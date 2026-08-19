@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  WITHDRAWN
+}
+
+enum ExperienceRange {
+  UNDER_3_MONTHS
+  MONTHS_3_TO_6
+  MONTHS_6_TO_12
+  YEARS_1_TO_2
+  YEARS_2_PLUS
+}
+
+enum RallyLevel {
+  STARTING
+  SHORT_RALLY
+  COMFORTABLE_RALLY
+  STANDARD_RALLY
+}
+
+enum GameExperience {
+  NONE
+  KNOWS_RULES
+  PLAYED_FEW
+  CAN_PLAY
+}
+
+enum PlayPurpose {
+  CASUAL_HIT
+  RALLY_PRACTICE
+  STROKE_PRACTICE
+  GAME_INTRO
+  GAME
+}
+
+enum RegionType {
+  CITY
+  DISTRICT
+}
+
+model User {
+  id                   String         @id @default(uuid()) @db.Uuid
+  nickname             String         @unique @db.VarChar(12)
+  status               UserStatus     @default(ACTIVE)
+  nicknameConfirmedAt  DateTime?      @map("nickname_confirmed_at") @db.Timestamptz(6)
+  onboardingCompletedAt DateTime?     @map("onboarding_completed_at") @db.Timestamptz(6)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  authAccounts AuthAccount[]
+  tennisProfile TennisProfile?
+
+  @@map("users")
+}
+
+model AuthAccount {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  provider          String   @db.VarChar(30)
+  providerAccountId String   @map("provider_account_id") @db.VarChar(191)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("auth_accounts")
+}
+
+model TennisProfile {
+  id                  String         @id @default(uuid()) @db.Uuid
+  userId              String         @unique @map("user_id") @db.Uuid
+  experienceRange     ExperienceRange @map("experience_range")
+  rallyLevel          RallyLevel     @map("rally_level")
+  gameExperience      GameExperience @map("game_experience")
+  skillLabel          String?        @map("skill_label") @db.VarChar(30)
+  nearbyRegionAllowed Boolean        @default(true) @map("nearby_region_allowed")
+  version             Int            @default(1)
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  regions  TennisProfileRegion[]
+  purposes TennisProfilePurpose[]
+
+  @@map("tennis_profiles")
+}
+
+model Region {
+  code      String       @id @db.VarChar(30)
+  parentCode String?     @map("parent_code") @db.VarChar(30)
+  name      String       @db.VarChar(50)
+  shortName String?      @map("short_name") @db.VarChar(30)
+  type      RegionType
+  active    Boolean      @default(true)
+
+  parent   Region?                 @relation("RegionHierarchy", fields: [parentCode], references: [code], onDelete: Restrict)
+  children Region[]                @relation("RegionHierarchy")
+  profiles TennisProfileRegion[]
+
+  @@unique([parentCode, name])
+  @@index([parentCode, active])
+  @@map("regions")
+}
+
+model TennisProfileRegion {
+  tennisProfileId String  @map("tennis_profile_id") @db.Uuid
+  regionCode      String  @map("region_code") @db.VarChar(30)
+  isPrimary       Boolean @default(true) @map("is_primary")
+
+  tennisProfile TennisProfile @relation(fields: [tennisProfileId], references: [id], onDelete: Cascade)
+  region        Region        @relation(fields: [regionCode], references: [code], onDelete: Restrict)
+
+  @@id([tennisProfileId, regionCode])
+  @@index([regionCode, tennisProfileId])
+  @@map("tennis_profile_regions")
+}
+
+model TennisProfilePurpose {
+  tennisProfileId String      @map("tennis_profile_id") @db.Uuid
+  purpose         PlayPurpose
+
+  tennisProfile TennisProfile @relation(fields: [tennisProfileId], references: [id], onDelete: Cascade)
+
+  @@id([tennisProfileId, purpose])
+  @@map("tennis_profile_purposes")
+}
