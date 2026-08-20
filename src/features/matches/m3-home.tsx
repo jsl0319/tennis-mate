@@ -15,6 +15,7 @@ type MeResponse = {
 
 type MatchListResponse = { items: MatchCardData[] };
 type Screen = "loading" | "onboarding" | "home" | "error";
+type MatchList = "recommended" | "other";
 
 function getErrorMessage(body: unknown) {
   if (typeof body === "object" && body !== null && "error" in body) {
@@ -37,6 +38,7 @@ export function TennisMateHome() {
   const [recommended, setRecommended] = useState<MatchCardData[]>([]);
   const [matches, setMatches] = useState<MatchCardData[]>([]);
   const [error, setError] = useState("");
+  const [activeList, setActiveList] = useState<MatchList>("recommended");
 
   const load = useCallback(async () => {
     try {
@@ -69,31 +71,60 @@ export function TennisMateHome() {
   if (screen === "error") return <main className="grid min-h-svh place-items-center bg-[#fffdfc] px-5 text-center"><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[#5c6b63]">{error}</p><button className="mt-6 rounded-2xl bg-[#1f7a55] px-5 py-3 font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></div></main>;
 
   const visibleOtherMatches = matches.filter((match) => !recommended.some((item) => item.id === match.id));
+  const isRecommendedList = activeList === "recommended";
+  const activeMatches = isRecommendedList ? recommended : visibleOtherMatches;
+  const listTitle = isRecommendedList ? "나와 잘 맞을 것 같아요 🎾" : "다른 매칭 둘러보기";
+  const listDescription = isRecommendedList
+    ? "랠리, 원하는 플레이와 활동 지역을 기준으로 골랐어요."
+    : "추천 조건과 달라도, 지금 함께 칠 수 있는 매칭이에요.";
+
   return (
-    <main className="min-h-svh bg-[#fffdfc] px-5 pb-12 pt-8 text-[#1a221e]">
-      <section className="mx-auto max-w-[560px]">
-        <p className="text-sm font-semibold text-[#1f7a55]">Tennis Mate</p>
-        <h1 className="mt-3 text-2xl font-bold leading-snug">{me?.nickname}님, 오늘도<br />부담 없이 테니스해요.</h1>
-        <p className="mt-3 inline-flex rounded-full bg-[#f0f5f2] px-3 py-2 text-sm text-[#405047]">📍 {me?.tennisProfile?.activityRegion?.name ?? "활동 지역"}에서 메이트를 찾고 있어요</p>
+    <main className="min-h-svh bg-[#fffdfc] pb-28 text-[#1a221e]">
+      <header className="sticky top-0 z-20 border-b border-[#e6ece8] bg-[#fffdfc]/95 backdrop-blur">
+        <div className="mx-auto max-w-[560px] px-5 pb-4 pt-8">
+          <p className="text-sm font-semibold text-[#1f7a55]">Tennis Mate</p>
+          <h1 className="mt-3 text-2xl font-bold leading-snug">{me?.nickname}님, 오늘도<br />부담 없이 테니스해요.</h1>
+          <p className="mt-3 inline-flex rounded-full bg-[#f0f5f2] px-3 py-2 text-sm text-[#405047]">📍 {me?.tennisProfile?.activityRegion?.name ?? "활동 지역"}에서 메이트를 찾고 있어요</p>
 
-        <section className="mt-9">
-          <h2 className="text-xl font-bold">나와 잘 맞을 것 같아요 🎾</h2>
-          <p className="mt-2 text-sm leading-6 text-[#5c6b63]">랠리, 원하는 플레이와 활동 지역을 기준으로 골랐어요.</p>
-          {recommended.length > 0 ? <div className="mt-4 grid gap-6">{recommended.map((match) => <MatchCard key={match.id} match={match} />)}</div> : <p className="mt-4 rounded-3xl bg-[#f4f7f5] p-5 text-sm leading-6 text-[#405047]">조건이 꼭 맞는 매칭은 아직 없어요. 다른 초보자 매칭도 편하게 둘러보세요.</p>}
-        </section>
+          <div aria-label="매칭 목록 선택" className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-[#f0f5f2] p-1" role="group">
+            <ListTab active={isRecommendedList} label="추천 매칭" onClick={() => setActiveList("recommended")} />
+            <ListTab active={!isRecommendedList} label="다른 매칭" onClick={() => setActiveList("other")} />
+          </div>
+        </div>
+      </header>
 
-        <Link className="mt-6 block rounded-3xl bg-[#1f7a55] p-5 text-white" href="/matches/new"><strong>이미 예약한 코트가 있나요?</strong><span className="mt-1 block text-sm opacity-85">편하게 함께 칠 메이트를 모집해보세요.</span></Link>
-        <section className="mt-10">
-          <h2 className="text-xl font-bold">다른 매칭 둘러보기</h2>
-          {visibleOtherMatches.length > 0 ? <div className="mt-4 grid gap-6">{visibleOtherMatches.map((match) => <MatchCard key={match.id} match={match} />)}</div> : recommended.length > 0 ? <p className="mt-4 text-sm text-[#5c6b63]">지금은 추천 매칭이 전부예요.</p> : <EmptyMatchState />}
-        </section>
+      <section className="mx-auto max-w-[560px] px-5 pt-6">
+        <h2 className="text-xl font-bold">{listTitle}</h2>
+        <p className="mt-2 text-sm leading-6 text-[#5c6b63]">{listDescription}</p>
+        {activeMatches.length > 0 ? (
+          <div className="mt-4 grid gap-6">{activeMatches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
+        ) : isRecommendedList && visibleOtherMatches.length > 0 ? (
+          <EmptyRecommendedState onShowOtherMatches={() => setActiveList("other")} />
+        ) : isRecommendedList ? (
+          <EmptyMatchState />
+        ) : (
+          <p className="mt-4 rounded-3xl bg-[#f4f7f5] p-5 text-sm leading-6 text-[#405047]">지금은 추천 매칭이 전부예요. 나와 잘 맞는 매칭을 다시 확인해 보세요.</p>
+        )}
       </section>
+
+      <Link aria-label="매칭 만들기" className="fixed bottom-5 right-5 z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[#1f7a55] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(19,82,56,0.26)] transition-transform active:scale-95" href="/matches/new">
+        <span aria-hidden="true" className="text-lg leading-none">+</span>
+        매칭 만들기
+      </Link>
     </main>
   );
 }
 
+function ListTab({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return <button aria-pressed={active} className={`min-h-11 rounded-xl px-3 text-sm font-semibold transition-colors ${active ? "bg-[#1f7a55] text-white shadow-sm" : "text-[#5c6b63]"}`} onClick={onClick} type="button">{label}</button>;
+}
+
+function EmptyRecommendedState({ onShowOtherMatches }: { onShowOtherMatches: () => void }) {
+  return <div className="mt-4 rounded-3xl bg-[#f4f7f5] p-5"><p className="font-bold">조건이 꼭 맞는 매칭은 아직 없어요.</p><p className="mt-2 text-sm leading-6 text-[#5c6b63]">다른 초보자 매칭도 편하게 둘러볼 수 있어요.</p><button className="mt-4 text-sm font-semibold text-[#1f7a55] underline" onClick={onShowOtherMatches} type="button">다른 매칭 보기</button></div>;
+}
+
 function EmptyMatchState() {
-  return <div className="mt-4 rounded-3xl bg-[#f4f7f5] p-6"><p className="font-bold">아직 가까운 매칭이 없어요.</p><p className="mt-2 text-sm leading-6 text-[#5c6b63]">이미 예약한 코트가 있다면 먼저 편하게 모집해볼 수 있어요.</p><Link className="mt-4 inline-block text-sm font-semibold text-[#1f7a55] underline" href="/matches/new">매칭 만들기</Link></div>;
+  return <div className="mt-4 rounded-3xl bg-[#f4f7f5] p-6"><p className="font-bold">아직 둘러볼 매칭이 없어요.</p><p className="mt-2 text-sm leading-6 text-[#5c6b63]">새로운 매칭이 등록되면 여기에서 확인할 수 있어요.</p><Link className="mt-4 inline-block text-sm font-semibold text-[#1f7a55] underline" href="/matches/new">매칭 만들기</Link></div>;
 }
 
 function HomeLoading() {
