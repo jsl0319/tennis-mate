@@ -20,6 +20,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:m3": "tsx prisma/seed-m3-matches.ts",
     "db:studio": "prisma studio",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build"
   },

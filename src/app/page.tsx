@@ -1,5 +1,5 @@
-import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
+import { TennisMateHome } from "@/features/matches/m3-home";
 
 export default function Home() {
-  return <M2OnboardingFlow />;
+  return <TennisMateHome />;
 }

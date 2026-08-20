@@ -3,7 +3,7 @@
 테니스 초보자가 실력 차이에 대한 부담을 덜고, 자신과 비슷한 사람을 찾아 함께
 칠 약속을 잡도록 돕는 모바일 우선 웹앱입니다.
 
-현재는 **M2: 카카오 인증·테니스 프로필 온보딩 기반**까지 구현되어 있습니다.
+현재는 **M3: 추천 매칭 탐색과 상세 조회**까지 구현되어 있습니다.
 카카오 로그인 후 닉네임을 확인하고, 5단계 온보딩에서 구력·랠리·게임 경험·원하는
 플레이·활동 지역을 저장합니다. 추천 매칭은 다음 마일스톤(M3) 범위입니다.
 
@@ -62,6 +62,7 @@ docker compose up -d
 npm run db:validate
 npm run db:migrate:deploy
 npm run db:seed
+npm run db:seed:m3
 npm run dev
 ```
 
@@ -127,6 +128,7 @@ npm run db:validate
 npm run db:migrate:dev
 npm run db:migrate:deploy
 npm run db:seed
+npm run db:seed:m3
 npm run db:studio
 ```
 

@@ -1,0 +1,78 @@
+import { config } from "dotenv";
+import { PrismaPg } from "@prisma/adapter-pg";
+
+import { PrismaClient } from "../src/generated/prisma/client";
+import { getDatabaseUrl } from "../src/server/env";
+
+config({ path: ".env.local" });
+config();
+
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: getDatabaseUrl() }) });
+
+const hosts = [
+  { id: "10000000-0000-4000-8000-000000000001", nickname: "랠리민지", regionCode: "SEOUL-001", rallyLevel: "SHORT_RALLY", gameExperience: "NONE", purposes: ["RALLY_PRACTICE"] },
+  { id: "10000000-0000-4000-8000-000000000002", nickname: "테니스수아", regionCode: "SEOUL-002", rallyLevel: "COMFORTABLE_RALLY", gameExperience: "KNOWS_RULES", purposes: ["CASUAL_HIT", "RALLY_PRACTICE"] },
+  { id: "10000000-0000-4000-8000-000000000003", nickname: "초록라켓", regionCode: "SEOUL-003", rallyLevel: "STARTING", gameExperience: "NONE", purposes: ["CASUAL_HIT"] },
+  { id: "10000000-0000-4000-8000-000000000004", nickname: "주말테니스", regionCode: "SEOUL-004", rallyLevel: "SHORT_RALLY", gameExperience: "PLAYED_FEW", purposes: ["GAME_INTRO"] },
+] as const;
+
+async function seedHosts() {
+  for (const host of hosts) {
+    await prisma.user.upsert({
+      where: { id: host.id },
+      update: { nickname: host.nickname, nicknameConfirmedAt: new Date(), onboardingCompletedAt: new Date() },
+      create: { id: host.id, nickname: host.nickname, nicknameConfirmedAt: new Date(), onboardingCompletedAt: new Date() },
+    });
+    await prisma.tennisProfile.upsert({
+      where: { userId: host.id },
+      update: {
+        experienceRange: "MONTHS_6_TO_12", rallyLevel: host.rallyLevel, gameExperience: host.gameExperience,
+        regions: { deleteMany: {}, create: { regionCode: host.regionCode, isPrimary: true } },
+        purposes: { deleteMany: {}, create: host.purposes.map((purpose) => ({ purpose })) },
+      },
+      create: {
+        userId: host.id, experienceRange: "MONTHS_6_TO_12", rallyLevel: host.rallyLevel, gameExperience: host.gameExperience,
+        regions: { create: { regionCode: host.regionCode, isPrimary: true } },
+        purposes: { create: host.purposes.map((purpose) => ({ purpose })) },
+      },
+    });
+  }
+}
+
+async function seedMatches() {
+  const startsAt = new Date();
+  startsAt.setDate(startsAt.getDate() + 2);
+  startsAt.setHours(10, 0, 0, 0);
+  const fixtures = [
+    ["천천히 랠리 연습해요", "마포 테니스장", "서울 마포구 월드컵로 25", "RALLY_PRACTICE", "COMPLETE_BEGINNER_WELCOME", 40_000],
+    ["주말에 편하게 공 주고받아요", "용산 가족공원 테니스장", "서울 용산구 서빙고로 137", "CASUAL_HIT", "COMPLETE_BEGINNER_WELCOME", 30_000],
+    ["첫 게임 입문, 같이 해봐요", "성동 테니스장", "서울 성동구 살곶이길 200", "GAME_INTRO", "SIMILAR_LEVEL", 36_000],
+    ["가벼운 랠리로 주말 시작", "광진 테니스장", "서울 광진구 아차산로 549", "RALLY_PRACTICE", "SIMILAR_LEVEL", 32_000],
+  ] as const;
+
+  for (const [index, fixture] of fixtures.entries()) {
+    const [title, courtName, address, purpose, partnerPreference, fee] = fixture;
+    const start = new Date(startsAt);
+    start.setDate(startsAt.getDate() + index);
+    const end = new Date(start);
+    end.setHours(end.getHours() + 2);
+    const host = hosts[index];
+    await prisma.match.upsert({
+      where: { hostUserId_clientRequestId: { hostUserId: host.id, clientRequestId: `20000000-0000-4000-8000-00000000000${index + 1}` } },
+      update: { title, startsAt: start, endsAt: end, status: "OPEN" },
+      create: {
+        hostUserId: host.id, clientRequestId: `20000000-0000-4000-8000-00000000000${index + 1}`,
+        regionCode: host.regionCode, title, startsAt: start, endsAt: end,
+        externalCourtName: courtName, externalCourtAddress: address, recruitCount: 2,
+        partnerPreference, totalCourtFeeKrw: fee, introduction: "처음 만나는 메이트와도 천천히, 편하게 쳐요.",
+        contactOpenChatUrl: `https://open.kakao.com/o/tennisMateM3${index + 1}`,
+        purposes: { create: { purpose } },
+      },
+    });
+  }
+}
+
+seedHosts()
+  .then(seedMatches)
+  .then(() => console.info("M3 테스트 매치 4개를 준비했어요."))
+  .finally(async () => prisma.$disconnect());

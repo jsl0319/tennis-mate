@@ -1,0 +1,68 @@
+import { z } from "zod";
+
+import { getCurrentUser } from "@/server/auth/current-user";
+import { getPrisma } from "@/server/db/prisma";
+import { createMatch, getMatches, getOnboardedViewer, parseCursor } from "@/server/domain/match-service";
+import { matchCreateInputSchema } from "@/server/domain/match";
+import { DomainError } from "@/server/domain/profile-service";
+import { handleApiError } from "@/server/http/api-response";
+
+export const runtime = "nodejs";
+
+const playPurposeSchema = z.enum([
+  "CASUAL_HIT",
+  "RALLY_PRACTICE",
+  "STROKE_PRACTICE",
+  "GAME_INTRO",
+  "GAME",
+]);
+
+function parseSearchParams(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const limitValue = params.get("limit") ?? "20";
+  const limit = Number(limitValue);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+    throw new DomainError("INVALID_REQUEST", 400, "목록 개수는 1~50개로 입력해 주세요.");
+  }
+
+  const startsFromValue = params.get("startsFrom");
+  const startsFrom = startsFromValue ? new Date(startsFromValue) : new Date();
+  if (Number.isNaN(startsFrom.getTime())) {
+    throw new DomainError("INVALID_REQUEST", 400, "시작 시각 형식을 확인해 주세요.");
+  }
+
+  const playPurposeValue = params.get("playPurpose");
+  const playPurpose = playPurposeValue ? playPurposeSchema.safeParse(playPurposeValue) : null;
+  if (playPurpose && !playPurpose.success) {
+    throw new DomainError("INVALID_REQUEST", 400, "원하는 플레이를 다시 선택해 주세요.");
+  }
+
+  return {
+    regionCode: params.get("regionCode")?.trim() || undefined,
+    playPurpose: playPurpose?.data,
+    startsFrom,
+    cursor: params.get("cursor") ? parseCursor(params.get("cursor")!) : undefined,
+    limit,
+  };
+}
+
+export async function GET(request: Request) {
+  try {
+    const user = await getCurrentUser();
+    const viewer = await getOnboardedViewer(getPrisma(), user);
+    return Response.json(await getMatches(getPrisma(), viewer, parseSearchParams(request)));
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const user = await getCurrentUser();
+    const viewer = await getOnboardedViewer(getPrisma(), user);
+    const result = await createMatch(getPrisma(), viewer, matchCreateInputSchema.parse(await request.json()));
+    return Response.json(result.match, { status: result.created ? 201 : 200, headers: { Location: `/api/v1/matches/${result.match.id}` } });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

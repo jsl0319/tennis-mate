@@ -48,6 +48,32 @@ enum RegionType {
   DISTRICT
 }
 
+enum CourtSource {
+  EXTERNAL_RESERVED
+}
+
+enum PartnerPreference {
+  COMPLETE_BEGINNER_WELCOME
+  SIMILAR_LEVEL
+  GAME_CAPABLE
+}
+
+enum MatchStatus {
+  OPEN
+  CLOSED
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  CANCELLED
+}
+
 model User {
   id                   String         @id @default(uuid()) @db.Uuid
   nickname             String         @unique @db.VarChar(12)
@@ -59,6 +85,8 @@ model User {
 
   authAccounts AuthAccount[]
   tennisProfile TennisProfile?
+  hostedMatches Match[]           @relation("MatchHost")
+  matchApplications MatchApplication[]
 
   @@map("users")
 }
@@ -107,6 +135,7 @@ model Region {
   parent   Region?                 @relation("RegionHierarchy", fields: [parentCode], references: [code], onDelete: Restrict)
   children Region[]                @relation("RegionHierarchy")
   profiles TennisProfileRegion[]
+  matches  Match[]
 
   @@unique([parentCode, name])
   @@index([parentCode, active])
@@ -134,4 +163,78 @@ model TennisProfilePurpose {
 
   @@id([tennisProfileId, purpose])
   @@map("tennis_profile_purposes")
+}
+
+model Match {
+  id                    String            @id @default(uuid()) @db.Uuid
+  hostUserId            String            @map("host_user_id") @db.Uuid
+  clientRequestId       String            @map("client_request_id") @db.Uuid
+  regionCode            String            @map("region_code") @db.VarChar(30)
+  title                 String            @db.VarChar(80)
+  startsAt              DateTime          @map("starts_at") @db.Timestamptz(6)
+  endsAt                DateTime          @map("ends_at") @db.Timestamptz(6)
+  courtSource           CourtSource       @default(EXTERNAL_RESERVED) @map("court_source")
+  externalCourtName     String            @map("external_court_name") @db.VarChar(100)
+  externalCourtAddress  String            @map("external_court_address") @db.VarChar(255)
+  externalCourtNumber   String?           @map("external_court_number") @db.VarChar(50)
+  recruitCount          Int               @map("recruit_count")
+  partnerPreference     PartnerPreference @map("partner_preference")
+  totalCourtFeeKrw      Int               @map("total_court_fee_krw")
+  additionalCostNote    String?           @map("additional_cost_note") @db.VarChar(200)
+  introduction          String?           @db.VarChar(300)
+  contactOpenChatUrl    String            @map("contact_open_chat_url") @db.VarChar(500)
+  status                MatchStatus       @default(OPEN)
+  version               Int               @default(1)
+  closedAt              DateTime?         @map("closed_at") @db.Timestamptz(6)
+  completedAt           DateTime?         @map("completed_at") @db.Timestamptz(6)
+  expiredAt             DateTime?         @map("expired_at") @db.Timestamptz(6)
+  cancelledAt           DateTime?         @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason    String?           @map("cancellation_reason") @db.VarChar(200)
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  host         User               @relation("MatchHost", fields: [hostUserId], references: [id], onDelete: Restrict)
+  region       Region             @relation(fields: [regionCode], references: [code], onDelete: Restrict)
+  purposes     MatchPurpose[]
+  applications MatchApplication[]
+
+  @@unique([hostUserId, clientRequestId])
+  @@index([status, startsAt])
+  @@index([regionCode, status, startsAt])
+  @@index([hostUserId, status, startsAt])
+  @@map("matches")
+}
+
+model MatchPurpose {
+  matchId String      @map("match_id") @db.Uuid
+  purpose PlayPurpose
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, purpose])
+  @@index([purpose, matchId])
+  @@map("match_purposes")
+}
+
+model MatchApplication {
+  id                     String            @id @default(uuid()) @db.Uuid
+  matchId                String            @map("match_id") @db.Uuid
+  applicantUserId        String            @map("applicant_user_id") @db.Uuid
+  status                 ApplicationStatus @default(PENDING)
+  message                String?           @db.VarChar(200)
+  profileSnapshot        Json              @map("profile_snapshot") @db.JsonB
+  profileSnapshotVersion Int               @default(1) @map("profile_snapshot_version")
+  decidedAt              DateTime?         @map("decided_at") @db.Timestamptz(6)
+  withdrawnAt            DateTime?         @map("withdrawn_at") @db.Timestamptz(6)
+  cancelledAt            DateTime?         @map("cancelled_at") @db.Timestamptz(6)
+  createdAt              DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match         Match @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  applicantUser User  @relation(fields: [applicantUserId], references: [id], onDelete: Restrict)
+
+  @@unique([matchId, applicantUserId])
+  @@index([matchId, status, createdAt])
+  @@index([applicantUserId, status, createdAt(sort: Desc)])
+  @@map("match_applications")
 }

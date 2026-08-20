@@ -1,6 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type Screen = "loading" | "login" | "nickname" | 0 | 1 | 2 | 3 | 4 | "result";
@@ -91,7 +92,8 @@ async function responseBody(response: Response) {
   return body;
 }
 
-export function M2OnboardingFlow() {
+export function M2OnboardingFlow({ onCompleted }: { onCompleted?: () => void }) {
+  const router = useRouter();
   const [screen, setScreen] = useState<Screen>("loading");
   const [draft, setDraft] = useState<ProfileDraft>(initialDraft);
   const [cities, setCities] = useState<Region[]>([]);
@@ -273,7 +275,7 @@ export function M2OnboardingFlow() {
     return <FormShell step={screen + 1} onBack={goBack}><h1>{question.title.split("\n").map((line) => <span key={line}>{line}<br /></span>)}</h1><p>{question.description}</p>{questionContent}{error ? <ErrorMessage message={error} /> : null}<ActionButton disabled={!canContinue} loading={loading} onClick={() => screen === 4 ? void saveProfile() : setScreen((screen + 1) as Screen)}>{screen === 4 ? "프로필 완성하기" : "다음"}</ActionButton></FormShell>;
   }
 
-  return <FormShell step={5} onBack={goBack}><div className="mt-8 grid size-12 place-items-center rounded-full bg-[#eff9f4] text-2xl text-[#1f7a55]">✓</div><h1 className="mt-6">{draft.nickname}님의<br />플레이 프로필이 완성됐어요</h1><p>이 정보를 기준으로 잘 맞는 매치를 먼저 보여드릴게요.</p><div className="mt-8 rounded-2xl bg-[#f4f7f5] p-5"><strong>{draft.nickname}</strong><p className="mt-2 text-sm text-[#5c6b63]">{draft.regionName} · {draft.experienceRange === "YEARS_1_TO_2" ? "1~2년" : "테니스 프로필"}</p></div><ActionButton onClick={() => setError("추천 매칭은 다음 개발 단위인 M3에서 연결할 예정이에요.")}>추천 매치 보기</ActionButton>{error ? <ErrorMessage message={error} /> : null}</FormShell>;
+  return <FormShell step={5} onBack={goBack}><div className="mt-8 grid size-12 place-items-center rounded-full bg-[#eff9f4] text-2xl text-[#1f7a55]">✓</div><h1 className="mt-6">{draft.nickname}님의<br />플레이 프로필이 완성됐어요</h1><p>이 정보를 기준으로 잘 맞는 매치를 먼저 보여드릴게요.</p><div className="mt-8 rounded-2xl bg-[#f4f7f5] p-5"><strong>{draft.nickname}</strong><p className="mt-2 text-sm text-[#5c6b63]">{draft.regionName} · {draft.experienceRange === "YEARS_1_TO_2" ? "1~2년" : "테니스 프로필"}</p></div><ActionButton onClick={() => onCompleted ? onCompleted() : router.replace("/")}>추천 매치 보기</ActionButton>{error ? <ErrorMessage message={error} /> : null}</FormShell>;
 }
 
 function FormShell({ children, onBack, step }: { children: React.ReactNode; onBack: () => void; step: number }) {
