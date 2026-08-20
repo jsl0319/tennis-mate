@@ -70,6 +70,21 @@ async function seedMatches() {
       },
     });
   }
+
+  const tbdStart = new Date(startsAt);
+  tbdStart.setDate(tbdStart.getDate() + fixtures.length);
+  const tbdEnd = new Date(tbdStart);
+  tbdEnd.setHours(tbdEnd.getHours() + 2);
+  await prisma.match.upsert({
+    where: { hostUserId_clientRequestId: { hostUserId: hosts[0].id, clientRequestId: "20000000-0000-4000-8000-000000000005" } },
+    update: { title: "주말 코트, 같이 정해요", startsAt: tbdStart, endsAt: tbdEnd, status: "OPEN", courtSource: "COURT_TBD", externalCourtName: null, externalCourtAddress: null, externalCourtNumber: null, totalCourtFeeKrw: null, additionalCostNote: null },
+    create: {
+      hostUserId: hosts[0].id, clientRequestId: "20000000-0000-4000-8000-000000000005", regionCode: hosts[0].regionCode,
+      title: "주말 코트, 같이 정해요", startsAt: tbdStart, endsAt: tbdEnd, courtSource: "COURT_TBD", recruitCount: 2,
+      partnerPreference: "COMPLETE_BEGINNER_WELCOME", introduction: "코트와 비용은 수락 후 오픈채팅에서 함께 정해요.",
+      contactOpenChatUrl: "https://open.kakao.com/o/tennisMateM3CourtTbd", purposes: { create: { purpose: "RALLY_PRACTICE" } },
+    },
+  });
 }
 
 seedHosts()

@@ -26,7 +26,7 @@ Core MVP에는 회원, 테니스 프로필, 지역, 매칭과 신청에 필요�
 ### 2.3 계산 가능한 값은 중복 저장하지 않는다
 
 - 예상 총 참여 인원 = 모집자 1명 + `Match.recruitCount`
-- 예상 1인 비용 = `ceil(Match.totalCourtFeeKrw ÷ 예상 총 참여 인원)`
+- 예상 1인 비용 = 직접 예약 코트일 때만 `ceil(Match.totalCourtFeeKrw ÷ 예상 총 참여 인원)`, 코트 미정이면 NULL
 - 남은 자리 = `Match.recruitCount - ACCEPTED 신청 수`
 - 추천 점수 = 프로필, 지역과 플레이 목적을 이용해 조회 시 계산
 
@@ -294,7 +294,7 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 
 ### 5.7 Match
 
-모집자가 외부에서 예약한 코트와 참가 조건을 등록한다.
+모집자가 외부에서 예약한 코트 또는 코트 미정 상태의 참가 조건을 등록한다.
 
 | 컬럼 | 타입 | 필수 | 규칙 |
 | --- | --- | ---: | --- |
@@ -305,13 +305,13 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `title` | varchar(80) | O | 짧은 모집 제목 |
 | `startsAt` | timestamptz | O | 시작 시각 |
 | `endsAt` | timestamptz | O | 종료 시각, 시작보다 이후 |
-| `courtSource` | CourtSource | O | Core에서는 `EXTERNAL_RESERVED`만 생성 |
-| `externalCourtName` | varchar(100) | O | 외부 예약 코트명 |
-| `externalCourtAddress` | varchar(255) | O | 상세 장소 |
-| `externalCourtNumber` | varchar(50) | X | 코트 번호, 예약번호 금지 |
+| `courtSource` | CourtSource | O | `EXTERNAL_RESERVED` 또는 `COURT_TBD` |
+| `externalCourtName` | varchar(100) | 예약 코트만 O | 외부 예약 코트명 |
+| `externalCourtAddress` | varchar(255) | 예약 코트만 O | 상세 장소 |
+| `externalCourtNumber` | varchar(50) | 예약 코트에서 X | 코트 번호, 예약번호 금지 |
 | `recruitCount` | int | O | 모집자 외 추가 인원, 1 이상 |
 | `partnerPreference` | PartnerPreference | O | 원하는 상대 선택지 |
-| `totalCourtFeeKrw` | int | O | 0 이상 |
+| `totalCourtFeeKrw` | int | 예약 코트만 O | 0 이상, 코트 미정이면 NULL |
 | `additionalCostNote` | varchar(200) | X | 조명비·볼 비용 등 |
 | `introduction` | varchar(300) | X | 짧은 소개 메시지 |
 | `contactOpenChatUrl` | varchar(500) | O | 매칭별 카카오 오픈채팅 URL, 모집자·수락자에게만 공개 |
@@ -328,10 +328,9 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 #### CourtSource
 
 - `EXTERNAL_RESERVED`: 모집자가 외부에서 직접 예약
-- `PARTNER_COURT`: Court Partner 확장 단계
-- `NOT_RESERVED`: 정책이 확정되기 전에는 생성 금지
+- `COURT_TBD`: 일정과 활동 지역은 정했지만 코트·비용은 수락자와 오픈채팅에서 조율
 
-Core MVP 초기 마이그레이션에서는 enum 확장 비용을 피하기 위해 세 값을 모두 선언할 수 있지만, 생성 API는 `EXTERNAL_RESERVED`만 허용한다. 더 엄격한 범위를 원하면 Core에서는 한 값만 선언하고 Partner 마이그레이션에서 값을 추가한다.
+`COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한다. 오픈채팅 링크는 두 상태 모두 필수이며 모집자와 수락자에게만 공개한다.
 
 #### PartnerPreference
 
@@ -415,8 +414,8 @@ Core MVP에서는 `(matchId, applicantUserId)`를 UNIQUE로 두어 한 사용자
 
 - `Match.startsAt < Match.endsAt`
 - `Match.recruitCount >= 1`
-- `Match.totalCourtFeeKrw >= 0`
-- `Match.courtSource = EXTERNAL_RESERVED`인 경우 외부 코트명과 주소 필수
+- `Match.totalCourtFeeKrw IS NULL OR Match.totalCourtFeeKrw >= 0`
+- `Match.courtSource = EXTERNAL_RESERVED`인 경우 외부 코트명·주소·비용 필수, `COURT_TBD`인 경우 해당 값은 NULL
 - `Match.contactOpenChatUrl`은 HTTPS와 `open.kakao.com` host만 허용
 - `Match.status = CANCELLED`인 경우 `cancelledAt` 필수
 - `Match.status = COMPLETED`인 경우 `completedAt` 필수

@@ -30,7 +30,7 @@
 - 지역 목록 조회
 - 추천 매칭과 일반 매칭 목록 조회
 - 매칭 상세 조회
-- 외부 예약 코트 기반 매칭 등록
+- 예약된 코트 또는 코트 미정 상태의 매칭 등록
 - 같이 치기 신청
 - 받은 신청 조회와 수락·거절
 - 보낸 신청 조회와 대기 신청 철회
@@ -212,13 +212,13 @@ PlayPurpose = CASUAL_HIT | RALLY_PRACTICE | STROKE_PRACTICE | GAME_INTRO | GAME
 ### 5.2 매칭
 
 ```text
-CourtSource = EXTERNAL_RESERVED
+CourtSource = EXTERNAL_RESERVED | COURT_TBD
 PartnerPreference = COMPLETE_BEGINNER_WELCOME | SIMILAR_LEVEL | GAME_CAPABLE
 MatchStatus = OPEN | CLOSED | COMPLETED | EXPIRED | CANCELLED
 ApplicationStatus = PENDING | ACCEPTED | REJECTED | WITHDRAWN | CANCELLED
 ```
 
-Core MVP 생성 API는 `CourtSource`로 `EXTERNAL_RESERVED`만 허용한다. 후속 enum 값이 DB에 존재하더라도 클라이언트가 임의로 사용할 수 없다.
+Core MVP 생성 API는 `EXTERNAL_RESERVED`와 `COURT_TBD`를 허용한다. `COURT_TBD`는 코트·비용이 확정되지 않았음을 응답에서 명시한다.
 
 ## 6. 공통 응답 모델
 
@@ -305,11 +305,13 @@ Core MVP 생성 API는 `CourtSource`로 `EXTERNAL_RESERVED`만 허용한다. 후
 }
 ```
 
-예상 1인 비용은 `ceil(totalCourtFeeKrw / (recruitCount + 1))`로 계산하고 사용자가 수정할 수 없다. 1원 단위 나머지를 어떻게 실제 정산할지는 서비스 밖에서 참가자들이 확인한다.
+예약 코트의 예상 1인 비용은 `ceil(totalCourtFeeKrw / (recruitCount + 1))`로 계산하고 사용자가 수정할 수 없다. `COURT_TBD`의 `estimatedFeePerPersonKrw`는 `null`이며, 실제 정산은 서비스 밖에서 참가자들이 확인한다.
 
 ### 6.4 MatchDetailView
 
 `MatchCardView`의 모든 필드에 다음 정보를 추가한다.
+
+`COURT_TBD` 응답에서는 `court.name`, `court.address`, `totalCourtFeeKrw`, `additionalCostNote`, `estimatedFeePerPersonKrw`가 모두 `null`이고 `court.sourceLabel`은 `코트와 비용을 함께 정해요`다.
 
 ```json
 {
@@ -657,7 +659,7 @@ GET /api/v1/matches/{matchId}
 
 ## 11. 매칭 등록·관리 API
 
-### 11.1 외부 예약 코트 매칭 등록
+### 11.1 매칭 등록
 
 ```http
 POST /api/v1/matches
@@ -690,6 +692,23 @@ POST /api/v1/matches
 }
 ```
 
+코트 미정 매칭은 다음처럼 코트·비용 필드 없이 생성한다.
+
+```json
+{
+  "clientRequestId": "0198d5a2-51f5-7be2-a044-6f68d37e61d2",
+  "title": "주말 코트, 같이 정해요",
+  "startsAt": "2026-08-22T01:00:00.000Z",
+  "endsAt": "2026-08-22T03:00:00.000Z",
+  "regionCode": "SEOUL-MAPO",
+  "courtSource": "COURT_TBD",
+  "recruitCount": 2,
+  "playPurposes": ["RALLY_PRACTICE"],
+  "partnerPreference": "COMPLETE_BEGINNER_WELCOME",
+  "contactOpenChatUrl": "https://open.kakao.com/o/example"
+}
+```
+
 서버 파생 값:
 
 - `hostUserId`: 세션 User
@@ -705,9 +724,9 @@ POST /api/v1/matches
 - `clientRequestId`는 UUID이며 모집자별 유일
 - `startsAt < endsAt`이며 시작은 현재보다 미래
 - 활성 `regionCode`
-- `courtSource = EXTERNAL_RESERVED`
-- 코트명 1~100자, 주소 1~255자, 코트 번호 최대 50자
-- 코트 번호에 예약번호나 연락처를 넣지 않도록 클라이언트에서 안내하고 서버에서도 명백한 형식을 제한
+- `courtSource = EXTERNAL_RESERVED`이면 코트명 1~100자, 주소 1~255자, 비용 0 이상이 필수이고 코트 번호는 최대 50자다.
+- `courtSource = COURT_TBD`이면 `externalCourt`, `totalCourtFeeKrw`, `additionalCostNote`는 `null` 또는 생략한다.
+- 예약 코트의 코트 번호에 예약번호나 연락처를 넣지 않도록 클라이언트에서 안내하고 서버에서도 명백한 형식을 제한한다.
 - `recruitCount >= 1`
 - 플레이 목적 1~2개, 중복 불가
 - 전체 코트 비용 0 이상

@@ -7,11 +7,11 @@ export type MatchCardData = {
   startsAt: string;
   endsAt: string;
   region: { name: string };
-  court: { sourceLabel: string; name: string };
+  court: { sourceLabel: string; name: string | null };
   playPurposes: Array<{ code: string; label: string }>;
   beginnerWelcome: boolean;
   remainingSpots: number;
-  estimatedFeePerPersonKrw: number;
+  estimatedFeePerPersonKrw: number | null;
   recommendationReasons: Array<{ code: string; label: string }>;
 };
 
@@ -39,8 +39,8 @@ export function MatchCard({ match }: { match: MatchCardData }) {
       </p>
       <dl className="mt-4 grid gap-2 text-sm leading-5 text-[#405047]">
         <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-2"><dt aria-hidden>🗓</dt><dd className="truncate">{formatSchedule(match.startsAt, match.endsAt)}</dd></div>
-        <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-2"><dt aria-hidden>📍</dt><dd className="truncate">{match.region.name} · {match.court.name}</dd></div>
-        <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-2"><dt aria-hidden>👥</dt><dd className="truncate">남은 자리 {match.remainingSpots}명 · 1인 약 {match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원</dd></div>
+        <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-2"><dt aria-hidden>📍</dt><dd className="truncate">{match.region.name} · {match.court.name ?? "코트는 함께 정해요"}</dd></div>
+        <div className="grid grid-cols-[16px_minmax(0,1fr)] gap-2"><dt aria-hidden>👥</dt><dd className="truncate">남은 자리 {match.remainingSpots}명 · {match.estimatedFeePerPersonKrw === null ? "비용 협의 필요" : `1인 약 ${match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</dd></div>
       </dl>
       <p className="mt-auto border-t border-[#edf1ee] pt-3 text-xs leading-5 text-[#5c6b63]">{match.court.sourceLabel}</p>
     </Link>

@@ -50,6 +50,7 @@ enum RegionType {
 
 enum CourtSource {
   EXTERNAL_RESERVED
+  COURT_TBD
 }
 
 enum PartnerPreference {
@@ -174,12 +175,12 @@ model Match {
   startsAt              DateTime          @map("starts_at") @db.Timestamptz(6)
   endsAt                DateTime          @map("ends_at") @db.Timestamptz(6)
   courtSource           CourtSource       @default(EXTERNAL_RESERVED) @map("court_source")
-  externalCourtName     String            @map("external_court_name") @db.VarChar(100)
-  externalCourtAddress  String            @map("external_court_address") @db.VarChar(255)
+  externalCourtName     String?           @map("external_court_name") @db.VarChar(100)
+  externalCourtAddress  String?           @map("external_court_address") @db.VarChar(255)
   externalCourtNumber   String?           @map("external_court_number") @db.VarChar(50)
   recruitCount          Int               @map("recruit_count")
   partnerPreference     PartnerPreference @map("partner_preference")
-  totalCourtFeeKrw      Int               @map("total_court_fee_krw")
+  totalCourtFeeKrw      Int?              @map("total_court_fee_krw")
   additionalCostNote    String?           @map("additional_cost_note") @db.VarChar(200)
   introduction          String?           @db.VarChar(300)
   contactOpenChatUrl    String            @map("contact_open_chat_url") @db.VarChar(500)

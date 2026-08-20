@@ -9,7 +9,7 @@ type HostedMatch = {
   status: string;
   statusLabel: string;
   startsAt: string;
-  court: { name: string };
+  court: { name: string | null };
   recruitCount: number;
   acceptedCount: number;
   remainingSpots: number;
@@ -90,11 +90,11 @@ export function M6ReceivedApplications() {
 }
 
 function EmptyHostedMatches() {
-  return <section className="mt-10 rounded-3xl border border-dashed border-[#c7d6ce] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 만든 매칭이 없어요</h2><p className="mt-2 text-sm leading-6 text-[#5c6b63]">예약한 코트가 있다면 함께 칠 메이트를 모집해 보세요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[#1f7a55] px-4 text-sm font-semibold text-white" href="/matches/new">매칭 만들기</Link></section>;
+  return <section className="mt-10 rounded-3xl border border-dashed border-[#c7d6ce] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 만든 매칭이 없어요</h2><p className="mt-2 text-sm leading-6 text-[#5c6b63]">코트 예약 전에도 일정과 지역을 정해 메이트를 모집할 수 있어요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[#1f7a55] px-4 text-sm font-semibold text-white" href="/matches/new">매칭 만들기</Link></section>;
 }
 
 function HostedMatchCard({ match }: { match: HostedMatch }) {
-  return <section className="rounded-3xl border border-[#d8e0db] bg-white p-5"><div className="flex items-center justify-between gap-3"><span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[#eff9f4] px-2.5 py-1 text-xs font-semibold text-[#1f7a55]">{match.statusLabel}</span>{match.pendingApplicationCount > 0 ? <span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[#eff9f4] px-2.5 py-1 text-xs font-semibold text-[#1f7a55]">검토할 신청 {match.pendingApplicationCount}건</span> : null}</div><h2 className="mt-4 text-lg font-bold">{match.title}</h2><p className="mt-3 text-sm text-[#405047]">🗓 {schedule(match.startsAt)}</p><p className="mt-1 text-sm text-[#405047]">📍 {match.court.name}</p><p className="mt-4 border-t border-[#edf0ee] pt-3 text-sm font-semibold">수락 {match.acceptedCount}명 / 모집 {match.recruitCount}명 <span className="font-normal text-[#5c6b63]">· 남은 자리 {match.remainingSpots}명</span></p>{match.pendingApplicationCount > 0 ? <Link className="mt-4 flex min-h-[52px] items-center justify-center rounded-2xl bg-[#1f7a55] px-4 text-center text-sm font-semibold text-white" href={`/activity/received/${match.id}`}>신청자 보기</Link> : <p className="mt-4 text-sm text-[#5c6b63]">새로 검토할 신청을 기다리고 있어요.</p>}</section>;
+  return <section className="rounded-3xl border border-[#d8e0db] bg-white p-5"><div className="flex items-center justify-between gap-3"><span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[#eff9f4] px-2.5 py-1 text-xs font-semibold text-[#1f7a55]">{match.statusLabel}</span>{match.pendingApplicationCount > 0 ? <span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[#eff9f4] px-2.5 py-1 text-xs font-semibold text-[#1f7a55]">검토할 신청 {match.pendingApplicationCount}건</span> : null}</div><h2 className="mt-4 text-lg font-bold">{match.title}</h2><p className="mt-3 text-sm text-[#405047]">🗓 {schedule(match.startsAt)}</p><p className="mt-1 text-sm text-[#405047]">📍 {match.court.name ?? "코트는 함께 정해요"}</p><p className="mt-4 border-t border-[#edf0ee] pt-3 text-sm font-semibold">수락 {match.acceptedCount}명 / 모집 {match.recruitCount}명 <span className="font-normal text-[#5c6b63]">· 남은 자리 {match.remainingSpots}명</span></p>{match.pendingApplicationCount > 0 ? <Link className="mt-4 flex min-h-[52px] items-center justify-center rounded-2xl bg-[#1f7a55] px-4 text-center text-sm font-semibold text-white" href={`/activity/received/${match.id}`}>신청자 보기</Link> : <p className="mt-4 text-sm text-[#5c6b63]">새로 검토할 신청을 기다리고 있어요.</p>}</section>;
 }
 
 export function M6ReceivedMatch({ params }: { params: Promise<{ matchId: string }> }) {

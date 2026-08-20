@@ -54,6 +54,20 @@ describe("M4 match creation input", () => {
     expect(matchCreateInputSchema.parse({ ...validInput, totalCourtFeeKrw: 0 }).courtSource).toBe("EXTERNAL_RESERVED");
   });
 
+  it("accepts a court-undecided match without court details or a fee", () => {
+    expect(matchCreateInputSchema.parse({
+      ...validInput,
+      courtSource: "COURT_TBD",
+      externalCourt: null,
+      totalCourtFeeKrw: null,
+      additionalCostNote: null,
+    }).courtSource).toBe("COURT_TBD");
+  });
+
+  it("does not calculate an estimated fee before the court is decided", () => {
+    expect(getEstimatedFeePerPerson(null, 2)).toBeNull();
+  });
+
   it("rejects an invalid court source, time range, or open chat link", () => {
     expect(() => matchCreateInputSchema.parse({ ...validInput, courtSource: "PARTNER_COURT" })).toThrow();
     expect(() => matchCreateInputSchema.parse({ ...validInput, endsAt: validInput.startsAt })).toThrow("종료 시간");

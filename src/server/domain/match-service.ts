@@ -112,6 +112,12 @@ function getRecommendationForMatch(match: MatchWithRelations, viewer: Viewer) {
   });
 }
 
+function getCourtView(match: Pick<MatchWithRelations, "courtSource" | "externalCourtName">) {
+  return match.courtSource === "EXTERNAL_RESERVED"
+    ? { source: match.courtSource, sourceLabel: "모집자가 코트를 예약했어요", name: match.externalCourtName }
+    : { source: match.courtSource, sourceLabel: "코트와 비용을 함께 정해요", name: null };
+}
+
 function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
   const acceptedCount = getAcceptedCount(match.applications);
   const recommendation = getRecommendationForMatch(match, viewer);
@@ -124,11 +130,7 @@ function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
     startsAt: match.startsAt.toISOString(),
     endsAt: match.endsAt.toISOString(),
     region: { code: match.region.code, name: match.region.name },
-    court: {
-      source: match.courtSource,
-      sourceLabel: "모집자가 코트를 예약했어요",
-      name: match.externalCourtName,
-    },
+    court: getCourtView(match),
     playPurposes: match.purposes.map(({ purpose }) => ({ code: purpose, label: ({
       CASUAL_HIT: "편하게 공 주고받기",
       RALLY_PRACTICE: "랠리",
@@ -304,9 +306,9 @@ function isSameCreateRequest(match: MatchWithRelations, input: MatchCreateInput)
     match.endsAt.getTime() === new Date(input.endsAt).getTime() &&
     match.regionCode === input.regionCode &&
     match.courtSource === input.courtSource &&
-    match.externalCourtName === input.externalCourt.name &&
-    match.externalCourtAddress === input.externalCourt.address &&
-    match.externalCourtNumber === optionalText(input.externalCourt.courtNumber) &&
+    match.externalCourtName === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null) &&
+    match.externalCourtAddress === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null) &&
+    match.externalCourtNumber === (input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null) &&
     match.recruitCount === input.recruitCount &&
     match.partnerPreference === input.partnerPreference &&
     match.totalCourtFeeKrw === input.totalCourtFeeKrw &&
@@ -332,9 +334,10 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
   const created = await prisma.match.create({
     data: {
       hostUserId: viewer.id, clientRequestId: input.clientRequestId, regionCode: input.regionCode, title: input.title,
-      startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), courtSource: "EXTERNAL_RESERVED",
-      externalCourtName: input.externalCourt.name, externalCourtAddress: input.externalCourt.address,
-      externalCourtNumber: optionalText(input.externalCourt.courtNumber), recruitCount: input.recruitCount,
+      startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), courtSource: input.courtSource,
+      externalCourtName: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null,
+      externalCourtAddress: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null,
+      externalCourtNumber: input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null, recruitCount: input.recruitCount,
       partnerPreference: input.partnerPreference, totalCourtFeeKrw: input.totalCourtFeeKrw,
       additionalCostNote: optionalText(input.additionalCostNote), introduction: optionalText(input.introduction),
       contactOpenChatUrl: input.contactOpenChatUrl, purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },

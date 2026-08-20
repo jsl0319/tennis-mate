@@ -1,30 +1,112 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type Region = { code: string; name: string; shortName: string | null };
+type CourtSource = "EXTERNAL_RESERVED" | "COURT_TBD";
+
 const purposes = [["CASUAL_HIT", "편하게 공 주고받기"], ["RALLY_PRACTICE", "랠리"], ["STROKE_PRACTICE", "스트로크 연습"], ["GAME_INTRO", "게임 입문"], ["GAME", "게임"]] as const;
+const preferences = [["COMPLETE_BEGINNER_WELCOME", "완전 초보도 좋아요"], ["SIMILAR_LEVEL", "비슷한 수준이면 좋아요"], ["GAME_CAPABLE", "게임 가능한 분을 찾고 있어요"]] as const;
+
+function apiMessage(body: unknown) {
+  if (typeof body === "object" && body !== null && "error" in body && typeof body.error === "object" && body.error !== null && "message" in body.error && typeof body.error.message === "string") return body.error.message;
+  return "등록하지 못했어요. 잠시 후 다시 시도해 주세요.";
+}
 
 export function M4MatchCreate() {
   const router = useRouter();
-  const [gate, setGate] = useState<null | boolean>(null); const [step, setStep] = useState(1); const [cities, setCities] = useState<Region[]>([]); const [districts, setDistricts] = useState<Region[]>([]); const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ date: "", time: "", duration: 120, cityCode: "", regionCode: "", courtName: "", address: "", courtNumber: "", title: "", recruitCount: 1, playPurposes: ["RALLY_PRACTICE"], partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: "", additionalCostNote: "", introduction: "", contactOpenChatUrl: "" });
-  useEffect(() => { void fetch("/api/v1/regions").then((r) => r.json()).then((body: { items: Region[] }) => setCities(body.items)); }, []);
+  const [step, setStep] = useState(1);
+  const [cities, setCities] = useState<Region[]>([]);
+  const [districts, setDistricts] = useState<Region[]>([]);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ courtSource: "COURT_TBD" as CourtSource, date: "", time: "", duration: 120, cityCode: "", regionCode: "", courtName: "", address: "", courtNumber: "", title: "", recruitCount: 1, playPurposes: ["RALLY_PRACTICE"], partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: "", additionalCostNote: "", introduction: "", contactOpenChatUrl: "" });
+
+  useEffect(() => {
+    void fetch("/api/v1/regions").then((response) => response.json()).then((body: { items: Region[] }) => setCities(body.items));
+  }, []);
+
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }));
-  const selectCity = async (code: string) => { set("cityCode", code); set("regionCode", ""); const body = await fetch(`/api/v1/regions?parentCode=${encodeURIComponent(code)}`).then((r) => r.json()) as { items: Region[] }; setDistricts(body.items); };
+  const chooseCourtSource = (courtSource: CourtSource) => setForm((current) => ({ ...current, courtSource, ...(courtSource === "COURT_TBD" ? { courtName: "", address: "", courtNumber: "", totalCourtFeeKrw: "", additionalCostNote: "" } : {}) }));
+  const selectCity = async (code: string) => {
+    set("cityCode", code);
+    set("regionCode", "");
+    const response = await fetch(`/api/v1/regions?parentCode=${encodeURIComponent(code)}`);
+    const body = await response.json() as { items: Region[] };
+    setDistricts(body.items);
+  };
   const togglePurpose = (purpose: string) => setForm((current) => current.playPurposes.includes(purpose) ? { ...current, playPurposes: current.playPurposes.filter((item) => item !== purpose) } : current.playPurposes.length < 2 ? { ...current, playPurposes: [...current.playPurposes, purpose] } : current);
-  const submit = async () => { setSaving(true); setError(""); try { const startsAt = new Date(`${form.date}T${form.time}`).toISOString(); const endsAt = new Date(new Date(startsAt).getTime() + form.duration * 60_000).toISOString(); const response = await fetch("/api/v1/matches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientRequestId: crypto.randomUUID(), title: form.title, startsAt, endsAt, regionCode: form.regionCode, courtSource: "EXTERNAL_RESERVED", externalCourt: { name: form.courtName, address: form.address, courtNumber: form.courtNumber || null }, recruitCount: form.recruitCount, playPurposes: form.playPurposes, partnerPreference: form.partnerPreference, totalCourtFeeKrw: Number(form.totalCourtFeeKrw), additionalCostNote: form.additionalCostNote || null, introduction: form.introduction || null, contactOpenChatUrl: form.contactOpenChatUrl }) }); const body: unknown = await response.json(); if (!response.ok) throw new Error(typeof body === "object" && body !== null && "error" in body && typeof body.error === "object" && body.error !== null && "message" in body.error && typeof body.error.message === "string" ? body.error.message : "등록하지 못했어요."); router.push(`/matches/${(body as { id: string }).id}`); } catch (caught) { setError(caught instanceof Error ? caught.message : "등록하지 못했어요."); } finally { setSaving(false); } };
-  if (gate === null) return <main className="grid min-h-svh place-items-center bg-[#fffdfc] px-5"><section className="w-full max-w-[480px] rounded-3xl bg-white p-6 shadow-sm"><p className="text-sm font-semibold text-[#1f7a55]">매칭 만들기</p><h1 className="mt-3 text-2xl font-bold">코트가 준비되어 있나요?</h1><p className="mt-3 text-sm leading-6 text-[#5c6b63]">지금은 이미 예약된 코트의 참가자 모집부터 지원하고 있어요.</p><button className="mt-7 w-full rounded-2xl bg-[#1f7a55] py-4 font-semibold text-white" onClick={() => setGate(true)} type="button">이미 예약했어요</button><button className="mt-3 w-full rounded-2xl border border-[#d8e0db] py-4 font-semibold" onClick={() => setGate(false)} type="button">아직 예약하지 않았어요</button><Link className="mt-5 block text-center text-sm underline" href="/">돌아가기</Link></section></main>;
-  if (!gate) return <main className="grid min-h-svh place-items-center bg-[#fffdfc] px-5 text-center"><div><h1 className="text-xl font-bold">예약된 코트가 있을 때 모집할 수 있어요</h1><p className="mt-3 text-sm leading-6 text-[#5c6b63]">제휴 코트 예약 기능은 준비 중이에요.</p><Link className="mt-6 inline-block rounded-2xl bg-[#1f7a55] px-5 py-3 font-semibold text-white" href="/">추천 매칭 보기</Link></div></main>;
   const fee = form.totalCourtFeeKrw === "" ? 0 : Math.ceil(Number(form.totalCourtFeeKrw) / (form.recruitCount + 1));
-  return <main className="min-h-svh bg-[#fffdfc] px-5 py-6"><section className="mx-auto max-w-[560px]"><header className="flex items-center gap-3"><button aria-label="이전 단계" className="size-10" disabled={step === 1} onClick={() => setStep((value) => value - 1)} type="button">←</button><div className="flex-1"><div className="h-1 rounded bg-[#d8e0db]"><div className="h-full rounded bg-[#1f7a55]" style={{ width: `${step * 25}%` }} /></div><p className="mt-1 text-right text-xs text-[#5c6b63]">{step}/4</p></div></header>
-  {step === 1 ? <div className="mt-8 space-y-4"><h1 className="text-2xl font-bold">언제, 어디서 치나요?</h1><Fields><label>날짜<input min={new Date().toISOString().slice(0, 10)} onChange={(e) => set("date", e.target.value)} type="date" value={form.date} /></label><label>시작 시간<input onChange={(e) => set("time", e.target.value)} type="time" value={form.time} /></label><label>이용 시간<select onChange={(e) => set("duration", Number(e.target.value))} value={form.duration}><option value={60}>1시간</option><option value={90}>1시간 30분</option><option value={120}>2시간</option></select></label><label>시<select onChange={(e) => void selectCity(e.target.value)} value={form.cityCode}><option value="">선택</option>{cities.map((city) => <option key={city.code} value={city.code}>{city.shortName ?? city.name}</option>)}</select></label><label>구<select onChange={(e) => set("regionCode", e.target.value)} value={form.regionCode}><option value="">선택</option>{districts.map((district) => <option key={district.code} value={district.code}>{district.name}</option>)}</select></label><label>코트장 이름<input onChange={(e) => set("courtName", e.target.value)} value={form.courtName} /></label><label>주소<input onChange={(e) => set("address", e.target.value)} value={form.address} /></label><label>코트 번호 (선택)<input onChange={(e) => set("courtNumber", e.target.value)} value={form.courtNumber} /></label></Fields></div> : null}
-  {step === 2 ? <div className="mt-8"><h1 className="text-2xl font-bold">어떤 테니스를 함께할까요?</h1><Fields><label>제목<input onChange={(e) => set("title", e.target.value)} value={form.title} /></label><label>추가 모집 인원<input min="1" onChange={(e) => set("recruitCount", Number(e.target.value))} type="number" value={form.recruitCount} /></label></Fields><p className="mt-5 text-sm font-semibold">원하는 플레이 (최대 2개)</p><div className="mt-3 grid gap-2">{purposes.map(([code, label]) => <button className={`rounded-xl border p-3 text-left ${form.playPurposes.includes(code) ? "border-[#1f7a55] bg-[#eff9f4]" : "border-[#d8e0db]"}`} key={code} onClick={() => togglePurpose(code)} type="button">{label}</button>)}</div><p className="mt-5 text-sm font-semibold">원하는 상대</p><div className="mt-3 grid gap-2">{[["COMPLETE_BEGINNER_WELCOME", "완전 초보도 좋아요"], ["SIMILAR_LEVEL", "비슷한 수준이면 좋아요"], ["GAME_CAPABLE", "게임 가능한 분을 찾고 있어요"]].map(([value, label]) => <button className={`rounded-xl border p-3 text-left ${form.partnerPreference === value ? "border-[#1f7a55] bg-[#eff9f4]" : "border-[#d8e0db]"}`} key={value} onClick={() => set("partnerPreference", value)} type="button">{label}</button>)}</div></div> : null}
-  {step === 3 ? <div className="mt-8 space-y-4"><h1 className="text-2xl font-bold">비용과 연락 방법을 알려주세요</h1><Fields><label>전체 코트 비용<input min="0" onChange={(e) => set("totalCourtFeeKrw", e.target.value)} type="number" value={form.totalCourtFeeKrw} /></label><p className="rounded-xl bg-[#eff9f4] p-4 text-sm">예상 1인 비용 <strong>약 {fee.toLocaleString("ko-KR")}원</strong><br /><span className="text-[#5c6b63]">Tennis Mate에서는 이 비용을 결제하지 않아요.</span></p><label>추가 비용 안내 (선택)<input onChange={(e) => set("additionalCostNote", e.target.value)} value={form.additionalCostNote} /></label><label>소개 (선택)<textarea onChange={(e) => set("introduction", e.target.value)} value={form.introduction} /></label><label>카카오 오픈채팅 링크<input onChange={(e) => set("contactOpenChatUrl", e.target.value)} placeholder="https://open.kakao.com/..." value={form.contactOpenChatUrl} /></label><p className="text-sm text-[#5c6b63]">수락된 참가자에게만 공개돼요.</p></Fields></div> : null}
-  {step === 4 ? <div className="mt-8"><h1 className="text-2xl font-bold">이렇게 모집할까요?</h1><div className="mt-5 rounded-3xl border border-[#d8e0db] bg-white p-5"><p className="text-sm text-[#1f7a55]">모집자가 코트를 예약했어요</p><h2 className="mt-3 text-xl font-bold">{form.title}</h2><p className="mt-3 text-sm">{form.date} {form.time} · {form.courtName}</p><p className="mt-2 text-sm">추가 {form.recruitCount}명 · 1인 약 {fee.toLocaleString("ko-KR")}원</p></div></div> : null}
-  {error ? <p className="mt-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}<button className="mt-8 min-h-[52px] w-full rounded-2xl bg-[#1f7a55] font-semibold text-white disabled:opacity-40" disabled={saving} onClick={() => step < 4 ? setStep((value) => value + 1) : void submit()} type="button">{saving ? "등록 중…" : step < 4 ? "다음" : "매칭 공개하기"}</button></section></main>;
+
+  const next = () => {
+    setError("");
+    if (step === 1 && (!form.date || !form.time || !form.regionCode)) return setError("날짜, 시작 시간, 활동 지역을 모두 선택해 주세요.");
+    if (step === 1 && form.courtSource === "EXTERNAL_RESERVED" && (!form.courtName.trim() || !form.address.trim())) return setError("예약한 코트의 이름과 주소를 입력해 주세요.");
+    if (step === 2 && (!form.title.trim() || form.playPurposes.length === 0 || form.recruitCount < 1)) return setError("매칭 제목, 모집 인원, 원하는 플레이를 확인해 주세요.");
+    if (step === 3 && form.courtSource === "EXTERNAL_RESERVED" && (form.totalCourtFeeKrw === "" || Number(form.totalCourtFeeKrw) < 0)) return setError("전체 코트 비용을 0원 이상으로 입력해 주세요.");
+    if (step === 3 && !form.contactOpenChatUrl.trim()) return setError("코트와 비용을 조율할 카카오 오픈채팅 링크를 입력해 주세요.");
+    setStep((current) => current + 1);
+  };
+
+  const submit = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const startsAt = new Date(`${form.date}T${form.time}`).toISOString();
+      const endsAt = new Date(new Date(startsAt).getTime() + form.duration * 60_000).toISOString();
+      const response = await fetch("/api/v1/matches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientRequestId: crypto.randomUUID(), title: form.title, startsAt, endsAt, regionCode: form.regionCode, courtSource: form.courtSource,
+          externalCourt: form.courtSource === "EXTERNAL_RESERVED" ? { name: form.courtName, address: form.address, courtNumber: form.courtNumber || null } : null,
+          recruitCount: form.recruitCount, playPurposes: form.playPurposes, partnerPreference: form.partnerPreference,
+          totalCourtFeeKrw: form.courtSource === "EXTERNAL_RESERVED" ? Number(form.totalCourtFeeKrw) : null,
+          additionalCostNote: form.courtSource === "EXTERNAL_RESERVED" ? form.additionalCostNote || null : null,
+          introduction: form.introduction || null, contactOpenChatUrl: form.contactOpenChatUrl,
+        }),
+      });
+      const body: unknown = await response.json();
+      if (!response.ok) throw new Error(apiMessage(body));
+      router.push(`/matches/${(body as { id: string }).id}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "등록하지 못했어요.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]"><section className="mx-auto max-w-[560px]"><header className="sticky top-0 z-10 -mx-5 border-b border-[#edf1ee] bg-[#fffdfc]/95 px-5 pb-4 pt-1 backdrop-blur"><div className="flex items-center gap-3"><button aria-label={step === 1 ? "홈으로 돌아가기" : "이전 단계"} className="grid size-11 place-items-center rounded-full text-xl" onClick={() => step === 1 ? router.push("/") : setStep((current) => current - 1)} type="button">←</button><div className="flex-1"><div className="h-1 rounded-full bg-[#d8e0db]"><div className="h-full rounded-full bg-[#1f7a55] transition-all" style={{ width: `${step * 25}%` }} /></div><p className="mt-1 text-right text-xs text-[#5c6b63]">{step}/4</p></div></div></header>
+
+    {step === 1 ? <StepOne cities={cities} districts={districts} form={form} onCourtSource={chooseCourtSource} onSelectCity={(code) => void selectCity(code)} set={(key, value) => set(key, value as never)} /> : null}
+    {step === 2 ? <StepTwo form={form} set={set} onTogglePurpose={togglePurpose} /> : null}
+    {step === 3 ? <StepThree fee={fee} form={form} set={set} /> : null}
+    {step === 4 ? <StepFour fee={fee} form={form} /> : null}
+
+    {error ? <p className="mt-5 rounded-2xl bg-[#fff1ef] px-4 py-3 text-sm leading-6 text-[#a13d32]">{error}</p> : null}
+    <button className="mt-8 min-h-[52px] w-full rounded-2xl bg-[#1f7a55] font-semibold text-white shadow-[0_8px_20px_rgba(31,122,85,0.18)] disabled:opacity-40" disabled={saving} onClick={() => step < 4 ? next() : void submit()} type="button">{saving ? "등록 중…" : step < 4 ? "다음" : "매칭 공개하기"}</button>
+  </section></main>;
 }
 
-function Fields({ children }: { children: React.ReactNode }) { return <div className="mt-5 grid gap-4 [&_input]:mt-2 [&_input]:h-12 [&_input]:w-full [&_input]:rounded-xl [&_input]:border [&_input]:border-[#d8e0db] [&_input]:px-3 [&_select]:mt-2 [&_select]:h-12 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-[#d8e0db] [&_select]:px-3 [&_textarea]:mt-2 [&_textarea]:min-h-24 [&_textarea]:w-full [&_textarea]:rounded-xl [&_textarea]:border [&_textarea]:border-[#d8e0db] [&_textarea]:p-3 [&_label]:text-sm [&_label]:font-semibold">{children}</div>; }
+function StepOne({ cities, districts, form, onCourtSource, onSelectCity, set }: { cities: Region[]; districts: Region[]; form: { courtSource: CourtSource; date: string; time: string; duration: number; cityCode: string; regionCode: string; courtName: string; address: string; courtNumber: string }; onCourtSource: (source: CourtSource) => void; onSelectCity: (code: string) => void; set: (key: "date" | "time" | "duration" | "cityCode" | "regionCode" | "courtName" | "address" | "courtNumber", value: string | number) => void }) {
+  const selected = (source: CourtSource) => form.courtSource === source;
+  return <div className="mt-8"><p className="text-sm font-semibold text-[#1f7a55]">매칭 만들기</p><h1 className="mt-1 text-2xl font-bold">언제, 어디서 칠까요?</h1><p className="mt-2 text-sm leading-6 text-[#5c6b63]">코트는 나중에 함께 정해도 괜찮아요.</p><h2 className="mt-7 text-lg font-bold">코트 예약 상태</h2><div className="mt-3 grid grid-cols-2 gap-2"><Choice selected={selected("COURT_TBD")} onClick={() => onCourtSource("COURT_TBD")} title="코트는 같이 정해요" description="예약 전에도 만들 수 있어요" /><Choice selected={selected("EXTERNAL_RESERVED")} onClick={() => onCourtSource("EXTERNAL_RESERVED")} title="코트를 예약했어요" description="코트 정보와 비용을 입력해요" /></div><Fields><label>날짜<input min={new Date().toISOString().slice(0, 10)} onChange={(event) => set("date", event.target.value)} type="date" value={form.date} /></label><label>시작 시간<input onChange={(event) => set("time", event.target.value)} type="time" value={form.time} /></label><label>이용 시간<select onChange={(event) => set("duration", Number(event.target.value))} value={form.duration}><option value={60}>1시간</option><option value={90}>1시간 30분</option><option value={120}>2시간</option></select></label><label>시<select onChange={(event) => onSelectCity(event.target.value)} value={form.cityCode}><option value="">선택</option>{cities.map((city) => <option key={city.code} value={city.code}>{city.shortName ?? city.name}</option>)}</select></label><label>구<select onChange={(event) => set("regionCode", event.target.value)} value={form.regionCode}><option value="">선택</option>{districts.map((district) => <option key={district.code} value={district.code}>{district.name}</option>)}</select></label></Fields>{form.courtSource === "COURT_TBD" ? <Notice /> : <Fields><label>코트장 이름<input onChange={(event) => set("courtName", event.target.value)} value={form.courtName} /></label><label>주소<input onChange={(event) => set("address", event.target.value)} value={form.address} /></label><label>코트 번호 <span className="font-normal text-[#5c6b63]">(선택)</span><input onChange={(event) => set("courtNumber", event.target.value)} value={form.courtNumber} /></label></Fields>}</div>;
+}
+
+function StepTwo({ form, set, onTogglePurpose }: { form: { title: string; recruitCount: number; playPurposes: string[]; partnerPreference: string }; set: (key: "title" | "recruitCount" | "partnerPreference", value: string | number) => void; onTogglePurpose: (value: string) => void }) {
+  return <div className="mt-8"><p className="text-sm font-semibold text-[#1f7a55]">모집 정보</p><h1 className="mt-1 text-2xl font-bold">어떤 테니스를 함께할까요?</h1><Fields><label>매칭 제목<input maxLength={80} onChange={(event) => set("title", event.target.value)} placeholder="예: 주말에 편하게 공 주고받아요" value={form.title} /></label><label>추가 모집 인원<input min="1" onChange={(event) => set("recruitCount", Number(event.target.value))} type="number" value={form.recruitCount} /></label></Fields><p className="mt-6 text-sm font-semibold">원하는 플레이 <span className="font-normal text-[#5c6b63]">(최대 2개)</span></p><div className="mt-3 grid gap-2">{purposes.map(([code, label]) => <SelectCard key={code} selected={form.playPurposes.includes(code)} onClick={() => onTogglePurpose(code)}>{label}</SelectCard>)}</div><p className="mt-6 text-sm font-semibold">원하는 상대</p><div className="mt-3 grid gap-2">{preferences.map(([value, label]) => <SelectCard key={value} selected={form.partnerPreference === value} onClick={() => set("partnerPreference", value)}>{label}</SelectCard>)}</div></div>;
+}
+
+function StepThree({ fee, form, set }: { fee: number; form: { courtSource: CourtSource; recruitCount: number; totalCourtFeeKrw: string; additionalCostNote: string; introduction: string; contactOpenChatUrl: string }; set: (key: "totalCourtFeeKrw" | "additionalCostNote" | "introduction" | "contactOpenChatUrl", value: string) => void }) {
+  return <div className="mt-8"><p className="text-sm font-semibold text-[#1f7a55]">마지막 확인</p><h1 className="mt-1 text-2xl font-bold">비용과 연락 방법을 알려주세요</h1>{form.courtSource === "EXTERNAL_RESERVED" ? <Fields><label>전체 코트 비용<input min="0" onChange={(event) => set("totalCourtFeeKrw", event.target.value)} type="number" value={form.totalCourtFeeKrw} /></label><div className="rounded-2xl bg-[#eff9f4] p-4 text-sm leading-6">예상 1인 비용 <strong>약 {fee.toLocaleString("ko-KR")}원</strong><br /><span className="text-[#5c6b63]">Tennis Mate에서는 이 비용을 결제하지 않아요.</span></div><label>추가 비용 안내 <span className="font-normal text-[#5c6b63]">(선택)</span><input onChange={(event) => set("additionalCostNote", event.target.value)} value={form.additionalCostNote} /></label></Fields> : <Notice />}<Fields><label>소개 <span className="font-normal text-[#5c6b63]">(선택)</span><textarea maxLength={300} onChange={(event) => set("introduction", event.target.value)} value={form.introduction} /></label><label>카카오 오픈채팅 링크<input onChange={(event) => set("contactOpenChatUrl", event.target.value)} placeholder="https://open.kakao.com/..." value={form.contactOpenChatUrl} /></label><p className="text-sm leading-6 text-[#5c6b63]">수락된 참가자에게만 공개돼요. 코트 미정 매칭에서는 코트와 비용을 조율하는 곳이에요.</p></Fields></div>;
+}
+
+function StepFour({ fee, form }: { fee: number; form: { courtSource: CourtSource; date: string; time: string; title: string; recruitCount: number; courtName: string } }) {
+  return <div className="mt-8"><p className="text-sm font-semibold text-[#1f7a55]">공개 전 확인</p><h1 className="mt-1 text-2xl font-bold">이렇게 모집할까요?</h1><article className="mt-6 rounded-3xl border border-[#d8e0db] bg-white p-5 shadow-sm"><p className="text-sm font-semibold text-[#1f7a55]">{form.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : "모집자가 코트를 예약했어요"}</p><h2 className="mt-3 text-xl font-bold">{form.title}</h2><p className="mt-4 text-sm leading-6 text-[#405047]">🗓 {form.date} · {form.time}<br />📍 {form.courtSource === "COURT_TBD" ? "코트는 함께 정해요" : form.courtName}<br />👥 추가 {form.recruitCount}명 · {form.courtSource === "COURT_TBD" ? "비용 협의 필요" : `1인 약 ${fee.toLocaleString("ko-KR")}원`}</p><p className="mt-4 border-t border-[#edf1ee] pt-3 text-xs leading-5 text-[#5c6b63]">{form.courtSource === "COURT_TBD" ? "수락된 참가자와 오픈채팅에서 코트와 비용을 정해요." : "코트 비용은 참가자끼리 별도로 정산해요."}</p></article></div>;
+}
+
+function Choice({ description, onClick, selected, title }: { description: string; onClick: () => void; selected: boolean; title: string }) { return <button aria-pressed={selected} className={`min-h-24 rounded-2xl border p-4 text-left text-sm transition ${selected ? "border-[#1f7a55] bg-[#1f7a55] text-white" : "border-[#d8e0db] bg-white text-[#1a221e]"}`} onClick={onClick} type="button"><span className="block font-semibold">{title}</span><span className={`mt-2 block leading-5 ${selected ? "text-white/85" : "text-[#5c6b63]"}`}>{description}</span></button>; }
+function SelectCard({ children, onClick, selected }: { children: React.ReactNode; onClick: () => void; selected: boolean }) { return <button aria-pressed={selected} className={`min-h-12 rounded-2xl border px-4 py-3 text-left text-sm font-semibold ${selected ? "border-[#1f7a55] bg-[#eff9f4] text-[#1f7a55]" : "border-[#d8e0db] bg-white"}`} onClick={onClick} type="button">{children}</button>; }
+function Notice() { return <section className="mt-5 rounded-2xl bg-[#eff9f4] p-4"><h2 className="font-semibold text-[#1f7a55]">코트와 비용은 함께 정해요</h2><p className="mt-2 text-sm leading-6 text-[#5c6b63]">일정과 활동 지역만 먼저 정해 보세요. 수락된 참가자에게만 오픈채팅을 보여드려요.</p></section>; }
+function Fields({ children }: { children: React.ReactNode }) { return <div className="mt-5 grid gap-4 [&_input]:mt-2 [&_input]:h-12 [&_input]:w-full [&_input]:rounded-xl [&_input]:border [&_input]:border-[#d8e0db] [&_input]:bg-white [&_input]:px-3 [&_select]:mt-2 [&_select]:h-12 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-[#d8e0db] [&_select]:bg-white [&_select]:px-3 [&_textarea]:mt-2 [&_textarea]:min-h-24 [&_textarea]:w-full [&_textarea]:rounded-xl [&_textarea]:border [&_textarea]:border-[#d8e0db] [&_textarea]:bg-white [&_textarea]:p-3 [&_label]:text-sm [&_label]:font-semibold">{children}</div>; }

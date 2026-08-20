@@ -18,26 +18,38 @@ export type RecommendationReason = {
 
 const playPurposeValues = ["CASUAL_HIT", "RALLY_PRACTICE", "STROKE_PRACTICE", "GAME_INTRO", "GAME"] as const;
 
-export const matchCreateInputSchema = z.object({
+const matchCreateCommonSchema = z.object({
   clientRequestId: z.string().uuid("요청 식별자를 다시 만들어 주세요."),
   title: z.string().trim().min(1, "매칭 제목을 입력해 주세요.").max(80, "제목은 80자 이하여야 해요."),
   startsAt: z.string().datetime({ offset: true }),
   endsAt: z.string().datetime({ offset: true }),
   regionCode: z.string().trim().min(1, "지역을 선택해 주세요."),
+  recruitCount: z.number().int().min(1, "추가 모집 인원은 1명 이상이어야 해요."),
+  playPurposes: z.array(z.enum(playPurposeValues)).min(1, "원하는 플레이를 선택해 주세요.").max(2).refine((items) => new Set(items).size === items.length, "같은 플레이를 중복 선택할 수 없어요."),
+  partnerPreference: z.enum(["COMPLETE_BEGINNER_WELCOME", "SIMILAR_LEVEL", "GAME_CAPABLE"]),
+  introduction: z.string().trim().max(300).nullable().optional(),
+  contactOpenChatUrl: z.string().trim().url("카카오 오픈채팅 링크를 확인해 주세요."),
+});
+
+const externalReservedMatchSchema = matchCreateCommonSchema.extend({
   courtSource: z.literal("EXTERNAL_RESERVED"),
   externalCourt: z.object({
     name: z.string().trim().min(1, "코트장 이름을 입력해 주세요.").max(100),
     address: z.string().trim().min(1, "코트 주소를 입력해 주세요.").max(255),
     courtNumber: z.string().trim().max(50).nullable().optional(),
   }),
-  recruitCount: z.number().int().min(1, "추가 모집 인원은 1명 이상이어야 해요."),
-  playPurposes: z.array(z.enum(playPurposeValues)).min(1, "원하는 플레이를 선택해 주세요.").max(2).refine((items) => new Set(items).size === items.length, "같은 플레이를 중복 선택할 수 없어요."),
-  partnerPreference: z.enum(["COMPLETE_BEGINNER_WELCOME", "SIMILAR_LEVEL", "GAME_CAPABLE"]),
   totalCourtFeeKrw: z.number().int().min(0, "코트 비용은 0원 이상이어야 해요."),
   additionalCostNote: z.string().trim().max(200).nullable().optional(),
-  introduction: z.string().trim().max(300).nullable().optional(),
-  contactOpenChatUrl: z.string().trim().url("카카오 오픈채팅 링크를 확인해 주세요."),
-}).superRefine((input, context) => {
+});
+
+const courtTbdMatchSchema = matchCreateCommonSchema.extend({
+  courtSource: z.literal("COURT_TBD"),
+  externalCourt: z.null().default(null),
+  totalCourtFeeKrw: z.null().default(null),
+  additionalCostNote: z.null().default(null),
+});
+
+export const matchCreateInputSchema = z.discriminatedUnion("courtSource", [externalReservedMatchSchema, courtTbdMatchSchema]).superRefine((input, context) => {
   const startsAt = new Date(input.startsAt);
   const endsAt = new Date(input.endsAt);
   if (startsAt <= new Date()) context.addIssue({ code: "custom", path: ["startsAt"], message: "시작 시간은 현재보다 미래여야 해요." });
@@ -46,7 +58,7 @@ export const matchCreateInputSchema = z.object({
     const url = new URL(input.contactOpenChatUrl);
     if (url.protocol !== "https:" || url.hostname !== "open.kakao.com") context.addIssue({ code: "custom", path: ["contactOpenChatUrl"], message: "카카오 오픈채팅 링크만 사용할 수 있어요." });
   } catch { /* zod URL validation reports this */ }
-  if (input.externalCourt.courtNumber && /(\d[ -]?){7,}/.test(input.externalCourt.courtNumber)) context.addIssue({ code: "custom", path: ["externalCourt", "courtNumber"], message: "예약번호나 연락처는 코트 번호에 입력하지 마세요." });
+  if (input.courtSource === "EXTERNAL_RESERVED" && input.externalCourt.courtNumber && /(\d[ -]?){7,}/.test(input.externalCourt.courtNumber)) context.addIssue({ code: "custom", path: ["externalCourt", "courtNumber"], message: "예약번호나 연락처는 코트 번호에 입력하지 마세요." });
 });
 
 export type MatchCreateInput = z.infer<typeof matchCreateInputSchema>;
@@ -153,7 +165,8 @@ export function getRecommendation(
   return { score, reasons };
 }
 
-export function getEstimatedFeePerPerson(totalCourtFeeKrw: number, recruitCount: number) {
+export function getEstimatedFeePerPerson(totalCourtFeeKrw: number | null, recruitCount: number) {
+  if (totalCourtFeeKrw === null) return null;
   return Math.ceil(totalCourtFeeKrw / (recruitCount + 1));
 }
 
