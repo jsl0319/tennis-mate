@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getEstimatedFeePerPerson, getRecommendation, isDiscoverableMatch, matchCreateInputSchema } from "./match";
+import { getEstimatedFeePerPerson, getPendingCount, getRecommendation, isDiscoverableMatch, matchApplicationDecisionInputSchema, matchApplicationInputSchema, matchCreateInputSchema } from "./match";
 
 const viewer = {
   rallyLevel: "SHORT_RALLY" as const,
@@ -58,5 +58,23 @@ describe("M4 match creation input", () => {
     expect(() => matchCreateInputSchema.parse({ ...validInput, courtSource: "PARTNER_COURT" })).toThrow();
     expect(() => matchCreateInputSchema.parse({ ...validInput, endsAt: validInput.startsAt })).toThrow("종료 시간");
     expect(() => matchCreateInputSchema.parse({ ...validInput, contactOpenChatUrl: "https://example.com/chat" })).toThrow("카카오 오픈채팅");
+  });
+});
+
+describe("M5 match application input", () => {
+  it("trims the optional message and rejects messages over 200 characters", () => {
+    expect(matchApplicationInputSchema.parse({ message: "  천천히 랠리하고 싶어요.  " }).message).toBe("천천히 랠리하고 싶어요.");
+    expect(() => matchApplicationInputSchema.parse({ message: "가".repeat(201) })).toThrow("200자");
+  });
+});
+
+describe("M6 application decisions", () => {
+  it("requires a positive, current match version for acceptance", () => {
+    expect(matchApplicationDecisionInputSchema.parse({ expectedMatchVersion: 3 })).toEqual({ expectedMatchVersion: 3 });
+    expect(() => matchApplicationDecisionInputSchema.parse({ expectedMatchVersion: 0 })).toThrow();
+  });
+
+  it("counts only pending applications for the host review badge", () => {
+    expect(getPendingCount([{ status: "PENDING" as const }, { status: "ACCEPTED" as const }, { status: "PENDING" as const }])).toBe(2);
   });
 });

@@ -51,6 +51,18 @@ export const matchCreateInputSchema = z.object({
 
 export type MatchCreateInput = z.infer<typeof matchCreateInputSchema>;
 
+export const matchApplicationInputSchema = z.object({
+  message: z.string().trim().max(200, "한마디는 200자 이하여야 해요.").nullable().optional(),
+});
+
+export type MatchApplicationInput = z.infer<typeof matchApplicationInputSchema>;
+
+export const matchApplicationDecisionInputSchema = z.object({
+  expectedMatchVersion: z.number().int().positive("매칭 정보를 다시 불러와 주세요."),
+});
+
+export type MatchApplicationDecisionInput = z.infer<typeof matchApplicationDecisionInputSchema>;
+
 export type RecommendationProfile = {
   rallyLevel: RallyLevel;
   gameExperience: GameExperience;
@@ -83,6 +95,14 @@ export const matchStatusLabels: Record<MatchStatus, string> = {
   COMPLETED: "완료",
   EXPIRED: "성사 없이 종료",
   CANCELLED: "취소됨",
+};
+
+export const applicationStatusLabels: Record<ApplicationStatus, string> = {
+  PENDING: "검토 중",
+  ACCEPTED: "같이 치게 됐어요",
+  REJECTED: "이번에는 함께하기 어려워요",
+  WITHDRAWN: "신청 철회",
+  CANCELLED: "모집이 마감됐어요",
 };
 
 export const partnerPreferenceLabels = {
@@ -139,6 +159,10 @@ export function getEstimatedFeePerPerson(totalCourtFeeKrw: number, recruitCount:
 
 export function getAcceptedCount(applications: Array<{ status: ApplicationStatus }>) {
   return applications.filter((application) => application.status === "ACCEPTED").length;
+}
+
+export function getPendingCount(applications: Array<{ status: ApplicationStatus }>) {
+  return applications.filter((application) => application.status === "PENDING").length;
 }
 
 export function hasRemainingSpots(recruitCount: number, applications: Array<{ status: ApplicationStatus }>) {

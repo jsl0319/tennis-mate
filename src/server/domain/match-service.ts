@@ -1,16 +1,21 @@
-import type { PlayPurpose, Prisma, PrismaClient } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
+import type { PlayPurpose, PrismaClient } from "@/generated/prisma/client";
 
 import { getProfile, type ProfileWithRelations } from "@/server/domain/profile-service";
 import { DomainError } from "@/server/domain/profile-service";
 
 import {
+  applicationStatusLabels,
   getAcceptedCount,
   getEstimatedFeePerPerson,
+  getPendingCount,
   getProfileLabels,
   getRecommendation,
   hasRemainingSpots,
   isDiscoverableMatch,
   matchStatusLabels,
+  type MatchApplicationInput,
+  type MatchApplicationDecisionInput,
   type MatchCreateInput,
   partnerPreferenceLabels,
   type RecommendationProfile,
@@ -60,7 +65,7 @@ function toHostProfile(profile: MatchWithRelations["host"]["tennisProfile"]): Re
   };
 }
 
-function toProfileView(profile: MatchWithRelations["host"]["tennisProfile"]) {
+function toProfileView(profile: ProfileWithRelations | null) {
   if (!profile) return null;
   const primaryRegion = profile.regions.find((item) => item.isPrimary)?.region;
   const { rallyLevelLabel, gameExperienceLabel } = getProfileLabels(profile);
@@ -89,6 +94,14 @@ function toProfileView(profile: MatchWithRelations["host"]["tennisProfile"]) {
       ? { code: primaryRegion.code, name: primaryRegion.name, parentCode: primaryRegion.parentCode }
       : null,
     nearbyRegionAllowed: profile.nearbyRegionAllowed,
+  };
+}
+
+function toProfileSnapshot(profile: ProfileWithRelations) {
+  return {
+    schemaVersion: 1,
+    profileVersion: profile.version,
+    ...toProfileView(profile),
   };
 }
 
@@ -269,6 +282,7 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
       canApply,
       applyBlockedReason,
       applicationId: application?.id ?? null,
+      tennisProfile: toProfileView(viewer.profile),
       canComplete: relation === "HOST" && match.status === "CLOSED" && match.endsAt <= now,
     },
     contact: canSeeContact
@@ -330,9 +344,197 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
   return { match: await getMatchDetail(prisma, viewer, created.id), created: true };
 }
 
+const applicationInclude = {
+  applicantUser: { select: { nickname: true } },
+  match: { include: { region: true } },
+} satisfies Prisma.MatchApplicationInclude;
+
+type ApplicationWithRelations = Prisma.MatchApplicationGetPayload<{ include: typeof applicationInclude }>;
+
+function toApplicationView(application: ApplicationWithRelations) {
+  return {
+    id: application.id,
+    status: application.status,
+    statusLabel: applicationStatusLabels[application.status],
+    message: application.message,
+    applicant: {
+      nickname: application.applicantUser.nickname,
+      profileSnapshot: application.profileSnapshot,
+    },
+    match: {
+      id: application.match.id,
+      title: application.match.title,
+      status: application.match.status,
+      statusLabel: matchStatusLabels[application.match.status],
+      startsAt: application.match.startsAt.toISOString(),
+      endsAt: application.match.endsAt.toISOString(),
+      courtName: application.match.externalCourtName,
+      regionName: application.match.region.name,
+      estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw, application.match.recruitCount),
+    },
+    createdAt: application.createdAt.toISOString(),
+    decidedAt: application.decidedAt?.toISOString() ?? null,
+    withdrawnAt: application.withdrawnAt?.toISOString() ?? null,
+    cancelledAt: application.cancelledAt?.toISOString() ?? null,
+  };
+}
+
+export async function createApplication(prisma: PrismaClient, viewer: Viewer, matchId: string, input: MatchApplicationInput) {
+  try {
+    const application = await prisma.$transaction(async (transaction) => {
+      const match = await transaction.match.findUnique({
+        where: { id: matchId },
+        select: {
+          hostUserId: true,
+          status: true,
+          startsAt: true,
+          recruitCount: true,
+          applications: { select: { status: true, applicantUserId: true } },
+        },
+      });
+
+      if (!match) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
+      if (match.hostUserId === viewer.id) throw new DomainError("OWN_MATCH_APPLICATION_NOT_ALLOWED", 409, "내가 만든 매칭에는 신청할 수 없어요.");
+      if (match.status === "CANCELLED") throw new DomainError("MATCH_CANCELLED", 409, "취소된 매칭에는 신청할 수 없어요.");
+      if (match.status !== "OPEN") throw new DomainError("MATCH_ALREADY_CLOSED", 409, "모집이 마감된 매칭이에요.");
+      if (match.startsAt <= new Date()) throw new DomainError("MATCH_ALREADY_ENDED", 409, "이미 시작된 일정에는 신청할 수 없어요.");
+      if (match.applications.some((item) => item.applicantUserId === viewer.id)) throw new DomainError("APPLICATION_ALREADY_EXISTS", 409, "이미 신청한 매칭이에요.");
+      if (!hasRemainingSpots(match.recruitCount, match.applications)) throw new DomainError("NO_REMAINING_SPOTS", 409, "남은 자리가 없어요.");
+
+      return transaction.matchApplication.create({
+        data: {
+          matchId,
+          applicantUserId: viewer.id,
+          message: optionalText(input.message),
+          profileSnapshot: toProfileSnapshot(viewer.profile),
+          profileSnapshotVersion: 1,
+        },
+        include: applicationInclude,
+      });
+    });
+    return toApplicationView(application);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new DomainError("APPLICATION_ALREADY_EXISTS", 409, "이미 신청한 매칭이에요.");
+    }
+    throw error;
+  }
+}
+
+export async function getSentApplications(prisma: PrismaClient, viewer: Viewer) {
+  const applications = await prisma.matchApplication.findMany({
+    where: { applicantUserId: viewer.id },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    include: applicationInclude,
+  });
+  return { items: applications.map(toApplicationView) };
+}
+
+export async function getReceivedApplications(prisma: PrismaClient, viewer: Viewer, matchId: string, statuses: Array<"PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN" | "CANCELLED"> = ["PENDING"]) {
+  const match = await prisma.match.findUnique({ where: { id: matchId }, include: matchInclude });
+  if (!match || match.hostUserId !== viewer.id) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
+
+  const applications = await prisma.matchApplication.findMany({
+    where: { matchId, ...(statuses.length > 0 ? { status: { in: statuses } } : {}) },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    include: applicationInclude,
+  });
+  const acceptedCount = getAcceptedCount(match.applications);
+
+  return {
+    match: {
+      id: match.id,
+      title: match.title,
+      status: match.status,
+      statusLabel: matchStatusLabels[match.status],
+      startsAt: match.startsAt.toISOString(),
+      endsAt: match.endsAt.toISOString(),
+      courtName: match.externalCourtName,
+      recruitCount: match.recruitCount,
+      acceptedCount,
+      pendingApplicationCount: getPendingCount(match.applications),
+      remainingSpots: Math.max(match.recruitCount - acceptedCount, 0),
+      version: match.version,
+    },
+    items: applications.map(toApplicationView),
+  };
+}
+
+export async function acceptApplication(prisma: PrismaClient, viewer: Viewer, applicationId: string, input: MatchApplicationDecisionInput) {
+  return prisma.$transaction(async (transaction) => {
+    const application = await transaction.matchApplication.findUnique({
+      where: { id: applicationId },
+      include: { match: { select: { id: true, hostUserId: true, status: true, startsAt: true, recruitCount: true, version: true } } },
+    });
+    if (!application || application.match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 신청을 검토할 수 있어요.");
+    if (application.status !== "PENDING") throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "이미 처리된 신청이에요.");
+    if (application.match.status !== "OPEN" || application.match.startsAt <= new Date()) throw new DomainError("MATCH_STATE_CONFLICT", 409, "현재 모집 중인 매칭에서만 신청을 수락할 수 있어요.");
+    if (application.match.version !== input.expectedMatchVersion) throw new DomainError("VERSION_CONFLICT", 409, "다른 변경사항이 있어 신청 목록을 다시 불러와 주세요.");
+
+    const reservedMatch = await transaction.match.updateMany({
+      where: { id: application.match.id, status: "OPEN", version: input.expectedMatchVersion },
+      data: { version: { increment: 1 } },
+    });
+    if (reservedMatch.count !== 1) throw new DomainError("VERSION_CONFLICT", 409, "다른 변경사항이 있어 신청 목록을 다시 불러와 주세요.");
+
+    const acceptedCount = await transaction.matchApplication.count({ where: { matchId: application.match.id, status: "ACCEPTED" } });
+    if (acceptedCount >= application.match.recruitCount) throw new DomainError("NO_REMAINING_SPOTS", 409, "남은 자리가 없어 신청을 수락할 수 없어요.");
+
+    const decidedAt = new Date();
+    const accepted = await transaction.matchApplication.updateMany({
+      where: { id: application.id, status: "PENDING" },
+      data: { status: "ACCEPTED", decidedAt },
+    });
+    if (accepted.count !== 1) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "이미 처리된 신청이에요.");
+
+    const nextAcceptedCount = acceptedCount + 1;
+    const isFull = nextAcceptedCount >= application.match.recruitCount;
+    if (isFull) {
+      await transaction.match.update({ where: { id: application.match.id }, data: { status: "CLOSED", closedAt: decidedAt } });
+      await transaction.matchApplication.updateMany({
+        where: { matchId: application.match.id, status: "PENDING" },
+        data: { status: "CANCELLED", cancelledAt: decidedAt },
+      });
+    }
+
+    return {
+      application: { id: application.id, status: "ACCEPTED" as const, decidedAt: decidedAt.toISOString() },
+      match: {
+        id: application.match.id,
+        status: isFull ? "CLOSED" as const : "OPEN" as const,
+        acceptedCount: nextAcceptedCount,
+        remainingSpots: Math.max(application.match.recruitCount - nextAcceptedCount, 0),
+        version: input.expectedMatchVersion + 1,
+      },
+    };
+  });
+}
+
+export async function rejectApplication(prisma: PrismaClient, viewer: Viewer, applicationId: string) {
+  return prisma.$transaction(async (transaction) => {
+    const application = await transaction.matchApplication.findUnique({
+      where: { id: applicationId },
+      include: { match: { select: { hostUserId: true } } },
+    });
+    if (!application || application.match.hostUserId !== viewer.id) throw new DomainError("MATCH_HOST_REQUIRED", 403, "이 매칭의 모집자만 신청을 검토할 수 있어요.");
+    if (application.status !== "PENDING") throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "이미 처리된 신청이에요.");
+    const rejected = await transaction.matchApplication.updateMany({
+      where: { id: applicationId, status: "PENDING" },
+      data: { status: "REJECTED", decidedAt: new Date() },
+    });
+    if (rejected.count !== 1) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "이미 처리된 신청이에요.");
+    const result = await transaction.matchApplication.findUnique({ where: { id: applicationId }, include: applicationInclude });
+    if (!result) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "신청 상태를 다시 확인해 주세요.");
+    return toApplicationView(result);
+  });
+}
+
 export async function getHostedMatches(prisma: PrismaClient, viewer: Viewer) {
   const matches = await prisma.match.findMany({
     where: { hostUserId: viewer.id }, orderBy: [{ startsAt: "asc" }, { id: "asc" }], include: matchInclude,
   });
-  return matches.map((match) => toMatchCardView(match, viewer));
+  return matches
+    .map((match) => ({ match, card: toMatchCardView(match, viewer), pendingApplicationCount: getPendingCount(match.applications) }))
+    .sort((left, right) => Number(right.pendingApplicationCount > 0) - Number(left.pendingApplicationCount > 0) || left.match.startsAt.getTime() - right.match.startsAt.getTime())
+    .map(({ card, pendingApplicationCount }) => ({ ...card, pendingApplicationCount }));
 }
