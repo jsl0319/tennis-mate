@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
+import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+
 type HostedMatch = {
   id: string;
   title: string;
@@ -80,8 +82,8 @@ function useJsonLoader<T>(url: string) {
   return { data, error, load };
 }
 
-function PageShell({ children }: { children: React.ReactNode }) {
-  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-10 pt-6 text-[#1a221e]"><div className="mx-auto max-w-[560px]">{children}</div></main>;
+function PageShell({ children, withNavigation = false }: { children: React.ReactNode; withNavigation?: boolean }) {
+  return <main className={`min-h-svh bg-[#fffdfc] px-5 pt-6 text-[#1a221e] ${withNavigation ? "pb-28" : "pb-10"}`}><div className="mx-auto max-w-[560px]">{children}</div>{withNavigation ? <BottomNavigation /> : null}</main>;
 }
 
 function LoadingOrError({ error, load }: { error: string; load: () => Promise<void> }) {
@@ -90,7 +92,7 @@ function LoadingOrError({ error, load }: { error: string; load: () => Promise<vo
 
 export function M6ReceivedApplications() {
   const { data, error, load } = useJsonLoader<{ items: HostedMatch[] }>("/api/v1/me/hosted-matches");
-  return <PageShell>
+  return <PageShell withNavigation>
     <Link aria-label="홈으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/">←</Link>
     <p className="mt-5 text-sm font-semibold text-[#1f7a55]">활동</p>
     <h1 className="mt-1 text-2xl font-bold">받은 신청</h1>
@@ -151,7 +153,20 @@ function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: "clos
 export function M6ReceivedMatch({ params }: { params: Promise<{ matchId: string }> }) {
   const { matchId } = use(params);
   const { data, error, load } = useJsonLoader<ReceivedResponse>(`/api/v1/matches/${encodeURIComponent(matchId)}/applications?status=PENDING`);
-  return <PageShell><Link aria-label="받은 신청 목록으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/activity/received">←</Link>{data === null ? <LoadingOrError error={error} load={load} /> : <><p className="mt-5 text-sm font-semibold text-[#1f7a55]">받은 신청</p><h1 className="mt-1 text-2xl font-bold">신청자 {data.match.pendingApplicationCount}명을 검토해요</h1><p className="mt-2 text-sm leading-6 text-[#5c6b63]">신청 내용을 보고 함께 치기 좋은 분을 선택하세요.</p><section className="mt-6 rounded-3xl border border-[#d8e0db] bg-white p-5"><div className="flex items-center justify-between gap-3"><span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[#eff9f4] px-2.5 py-1 text-xs font-semibold text-[#1f7a55]">{data.match.statusLabel}</span><span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[#eff9f4] px-2.5 py-1 text-xs font-semibold text-[#1f7a55]">검토할 신청 {data.match.pendingApplicationCount}건</span></div><h2 className="mt-4 text-lg font-bold">{data.match.title}</h2><p className="mt-3 text-sm text-[#405047]">🗓 {schedule(data.match.startsAt)} · {data.match.court.name ?? "코트와 비용을 함께 정해요"}</p><p className="mt-3 text-sm font-semibold">수락 {data.match.acceptedCount}명 / 모집 {data.match.recruitCount}명 <span className="font-normal text-[#5c6b63]">· 남은 자리 {data.match.remainingSpots}명</span></p></section>{data.items.length === 0 ? <section className="mt-6 rounded-3xl border border-dashed border-[#c7d6ce] bg-white px-5 py-10 text-center"><h2 className="font-bold">검토할 신청을 모두 확인했어요</h2><p className="mt-2 text-sm text-[#5c6b63]">새 신청이 오면 여기에서 확인할 수 있어요.</p></section> : <div className="mt-4 space-y-3">{data.items.map((application) => <ApplicantCard application={application} matchId={matchId} key={application.id} />)}</div>}</>}</PageShell>;
+  if (data === null) return <PageShell><Link aria-label="받은 신청 목록으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/activity/received">←</Link><LoadingOrError error={error} load={load} /></PageShell>;
+  return <PageShell>
+    <Link aria-label="받은 신청 목록으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/activity/received">←</Link>
+    <p className="mt-5 text-sm font-semibold text-[#1f7a55]">받은 신청</p>
+    <h1 className="mt-1 text-2xl font-bold">신청자 {data.match.pendingApplicationCount}명을 검토해요</h1>
+    <p className="mt-2 text-sm leading-6 text-[#5c6b63]">신청 내용을 보고 함께 치기 좋은 분을 선택하세요.</p>
+    <section className="mt-6 rounded-3xl border border-[#d8e0db] bg-white p-5 shadow-[0_4px_14px_rgba(23,67,45,0.05)]">
+      <div className="flex items-center justify-between gap-3"><span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[#eff9f4] px-2.5 py-1 text-xs font-semibold text-[#1f7a55]">{data.match.statusLabel}</span><span className="inline-flex min-h-7 items-center whitespace-nowrap rounded-full bg-[#eff9f4] px-2.5 py-1 text-xs font-semibold text-[#1f7a55]">검토할 신청 {data.match.pendingApplicationCount}건</span></div>
+      <h2 className="mt-4 text-lg font-bold">{data.match.title}</h2>
+      <p className="mt-3 text-sm text-[#405047]">🗓 {schedule(data.match.startsAt)} · {data.match.court.name ?? "코트와 비용을 함께 정해요"}</p>
+      <p className="mt-3 text-sm font-semibold">수락 {data.match.acceptedCount}명 / 모집 {data.match.recruitCount}명 <span className="font-normal text-[#5c6b63]">· 남은 자리 {data.match.remainingSpots}명</span></p>
+    </section>
+    {data.items.length === 0 ? <section className="mt-6 rounded-3xl border border-dashed border-[#c7d6ce] bg-white px-5 py-10 text-center"><h2 className="font-bold">검토할 신청을 모두 확인했어요</h2><p className="mt-2 text-sm text-[#5c6b63]">새 신청이 오면 여기에서 확인할 수 있어요.</p></section> : <div className="mt-4 grid gap-4">{data.items.map((application) => <ApplicantCard application={application} matchId={matchId} key={application.id} />)}</div>}
+  </PageShell>;
 }
 
 function ApplicantCard({ application, matchId }: { application: ReceivedApplication; matchId: string }) {

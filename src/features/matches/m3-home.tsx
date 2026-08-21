@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
+import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
 
 import { MatchCard, MatchCardSkeleton, type MatchCardData } from "./m3-match-card";
@@ -97,7 +98,7 @@ export function TennisMateHome() {
         <h2 className="text-xl font-bold">{listTitle}</h2>
         <p className="mt-2 text-sm leading-6 text-[#5c6b63]">{listDescription}</p>
         {activeMatches.length > 0 ? (
-          <div className="mt-4 grid gap-6">{activeMatches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
+          <div className="mt-4 grid gap-4">{activeMatches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : isRecommendedList && visibleOtherMatches.length > 0 ? (
           <EmptyRecommendedState onShowOtherMatches={() => setActiveList("other")} />
         ) : isRecommendedList ? (
@@ -107,10 +108,11 @@ export function TennisMateHome() {
         )}
       </section>
 
-      <Link aria-label="매칭 만들기" className="fixed bottom-5 right-5 z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[#1f7a55] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(19,82,56,0.26)] transition-transform active:scale-95" href="/matches/new">
+      <Link aria-label="매칭 만들기" className="fixed bottom-24 right-5 z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[#1f7a55] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(19,82,56,0.26)] transition-transform active:scale-95" href="/matches/new">
         <span aria-hidden="true" className="text-lg leading-none">+</span>
         매칭 만들기
       </Link>
+      <BottomNavigation />
     </main>
   );
 }
@@ -128,5 +130,5 @@ function EmptyMatchState() {
 }
 
 function HomeLoading() {
-  return <main className="min-h-svh bg-[#fffdfc] px-5 pt-8"><section className="mx-auto max-w-[560px]"><div className="h-4 w-24 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-4 h-16 w-64 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-10"><div className="h-6 w-52 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-4 grid gap-6"><MatchCardSkeleton /><MatchCardSkeleton /></div></div></section></main>;
+  return <main className="min-h-svh bg-[#fffdfc] px-5 pt-8"><section className="mx-auto max-w-[560px]"><div className="h-4 w-24 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-4 h-16 w-64 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-10"><div className="h-6 w-52 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-4 grid gap-4"><MatchCardSkeleton /><MatchCardSkeleton /></div></div></section></main>;
 }
