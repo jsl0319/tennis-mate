@@ -75,6 +75,18 @@ export const matchApplicationDecisionInputSchema = z.object({
 
 export type MatchApplicationDecisionInput = z.infer<typeof matchApplicationDecisionInputSchema>;
 
+export const matchLifecycleInputSchema = z.object({
+  expectedVersion: z.number().int().positive("매칭 정보를 다시 불러와 주세요."),
+});
+
+export type MatchLifecycleInput = z.infer<typeof matchLifecycleInputSchema>;
+
+export const matchCancelInputSchema = matchLifecycleInputSchema.extend({
+  reason: z.string().trim().max(200, "취소 안내는 200자 이하여야 해요.").nullable().optional(),
+});
+
+export type MatchCancelInput = z.infer<typeof matchCancelInputSchema>;
+
 export type RecommendationProfile = {
   rallyLevel: RallyLevel;
   gameExperience: GameExperience;
@@ -116,6 +128,14 @@ export const applicationStatusLabels: Record<ApplicationStatus, string> = {
   WITHDRAWN: "신청 철회",
   CANCELLED: "모집이 마감됐어요",
 };
+
+export function getApplicationStatusLabel(status: ApplicationStatus, matchStatus: MatchStatus) {
+  if (status !== "CANCELLED") return applicationStatusLabels[status];
+  if (matchStatus === "CLOSED") return "모집이 마감됐어요";
+  if (matchStatus === "CANCELLED") return "매칭이 취소됐어요";
+  if (matchStatus === "EXPIRED") return "성사 없이 종료됐어요";
+  return "신청이 취소됐어요";
+}
 
 export const partnerPreferenceLabels = {
   COMPLETE_BEGINNER_WELCOME: "완전 초보도 좋아요",

@@ -17,3 +17,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/* Activity lists keep a stable 16px rhythm so adjacent cards do not blend together. */
+main > div > .mt-7.space-y-3 > article,
+main > div > .mt-4.space-y-3 > a {
+  box-shadow: 0 4px 14px rgb(23 67 45 / 5%);
+}
+
+main > div > .mt-7.space-y-3 > article + article,
+main > div > .mt-4.space-y-3 > a + a {
+  margin-top: 1rem;
+}

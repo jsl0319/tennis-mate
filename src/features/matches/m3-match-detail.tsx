@@ -29,7 +29,8 @@ type Detail = {
   partnerPreferenceLabel: string;
   recommendationReasons: Array<{ code: string; label: string }>;
   host: { nickname: string; tennisProfile: ProfileSummary | null };
-  viewer: { relation: "NONE" | "HOST" | "APPLICANT"; canApply: boolean; applyBlockedReason: string | null; applicationId: string | null; tennisProfile: ProfileSummary | null };
+  contact: { type: "KAKAO_OPEN_CHAT"; url: string; label: string } | null;
+  viewer: { relation: "NONE" | "HOST" | "APPLICANT"; canApply: boolean; applyBlockedReason: string | null; applicationId: string | null; applicationStatus: "PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN" | "CANCELLED" | null; tennisProfile: ProfileSummary | null };
 };
 
 function schedule(startsAt: string, endsAt: string) {
@@ -124,6 +125,7 @@ export function M3MatchDetail({ params }: { params: Promise<{ matchId: string }>
 
 function DetailAction({ detail, onApply }: { detail: Detail; onApply: () => void }) {
   if (detail.viewer.canApply) return <button className="min-h-[52px] w-full rounded-3xl bg-[#1f7a55] font-semibold text-white transition-colors hover:bg-[#176342]" onClick={onApply} type="button">같이 치기</button>;
+  if (detail.viewer.relation === "APPLICANT" && detail.viewer.applicationStatus === "ACCEPTED" && detail.contact) return <a className="flex min-h-[52px] w-full items-center justify-center rounded-3xl bg-[#1f7a55] font-semibold text-white" href={detail.contact.url} rel="noreferrer" target="_blank">{detail.contact.label}</a>;
   if (detail.viewer.relation === "APPLICANT") return <Link className="flex min-h-[52px] w-full items-center justify-center rounded-3xl bg-[#eff9f4] font-semibold text-[#1f7a55]" href="/activity/sent">검토 중이에요 · 신청 내역 보기</Link>;
   return <p className="py-4 text-center text-sm font-medium text-[#5c6b63]">{blockedMessage(detail.viewer.applyBlockedReason)}</p>;
 }

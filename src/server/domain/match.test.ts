@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getEstimatedFeePerPerson, getPendingCount, getRecommendation, isDiscoverableMatch, matchApplicationDecisionInputSchema, matchApplicationInputSchema, matchCreateInputSchema } from "./match";
+import { getApplicationStatusLabel, getEstimatedFeePerPerson, getPendingCount, getRecommendation, isDiscoverableMatch, matchApplicationDecisionInputSchema, matchApplicationInputSchema, matchCancelInputSchema, matchCreateInputSchema, matchLifecycleInputSchema } from "./match";
 
 const viewer = {
   rallyLevel: "SHORT_RALLY" as const,
@@ -90,5 +90,21 @@ describe("M6 application decisions", () => {
 
   it("counts only pending applications for the host review badge", () => {
     expect(getPendingCount([{ status: "PENDING" as const }, { status: "ACCEPTED" as const }, { status: "PENDING" as const }])).toBe(2);
+  });
+});
+
+describe("M7 lifecycle inputs and user-facing state", () => {
+  it("requires a current version for lifecycle changes and limits an optional cancellation note", () => {
+    expect(matchLifecycleInputSchema.parse({ expectedVersion: 4 })).toEqual({ expectedVersion: 4 });
+    expect(matchCancelInputSchema.parse({ expectedVersion: 4, reason: null })).toEqual({ expectedVersion: 4, reason: null });
+    expect(() => matchLifecycleInputSchema.parse({ expectedVersion: 0 })).toThrow();
+    expect(() => matchCancelInputSchema.parse({ expectedVersion: 4, reason: "가".repeat(201) })).toThrow("200자");
+  });
+
+  it("distinguishes cancelled applications by their match outcome", () => {
+    expect(getApplicationStatusLabel("CANCELLED", "CLOSED")).toBe("모집이 마감됐어요");
+    expect(getApplicationStatusLabel("CANCELLED", "CANCELLED")).toBe("매칭이 취소됐어요");
+    expect(getApplicationStatusLabel("CANCELLED", "EXPIRED")).toBe("성사 없이 종료됐어요");
+    expect(getApplicationStatusLabel("ACCEPTED", "CLOSED")).toBe("같이 치게 됐어요");
   });
 });
