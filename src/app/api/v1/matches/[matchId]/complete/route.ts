@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/server/auth/current-user";
+import { getRateLimitedCurrentUser } from "@/server/auth/current-user";
 import { getPrisma } from "@/server/db/prisma";
 import { matchLifecycleInputSchema } from "@/server/domain/match";
 import { completeMatch, getOnboardedViewer } from "@/server/domain/match-service";
@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request, context: { params: Promise<{ matchId: string }> }) {
   try {
     const { matchId } = await context.params;
-    const user = await getCurrentUser();
+    const user = await getRateLimitedCurrentUser();
     const prisma = getPrisma();
     return Response.json(await completeMatch(prisma, await getOnboardedViewer(prisma, user), matchId, matchLifecycleInputSchema.parse(await request.json())));
   } catch (error) {

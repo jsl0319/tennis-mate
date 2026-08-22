@@ -1,6 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -227,7 +228,7 @@ export function M2OnboardingFlow({ onCompleted }: { onCompleted?: () => void }) 
 
   if (screen === "loading") return <main className="grid min-h-svh place-items-center bg-[#fffdfc] text-[#1a221e]">불러오는 중이에요…</main>;
 
-  if (screen === "login") return <main className="min-h-svh bg-[#fffdfc] px-5 py-10 text-[#1a221e]"><section className="mx-auto flex min-h-[calc(100svh-5rem)] max-w-[390px] flex-col rounded-[28px] bg-white p-7 shadow-sm"><p className="font-semibold text-[#1f7a55]">● Tennis Mate</p><h1 className="mt-8 text-[32px] font-bold leading-tight">테니스 메이트를<br />가볍게 시작해요</h1><p className="mt-4 leading-7 text-[#5c6b63]">조건이 맞는 메이트를 찾고, 신청부터 약속 확인까지 한 번에 이어가세요.</p><div className="flex-1" />{error ? <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}<button className="min-h-[52px] rounded-2xl bg-[#1f7a55] px-4 font-semibold text-white disabled:opacity-60" disabled={loading} onClick={() => void signIn("kakao", { callbackUrl: "/" })} type="button">카카오 계정으로 시작하기</button><p className="mt-4 text-center text-xs leading-5 text-[#5c6b63]">계속하면 서비스 이용약관과 개인정보 처리방침에 동의하게 됩니다.</p></section></main>;
+  if (screen === "login") return <main className="min-h-svh bg-[#fffdfc] px-5 py-10 text-[#1a221e]"><section className="mx-auto flex min-h-[calc(100svh-5rem)] max-w-[390px] flex-col rounded-[28px] bg-white p-7 shadow-sm"><p className="font-semibold text-[#1f7a55]">● Tennis Mate</p><h1 className="mt-8 text-[32px] font-bold leading-tight">테니스 메이트를<br />가볍게 시작해요</h1><p className="mt-4 leading-7 text-[#5c6b63]">조건이 맞는 메이트를 찾고, 신청부터 약속 확인까지 한 번에 이어가세요.</p><div className="flex-1" />{error ? <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}<button className="min-h-[52px] rounded-2xl bg-[#1f7a55] px-4 font-semibold text-white disabled:opacity-60" disabled={loading} onClick={() => void signIn("kakao", { callbackUrl: "/" })} type="button">카카오 계정으로 시작하기</button><p className="mt-4 text-center text-xs leading-5 text-[#5c6b63]">계속하면 <Link className="font-semibold text-[#1f7a55] underline" href="/terms">서비스 이용약관</Link>과 <Link className="font-semibold text-[#1f7a55] underline" href="/privacy">개인정보 처리방침</Link>에 동의하게 됩니다.</p></section></main>;
 
   if (screen === "nickname") {
     const nicknameValid = /^[가-힣a-zA-Z0-9]{2,12}$/.test(draft.nickname.trim());

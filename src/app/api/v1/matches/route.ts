@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { getCurrentUser } from "@/server/auth/current-user";
+import { getRateLimitedCurrentUser } from "@/server/auth/current-user";
 import { getPrisma } from "@/server/db/prisma";
 import { createMatch, getMatches, getOnboardedViewer, parseCursor } from "@/server/domain/match-service";
 import { matchCreateInputSchema } from "@/server/domain/match";
@@ -48,7 +48,7 @@ function parseSearchParams(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const user = await getCurrentUser();
+    const user = await getRateLimitedCurrentUser();
     const viewer = await getOnboardedViewer(getPrisma(), user);
     return Response.json(await getMatches(getPrisma(), viewer, parseSearchParams(request)));
   } catch (error) {
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getCurrentUser();
+    const user = await getRateLimitedCurrentUser();
     const viewer = await getOnboardedViewer(getPrisma(), user);
     const result = await createMatch(getPrisma(), viewer, matchCreateInputSchema.parse(await request.json()));
     return Response.json(result.match, { status: result.created ? 201 : 200, headers: { Location: `/api/v1/matches/${result.match.id}` } });

@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 
 import { AccountAccessError, AuthenticationError } from "@/server/auth/current-user";
 import { DomainError } from "@/server/domain/profile-service";
+import { ApiRateLimitError } from "@/server/http/api-rate-limit";
 
 export function apiError(
   status: number,
@@ -21,6 +22,13 @@ export function handleApiError(error: unknown) {
 
   if (error instanceof AccountAccessError) {
     return apiError(403, "FORBIDDEN", error.message);
+  }
+
+  if (error instanceof ApiRateLimitError) {
+    return NextResponse.json(
+      { error: { code: "RATE_LIMITED", message: error.message, fieldErrors: [] } },
+      { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds), "Cache-Control": "no-store" } },
+    );
   }
 
   if (error instanceof DomainError) {

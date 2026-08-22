@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { getPrisma } from "@/server/db/prisma";
+import { enforceApiRateLimit } from "@/server/http/api-rate-limit-service";
 
 export class AuthenticationError extends Error {}
 export class AccountAccessError extends Error {}
@@ -22,5 +23,11 @@ export async function getCurrentUser() {
     throw new AccountAccessError("현재 계정으로는 서비스를 이용할 수 없어요.");
   }
 
+  return user;
+}
+
+export async function getRateLimitedCurrentUser() {
+  const user = await getCurrentUser();
+  await enforceApiRateLimit(getPrisma(), user.id);
   return user;
 }

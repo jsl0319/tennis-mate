@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/server/auth/current-user";
+import { getRateLimitedCurrentUser } from "@/server/auth/current-user";
 import { getPrisma } from "@/server/db/prisma";
 import { getOnboardedViewer, getRecommendedMatches } from "@/server/domain/match-service";
 import { DomainError } from "@/server/domain/profile-service";
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
       throw new DomainError("INVALID_REQUEST", 400, "추천 개수는 1~50개로 입력해 주세요.");
     }
 
-    const user = await getCurrentUser();
+    const user = await getRateLimitedCurrentUser();
     const viewer = await getOnboardedViewer(getPrisma(), user);
     return Response.json({ items: await getRecommendedMatches(getPrisma(), viewer, limit) });
   } catch (error) {

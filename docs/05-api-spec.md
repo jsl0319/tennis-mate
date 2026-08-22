@@ -198,6 +198,12 @@
 - 서로 다른 최종 상태로 이미 전환된 경우 `409 APPLICATION_STATE_CONFLICT`를 반환한다.
 - 매칭 생성은 요청의 `clientRequestId`와 세션 User를 묶어 멱등성을 보장한다. 같은 키의 재요청은 새 Match를 만들지 않고 기존 Match를 반환한다.
 
+### 4.10 요청 제한
+
+- `/api/v1`의 인증된 요청은 계정별로 60초 동안 최대 120개까지 허용한다.
+- 제한을 초과하면 `429 Too Many Requests`와 `RATE_LIMITED`를 반환한다. 응답의 `Retry-After` 헤더는 다음 요청 가능 시점까지의 초 단위 값이다.
+- 이 제한은 로그인·권한 검증 뒤에 적용하며, 요청 본문이나 개인정보를 제한 키로 저장하지 않는다.
+
 ## 5. 공통 Enum
 
 ### 5.1 테니스 프로필
@@ -1080,6 +1086,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 | `INVALID_REGION` | 잘못되거나 비활성 지역 |
 | `TOO_MANY_PLAY_PURPOSES` | 플레이 목적 최대 개수 초과 |
 | `VERSION_CONFLICT` | 리소스가 다른 요청으로 변경됨 |
+| `RATE_LIMITED` | 짧은 시간에 너무 많은 요청 발생 |
 
 ### 14.2 매칭
 

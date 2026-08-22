@@ -86,6 +86,7 @@ model User {
 
   authAccounts AuthAccount[]
   tennisProfile TennisProfile?
+  apiRateLimit ApiRateLimit?
   hostedMatches Match[]           @relation("MatchHost")
   matchApplications MatchApplication[]
 
@@ -164,6 +165,17 @@ model TennisProfilePurpose {
 
   @@id([tennisProfileId, purpose])
   @@map("tennis_profile_purposes")
+}
+
+model ApiRateLimit {
+  userId          String   @id @map("user_id") @db.Uuid
+  windowStartedAt DateTime @map("window_started_at") @db.Timestamptz(6)
+  requestCount    Int      @default(0) @map("request_count")
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_rate_limits")
 }
 
 model Match {

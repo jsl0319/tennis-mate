@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/server/auth/current-user";
+import { getRateLimitedCurrentUser } from "@/server/auth/current-user";
 import { getPrisma } from "@/server/db/prisma";
 import { nicknameSchema } from "@/server/domain/profile";
 import { getProfile, toProfileView } from "@/server/domain/profile-service";
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const user = await getCurrentUser();
+    const user = await getRateLimitedCurrentUser();
     const profile = await getProfile(getPrisma(), user.id);
 
     return Response.json({
@@ -26,7 +26,7 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    const user = await getCurrentUser();
+    const user = await getRateLimitedCurrentUser();
     const body: unknown = await request.json();
     const nickname = nicknameSchema.parse(
       typeof body === "object" && body !== null ? (body as { nickname?: unknown }).nickname : undefined,

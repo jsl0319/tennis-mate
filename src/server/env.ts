@@ -21,7 +21,14 @@ export function parseDatabaseUrl(value: string | undefined): string {
     throw new Error(message);
   }
 
-  return result.data;
+  const url = new URL(result.data);
+  const sslmode = url.searchParams.get("sslmode");
+
+  if (sslmode === "prefer" || sslmode === "require" || sslmode === "verify-ca") {
+    url.searchParams.set("sslmode", "verify-full");
+  }
+
+  return url.toString();
 }
 
 export function getDatabaseUrl(): string {

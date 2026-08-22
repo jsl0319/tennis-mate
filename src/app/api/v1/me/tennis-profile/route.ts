@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/server/auth/current-user";
+import { getRateLimitedCurrentUser } from "@/server/auth/current-user";
 import { getPrisma } from "@/server/db/prisma";
 import { profileInputSchema } from "@/server/domain/profile";
 import { saveProfile, toProfileView } from "@/server/domain/profile-service";
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 export async function PUT(request: Request) {
   try {
-    const user = await getCurrentUser();
+    const user = await getRateLimitedCurrentUser();
     if (!user.nicknameConfirmedAt) {
       return Response.json(
         {
