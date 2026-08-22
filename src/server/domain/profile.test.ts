@@ -17,6 +17,10 @@ describe("M2 profile input", () => {
     expect(profileInputSchema.parse(validProfile)).toMatchObject(validProfile);
   });
 
+  it("accepts the current profile version when editing an existing profile", () => {
+    expect(profileInputSchema.parse({ ...validProfile, expectedVersion: 2 }).expectedVersion).toBe(2);
+  });
+
   it("rejects more than two play purposes", () => {
     expect(() => profileInputSchema.parse({
       ...validProfile,

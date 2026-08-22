@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
+import { ActivityTabs } from "@/components/navigation/activity-tabs";
 import { BackButton } from "@/components/navigation/back-button";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 
@@ -97,7 +98,7 @@ export function M6ReceivedApplications() {
     <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" />
     <p className="mt-5 text-sm font-semibold text-[#1f7a55]">활동</p>
     <h1 className="mt-1 text-2xl font-bold">받은 신청</h1>
-    <div className="mt-5 flex gap-6 border-b border-[#d8e0db] text-sm font-semibold"><span className="border-b-2 border-[#1f7a55] pb-3 text-[#1f7a55]">받은 신청</span><Link className="pb-3 text-[#5c6b63]" href="/activity/sent">보낸 신청</Link></div>
+    <ActivityTabs current="received" />
     {data === null ? <LoadingOrError error={error} load={load} /> : data.items.length === 0 ? <EmptyHostedMatches /> : <div className="mt-6 space-y-4">{data.items.map((match) => <HostedMatchCard key={match.id} match={match} onChanged={load} />)}</div>}
   </PageShell>;
 }
