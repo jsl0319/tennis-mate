@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
+import { BackButton } from "@/components/navigation/back-button";
+
 type ProfileSummary = {
   experienceLabel: string;
   rallyLevelLabel: string;
@@ -109,7 +111,7 @@ export function M3MatchDetail({ params }: { params: Promise<{ matchId: string }>
   if (submitted) return <ApplicationSuccess title={detail.title} />;
 
   const hostProfile = detail.host.tennisProfile;
-  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]"><article className="mx-auto max-w-[560px]"><Link className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/" aria-label="홈으로 돌아가기">←</Link><div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold"><span className="rounded-full bg-[#eff9f4] px-2.5 py-1 text-[#1f7a55]">{detail.statusLabel}</span>{detail.beginnerWelcome ? <span className="rounded-full bg-[#f6f4e9] px-2.5 py-1 text-[#6c5a18]">🌱 초보자 환영</span> : null}</div><h1 className="mt-4 text-2xl font-bold leading-snug">{detail.title}</h1><p className="mt-3 text-sm text-[#405047]">🗓 {schedule(detail.startsAt, detail.endsAt)}</p><p className="mt-2 text-sm text-[#405047]">📍 {detail.region.name} · 남은 자리 {detail.remainingSpots}명</p>
+  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]"><article className="mx-auto max-w-[560px]"><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" /><div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold"><span className="rounded-full bg-[#eff9f4] px-2.5 py-1 text-[#1f7a55]">{detail.statusLabel}</span>{detail.beginnerWelcome ? <span className="rounded-full bg-[#f6f4e9] px-2.5 py-1 text-[#6c5a18]">🌱 초보자 환영</span> : null}</div><h1 className="mt-4 text-2xl font-bold leading-snug">{detail.title}</h1><p className="mt-3 text-sm text-[#405047]">🗓 {schedule(detail.startsAt, detail.endsAt)}</p><p className="mt-2 text-sm text-[#405047]">📍 {detail.region.name} · 남은 자리 {detail.remainingSpots}명</p>
 
     {detail.recommendationReasons.length > 0 ? <section className="mt-4 flex min-h-[140px] flex-col rounded-3xl bg-[#eff9f4] p-5"><h2 className="font-bold">왜 잘 맞나요?</h2><ul className="mt-4 space-y-2 text-sm text-[#315b45]">{detail.recommendationReasons.map((reason) => <li key={reason.code}>• {reason.label}</li>)}</ul></section> : null}
 

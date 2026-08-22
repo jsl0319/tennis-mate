@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { BackButton } from "@/components/navigation/back-button";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 
 type SentApplication = {
@@ -71,7 +72,7 @@ export function M5SentApplications() {
 
   return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]">
     <div className="mx-auto max-w-[560px]">
-      <Link aria-label="홈으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/">←</Link>
+      <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" />
       <p className="mt-5 text-sm font-semibold text-[#1f7a55]">같이 치기</p>
       <h1 className="mt-1 text-2xl font-bold">보낸 신청</h1>
       <p className="mt-2 text-sm leading-6 text-[#5c6b63]">모집자의 확인을 기다리고 있어요.</p>

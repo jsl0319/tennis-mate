@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
+import { BackButton } from "@/components/navigation/back-button";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 
 type HostedMatch = {
@@ -93,7 +94,7 @@ function LoadingOrError({ error, load }: { error: string; load: () => Promise<vo
 export function M6ReceivedApplications() {
   const { data, error, load } = useJsonLoader<{ items: HostedMatch[] }>("/api/v1/me/hosted-matches");
   return <PageShell withNavigation>
-    <Link aria-label="홈으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/">←</Link>
+    <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" />
     <p className="mt-5 text-sm font-semibold text-[#1f7a55]">활동</p>
     <h1 className="mt-1 text-2xl font-bold">받은 신청</h1>
     <div className="mt-5 flex gap-6 border-b border-[#d8e0db] text-sm font-semibold"><span className="border-b-2 border-[#1f7a55] pb-3 text-[#1f7a55]">받은 신청</span><Link className="pb-3 text-[#5c6b63]" href="/activity/sent">보낸 신청</Link></div>
@@ -153,9 +154,9 @@ function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: "clos
 export function M6ReceivedMatch({ params }: { params: Promise<{ matchId: string }> }) {
   const { matchId } = use(params);
   const { data, error, load } = useJsonLoader<ReceivedResponse>(`/api/v1/matches/${encodeURIComponent(matchId)}/applications?status=PENDING`);
-  if (data === null) return <PageShell><Link aria-label="받은 신청 목록으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/activity/received">←</Link><LoadingOrError error={error} load={load} /></PageShell>;
+  if (data === null) return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" /><LoadingOrError error={error} load={load} /></PageShell>;
   return <PageShell>
-    <Link aria-label="받은 신청 목록으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href="/activity/received">←</Link>
+    <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" />
     <p className="mt-5 text-sm font-semibold text-[#1f7a55]">받은 신청</p>
     <h1 className="mt-1 text-2xl font-bold">신청자 {data.match.pendingApplicationCount}명을 검토해요</h1>
     <p className="mt-2 text-sm leading-6 text-[#5c6b63]">신청 내용을 보고 함께 치기 좋은 분을 선택하세요.</p>
@@ -196,7 +197,7 @@ export function M6ApplicantReview({ params }: { params: Promise<{ matchId: strin
     } catch (caught) { setDecisionError(caught instanceof Error ? caught.message : "신청 상태를 변경하지 못했어요."); } finally { setSubmitting(false); }
   };
 
-  return <PageShell><Link aria-label="신청자 목록으로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" href={`/activity/received/${matchId}`}>←</Link>{data === null ? <LoadingOrError error={error} load={load} /> : !application ? <section className="mt-10 rounded-3xl border border-[#d8e0db] bg-white p-5"><h1 className="text-xl font-bold">이미 처리된 신청이에요</h1><p className="mt-2 text-sm leading-6 text-[#5c6b63]">최신 신청 목록을 확인해 주세요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[#1f7a55] px-4 text-sm font-semibold text-white" href={`/activity/received/${matchId}`}>신청 목록 보기</Link></section> : completed ? <DecisionSuccess matchId={matchId} result={completed} /> : <ApplicantReviewContent application={application} data={data} decisionError={decisionError} onDecision={setDecision} />}{decision ? <DecisionConfirm application={application} decision={decision} error={decisionError} submitting={submitting} remainingSpots={data?.match.remainingSpots ?? 0} onCancel={() => setDecision(null)} onConfirm={() => void decide()} /> : null}</PageShell>;
+  return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" />{data === null ? <LoadingOrError error={error} load={load} /> : !application ? <section className="mt-10 rounded-3xl border border-[#d8e0db] bg-white p-5"><h1 className="text-xl font-bold">이미 처리된 신청이에요</h1><p className="mt-2 text-sm leading-6 text-[#5c6b63]">최신 신청 목록을 확인해 주세요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[#1f7a55] px-4 text-sm font-semibold text-white" href={`/activity/received/${matchId}`}>신청 목록 보기</Link></section> : completed ? <DecisionSuccess matchId={matchId} result={completed} /> : <ApplicantReviewContent application={application} data={data} decisionError={decisionError} onDecision={setDecision} />}{decision ? <DecisionConfirm application={application} decision={decision} error={decisionError} submitting={submitting} remainingSpots={data?.match.remainingSpots ?? 0} onCancel={() => setDecision(null)} onConfirm={() => void decide()} /> : null}</PageShell>;
 }
 
 function ApplicantReviewContent({ application, data, decisionError, onDecision }: { application: ReceivedApplication; data: ReceivedResponse; decisionError: string; onDecision: (decision: "ACCEPT" | "REJECT") => void }) {
