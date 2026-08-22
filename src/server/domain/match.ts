@@ -56,7 +56,9 @@ export const matchCreateInputSchema = z.discriminatedUnion("courtSource", [exter
   if (startsAt >= endsAt) context.addIssue({ code: "custom", path: ["endsAt"], message: "종료 시간은 시작 시간보다 늦어야 해요." });
   try {
     const url = new URL(input.contactOpenChatUrl);
-    if (url.protocol !== "https:" || url.hostname !== "open.kakao.com") context.addIssue({ code: "custom", path: ["contactOpenChatUrl"], message: "카카오 오픈채팅 링크만 사용할 수 있어요." });
+    if (url.protocol !== "https:" || url.hostname !== "open.kakao.com" || !url.pathname.startsWith("/o/") || url.pathname.length <= 3) {
+      context.addIssue({ code: "custom", path: ["contactOpenChatUrl"], message: "카카오 오픈채팅방 링크(https://open.kakao.com/o/...)를 입력해 주세요." });
+    }
   } catch { /* zod URL validation reports this */ }
   if (input.courtSource === "EXTERNAL_RESERVED" && input.externalCourt.courtNumber && /(\d[ -]?){7,}/.test(input.externalCourt.courtNumber)) context.addIssue({ code: "custom", path: ["externalCourt", "courtNumber"], message: "예약번호나 연락처는 코트 번호에 입력하지 마세요." });
 });

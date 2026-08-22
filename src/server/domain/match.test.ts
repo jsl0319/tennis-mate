@@ -72,6 +72,7 @@ describe("M4 match creation input", () => {
     expect(() => matchCreateInputSchema.parse({ ...validInput, courtSource: "PARTNER_COURT" })).toThrow();
     expect(() => matchCreateInputSchema.parse({ ...validInput, endsAt: validInput.startsAt })).toThrow("종료 시간");
     expect(() => matchCreateInputSchema.parse({ ...validInput, contactOpenChatUrl: "https://example.com/chat" })).toThrow("카카오 오픈채팅");
+    expect(() => matchCreateInputSchema.parse({ ...validInput, contactOpenChatUrl: "https://open.kakao.com" })).toThrow("카카오 오픈채팅방 링크");
   });
 });
 

@@ -23,7 +23,7 @@ export function M4MatchCreate() {
   const [districts, setDistricts] = useState<Region[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ courtSource: "COURT_TBD" as CourtSource, date: "", time: "", duration: 120, cityCode: "", regionCode: "", courtName: "", address: "", courtNumber: "", title: "", recruitCount: 1, playPurposes: ["RALLY_PRACTICE"], partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: "", additionalCostNote: "", introduction: "", contactOpenChatUrl: "" });
+  const [form, setForm] = useState(() => ({ clientRequestId: crypto.randomUUID(), courtSource: "COURT_TBD" as CourtSource, date: "", time: "", duration: 120, cityCode: "", regionCode: "", courtName: "", address: "", courtNumber: "", title: "", recruitCount: 1, playPurposes: ["RALLY_PRACTICE"], partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: "", additionalCostNote: "", introduction: "", contactOpenChatUrl: "" }));
 
   useEffect(() => {
     void fetch("/api/v1/regions").then((response) => response.json()).then((body: { items: Region[] }) => setCities(body.items));
@@ -61,7 +61,7 @@ export function M4MatchCreate() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientRequestId: crypto.randomUUID(), title: form.title, startsAt, endsAt, regionCode: form.regionCode, courtSource: form.courtSource,
+          clientRequestId: form.clientRequestId, title: form.title, startsAt, endsAt, regionCode: form.regionCode, courtSource: form.courtSource,
           externalCourt: form.courtSource === "EXTERNAL_RESERVED" ? { name: form.courtName, address: form.address, courtNumber: form.courtNumber || null } : null,
           recruitCount: form.recruitCount, playPurposes: form.playPurposes, partnerPreference: form.partnerPreference,
           totalCourtFeeKrw: form.courtSource === "EXTERNAL_RESERVED" ? Number(form.totalCourtFeeKrw) : null,

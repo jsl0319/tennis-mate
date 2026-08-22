@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { ZodError } from "zod";
 
 import { AccountAccessError, AuthenticationError } from "@/server/auth/current-user";
@@ -33,6 +34,18 @@ export function handleApiError(error: unknown) {
       "입력한 내용을 다시 확인해 주세요.",
       error.issues.map((issue) => ({ field: issue.path.join("."), message: issue.message })),
     );
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    console.error({ event: "api.database_error", code: error.code, meta: error.meta });
+
+    if (error.code === "P2004") {
+      return apiError(422, "DATABASE_CONSTRAINT_FAILED", "입력한 내용을 다시 확인해 주세요.");
+    }
+  } else if (error instanceof Error) {
+    console.error({ event: "api.unexpected_error", name: error.name });
+  } else {
+    console.error({ event: "api.unexpected_error", name: "UnknownError" });
   }
 
   return apiError(500, "INTERNAL_ERROR", "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.");
