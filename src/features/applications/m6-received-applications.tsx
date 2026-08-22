@@ -95,10 +95,10 @@ function LoadingOrError({ error, load }: { error: string; load: () => Promise<vo
 export function M6ReceivedApplications() {
   const { data, error, load } = useJsonLoader<{ items: HostedMatch[] }>("/api/v1/me/hosted-matches");
   return <PageShell withNavigation>
-    <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" />
-    <p className="mt-5 text-sm font-semibold text-[#1f7a55]">활동</p>
+    <p className="text-sm font-semibold text-[#1f7a55]">활동</p>
     <h1 className="mt-1 text-2xl font-bold">받은 신청</h1>
     <ActivityTabs current="received" />
+    <p className="mt-4 text-sm leading-6 text-[#5c6b63]">내가 만든 매칭에 들어온 신청을 한곳에서 확인해요.</p>
     {data === null ? <LoadingOrError error={error} load={load} /> : data.items.length === 0 ? <EmptyHostedMatches /> : <div className="mt-6 space-y-4">{data.items.map((match) => <HostedMatchCard key={match.id} match={match} onChanged={load} />)}</div>}
   </PageShell>;
 }
