@@ -10,7 +10,7 @@
 | 기준 문서 | `02-prd.md`, `03-screen-spec.md`, `04-erd.md` |
 | 후속 문서 | `06-development-plan.md` |
 
-이 문서는 Tennis Mate Core MVP의 클라이언트와 서버 사이 HTTP 계약을 정의한다. Court Partner Pilot과 Court Commerce API는 확장 방향만 별도 섹션에서 정의하며, 별도 구현 승인이 없으면 활성 범위로 간주하지 않는다.
+이 문서는 Tennis Mate Core MVP의 클라이언트와 서버 사이 HTTP 계약을 정의한다. Court Partner Pilot과 Court Commerce API는 별도 섹션으로 구분한다. Court Partner Pilot은 필수 후속 단계지만, 해당 구현이 시작되기 전까지 엔드포인트를 활성화하지 않는다.
 
 ## 2. 설계 목표
 
@@ -1247,7 +1247,33 @@ POST /api/v1/applications/{applicationId}/withdraw
 
 ## 22. Court Partner Pilot API 확장 방향
 
-이 섹션은 경계 확인용이며 Core MVP 구현 대상이 아니다.
+이 섹션은 Core MVP 구현 대상이 아니며 Court Partner Pilot 구현 시작 시 활성화한다.
+
+### 22.0 운영자 자율 등록·검증 후보 API
+
+```text
+POST /api/v1/operator-applications
+GET  /api/v1/operator-applications/me
+PATCH /api/v1/operator-applications/{applicationId}
+POST /api/v1/operator-applications/{applicationId}/retry-verification
+POST /api/v1/operator-applications/{applicationId}/request-review
+```
+
+등록 요청은 사업자등록번호, 개업일, 대표자명, 사업장명, 테니스장명, 도로명주소와 담당자 정보를 받는다. 서버만 국세청 사업자등록정보 API와 주소·장소 API를 호출하며 외부 API 키나 원문 응답을 클라이언트에 반환하지 않는다. 증빙 업로드는 검토가 필요한 경우에만 별도의 비공개 업로드 계약으로 추가하며, 공개 URL을 요청·응답에 넣지 않는다.
+
+응답은 `applicationStatus`, `businessVerificationStatus`, `venueVerificationStatus`, `canCreatePrivateDraft`, `canPublish`, 사용자 문구와 다음 행동만 제공한다. 사업자 확인 완료는 `canCreatePrivateDraft: true`만 부여할 수 있다. `VERIFIED` 사업자, `MATCHED` 장소·주소, 활성 동일 장소 운영자 부재를 모두 충족하거나 운영 검토가 승인하기 전에는 `canPublish: false`이며 코트·Slot 공개 API를 허용하지 않는다.
+
+외부 API 장애와 신규 사업자 반영 지연은 `UNAVAILABLE`로 구분해 제한된 서버 재시도를 수행하고, 계속 실패하면 검토·수정 경로를 안내한다. 국세청 진위 불일치 또는 휴·폐업은 정정 후 새 신청 경로를 안내한다. 사업자번호·대표자명·주소 전문, 장소 검색 원문과 공급자 응답은 오류 응답과 로그에 포함하지 않는다. 이 엔드포인트에는 일반 등록 API보다 엄격한 로그인 사용자·동일 신청·입력 해시 단위 속도 제한을 적용한다.
+
+운영 검토용 API는 일반 운영자 API와 분리한다.
+
+```text
+GET  /api/internal/operator-applications?status=REVIEW_REQUIRED
+POST /api/internal/operator-applications/{applicationId}/review
+POST /api/internal/operator-applications/{applicationId}/suspend
+```
+
+권한 있는 내부 검토자만 호출할 수 있으며, 신청자는 자신의 신청을 검토할 수 없다. 각 판정은 안전한 사유 코드, 내부 메모, 검토자와 시각을 감사 이력에 기록한다. 이 내부 API와 역할 모델은 Pilot 구현 시 별도 인증·권한 설계와 함께 활성화한다.
 
 ### 22.1 사용자 측 후보 API
 
@@ -1267,7 +1293,6 @@ POST /api/v1/court-bookings/{bookingId}/matches
 ### 22.2 운영자 측 후보 API
 
 ```text
-POST  /api/v1/operator-applications
 GET   /api/v1/operator/courts
 POST  /api/v1/operator/courts
 PATCH /api/v1/operator/courts/{courtId}
@@ -1282,9 +1307,14 @@ POST  /api/v1/operator/bookings/{bookingId}/reject
 
 운영자 예약 승인 API는 CourtBooking만 변경한다. 연결 Match의 Application을 수락하지 않는다.
 
+`POST /api/v1/operator/courts`는 `PUBLISH_APPROVED` 신청에 연결된 한 시설만 생성할 수 있다. 다른 지점·주소를 새로 등록하려는 요청은 기존 Court를 수정하거나 복제하지 않고 새 운영자 신청 흐름으로 보낸다.
+
 ### 22.3 Pilot 전에 확정할 계약
 
 - 운영자 인증과 직원 권한
+- 내부 운영 검토자 권한, 심사 SLA와 이의·보완 처리 기준
+- 사업자·증빙 원문 보관 기간과 삭제 절차, 재확인 알림 채널
+- 검증 공급자별 장애·할당량 초과 시 재시도와 수동 검토 전환 기준
 - 예약 요청의 임시 점유와 만료 시간
 - 한 Slot에 여러 대기 요청을 허용할지 여부
 - 운영자 승인 후 즉시 확정인지 결제 대기인지

@@ -563,13 +563,17 @@ stateDiagram-v2
 
 ## 12. Court Partner 확장 ERD
 
-Court Partner Pilot이 승인될 때 추가한다.
+Court Partner Pilot 구현 단계에서 추가한다. 운영자는 자율 등록할 수 있지만, 검증이 완료되기 전에는 코트와 Slot을 공개하지 않는다.
 
 ```mermaid
 erDiagram
     USER ||--o{ COURT_OPERATOR_APPLICATION : submits
+    USER ||--o{ OPERATOR_APPLICATION_REVIEW : performs
+    COURT_OPERATOR_APPLICATION ||--o{ OPERATOR_APPLICATION_VERIFICATION_ATTEMPT : records
+    COURT_OPERATOR_APPLICATION ||--o{ OPERATOR_APPLICATION_REVIEW : receives
     USER ||--o| COURT_OPERATOR : owns
     COURT_OPERATOR ||--o{ COURT : manages
+    COURT_OPERATOR_APPLICATION ||--o| COURT : verifies
     REGION ||--o{ COURT : locates
     COURT ||--o{ COURT_UNIT : contains
     COURT ||--o{ COURT_AMENITY : offers
@@ -586,10 +590,38 @@ erDiagram
         operator_application_status status
         varchar business_name
         varchar business_number_hash
+        varchar verification_input_ref
+        business_verification_status business_verification_status
+        venue_verification_status venue_verification_status
+        varchar normalized_venue_key
+        timestamptz verified_at
+        timestamptz publish_approved_at
+        timestamptz revalidation_due_at
+        varchar verification_failure_code
         varchar verification_document_ref
         varchar reviewer_note
         timestamptz submitted_at
         timestamptz reviewed_at
+    }
+
+    OPERATOR_APPLICATION_VERIFICATION_ATTEMPT {
+        uuid id PK
+        uuid application_id FK
+        verification_attempt_kind kind
+        verification_attempt_result result
+        varchar safe_failure_code
+        varchar provider_request_ref
+        timestamptz attempted_at
+    }
+
+    OPERATOR_APPLICATION_REVIEW {
+        uuid id PK
+        uuid application_id FK
+        uuid reviewer_user_id FK
+        operator_review_decision decision
+        varchar reason_code
+        varchar internal_note
+        timestamptz created_at
     }
 
     COURT_OPERATOR {
@@ -605,9 +637,11 @@ erDiagram
     COURT {
         uuid id PK
         uuid operator_id FK
+        uuid operator_application_id FK_UK
         varchar region_code FK
         varchar name
         varchar address
+        varchar normalized_venue_key
         varchar location_guide
         decimal latitude
         decimal longitude
@@ -682,18 +716,48 @@ erDiagram
 
 ### 13.1 CourtOperatorApplication
 
-운영자 신청과 심사 이력을 보존한다. 승인된 운영자와 신청 데이터를 하나의 테이블로 합치지 않는다.
+운영자 신청과 심사 이력을 보존한다. 승인된 운영자와 신청 데이터를 하나의 테이블로 합치지 않는다. 신청 단계의 사업자 확인 완료는 비공개 Court·Slot 초안 작성 권한만 줄 수 있고, 공개 권한은 `PUBLISH_APPROVED` 상태에서만 부여한다.
 
-민감한 사업자 번호 원문을 일반 컬럼에 저장하지 않는다. 중복 확인용 해시와 필요한 경우 암호화된 별도 저장소 참조를 사용한다. 증빙 파일은 비공개 객체 저장소 참조만 저장한다.
+민감한 사업자 번호 원문을 일반 컬럼에 저장하지 않는다. 중복 확인은 일반 해시가 아니라 비밀값으로 키를 관리하는 HMAC으로 수행하고, 필요한 경우에만 암호화된 별도 저장소 참조를 사용한다. 증빙 파일은 비공개 객체 저장소 참조만 저장한다.
+
+자동 검증에는 사업자번호·개업일·대표자명, 사업장명, 사용자가 고른 표준 도로명주소와 장소 검색 결과를 사용한다. 원문 사업자번호·대표자명·외부 API 응답 전문은 로그나 분석 이벤트에 남기지 않는다. `CourtOperatorApplication`에는 최소한 다음 결과를 보관한다.
+
+| 필드 | 규칙 |
+| --- | --- |
+| `businessRegistrationNumberHash` | 정규화 사업자번호의 키 관리 HMAC. 원문 대입 공격 없이 중복 신청만 탐지 |
+| `verificationInputRef` | 사업자번호·개업일·대표자명·제출 주소를 재확인에만 쓰는 암호화된 비공개 참조 |
+| `businessVerificationStatus` | `PENDING`, `VERIFIED`, `MISMATCH`, `UNAVAILABLE` |
+| `venueVerificationStatus` | `PENDING`, `MATCHED`, `REVIEW_REQUIRED` |
+| `normalizedVenueKey` | 표준 주소·장소 식별자로 만든 중복 탐지 키. 원문 장소 검색 응답을 저장하지 않음 |
+| `verifiedAt` | 자동 또는 운영 검토로 확인된 시각 |
+| `publishApprovedAt` | 코트·Slot 공개를 허용한 시각 |
+| `revalidationDueAt` | 연 1회 또는 운영상 재확인이 필요한 다음 확인 시각 |
+| `verificationFailureCode` | 사용자에게 안전하게 설명 가능한 코드만 저장 |
+
+`businessVerificationStatus = VERIFIED`만으로 운영자를 승인하지 않는다. `venueVerificationStatus = MATCHED`, 주소·장소 일치, 활성 동일 장소 운영자 부재를 함께 충족하거나 운영 검토가 이를 대체해야 `PUBLISH_APPROVED` 및 `CourtOperator.ACTIVE`로 전환한다. 동일 `businessRegistrationNumberHash` 또는 `normalizedVenueKey`의 활성 신청·운영자가 있으면 자동 승인을 금지하고 검토 대상으로 만든다.
+
+`UNAVAILABLE`은 외부 서비스 장애·지연을 뜻하므로 반려와 구분한다. 재시도는 별도 Attempt 이력으로 남기고 제한된 횟수 이후 `REVIEW_REQUIRED`로 전환한다. `MISMATCH` 또는 휴·폐업처럼 명백히 잘못된 사업자 상태만 정정 후 새 신청하도록 `REJECTED`로 전환할 수 있다.
+
+#### OperatorApplicationVerificationAttempt
+
+사업자·주소·장소 확인의 실행 이력만 보관한다. 외부 응답 전문, 사업자번호 원문, 대표자명 원문, 주소 원문은 저장하지 않는다. `providerRequestRef`는 공급자 문의·장애 추적에 필요한 비식별 참조값만 허용한다.
+
+#### OperatorApplicationReview
+
+자동 확인으로 결론 낼 수 없는 장소·운영 권한을 권한 있는 운영 검토자가 판정한 감사 이력이다. `reviewerUserId`는 신청자와 같을 수 없고, 결정은 `APPROVE_PUBLISH`, `REQUEST_CHANGES`, `REJECT`, `SUSPEND` 중 하나다. 공개 검토 권한은 일반 운영자 권한과 분리된 내부 역할에만 부여한다.
 
 #### OperatorApplicationStatus
 
 - `DRAFT`
 - `SUBMITTED`
+- `VERIFYING`
+- `DRAFT_ACCESS_GRANTED`
+- `REVIEW_REQUIRED`
 - `UNDER_REVIEW`
 - `CHANGES_REQUESTED`
-- `APPROVED`
+- `PUBLISH_APPROVED`
 - `REJECTED`
+- `SUSPENDED`
 
 ### 13.2 CourtOperator
 
@@ -707,7 +771,7 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 
 ### 13.3 Court와 CourtUnit
 
-`Court`는 주소와 시설을 공유하는 코트장이고 `CourtUnit`은 실제 예약되는 개별 코트 면이다.
+`Court`는 주소와 시설을 공유하는 코트장이고 `CourtUnit`은 실제 예약되는 개별 코트 면이다. Pilot에서는 한 `CourtOperatorApplication`이 한 `Court` 시설의 공개 권한을 검증한다. 같은 운영자가 다른 지점·시설을 추가하면 기존 승인 권한을 재사용하지 않고 별도 신청·장소 검증을 연결한다.
 
 예:
 
@@ -715,6 +779,8 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 - CourtUnit: 1번 코트, 2번 코트
 
 시간대 중복 검사는 Court가 아니라 CourtUnit 단위로 수행한다.
+
+`Court.normalizedVenueKey`는 연결된 신청의 정규화 장소 키와 일치해야 한다. 활성 또는 중지 상태의 Court에 같은 키가 존재하면 자동 공개를 허용하지 않는 부분 유일 인덱스를 둔다. 권리 관계가 확인된 공동 운영·명의 변경만 내부 검토의 명시적 결정으로 예외 처리한다.
 
 ### 13.4 CourtSlot
 
@@ -978,7 +1044,10 @@ erDiagram
 
 | 테이블 | 인덱스 | 목적 |
 | --- | --- | --- |
+| CourtOperatorApplication | `(businessRegistrationNumberHash, status)` | 동일 사업자 신청·지점 관계 검토 |
+| CourtOperatorApplication | 활성 `normalizedVenueKey` 부분 유일 | 동일 장소 자동 공개 방지 |
 | Court | `(regionCode, status)` | 지역별 코트 탐색 |
+| Court | 활성 `normalizedVenueKey` 부분 유일 | 승인 시설의 중복 공개 방지 |
 | CourtUnit | `(courtId, status)` | 코트장 면 관리 |
 | CourtSlot | `(status, startsAt)` | 예약 가능 시간 탐색 |
 | CourtSlot | `(courtUnitId, startsAt, endsAt)` | 시간 충돌 확인 |
@@ -1090,12 +1159,13 @@ WHERE id = :id AND version = :expectedVersion
 
 ### Court Partner Pilot
 
-1. CourtOperatorApplication·CourtOperator
+1. CourtOperatorApplication·VerificationAttempt·Review·CourtOperator와 공개 권한 분리
 2. Court·CourtUnit·Amenity·Image
-3. CourtSlot과 시간 중복 제약
+3. CourtSlot과 시간 중복 제약 및 `PUBLISH_APPROVED` 공개 게이트
 4. CourtBooking과 상태 이력
 5. Match.courtBookingId 확장
-6. 예약·매칭 연쇄 취소 정책 적용
+6. 운영자 재확인·중지와 예약 안내 정책 적용
+7. 예약·매칭 연쇄 취소 정책 적용
 
 ### Court Commerce
 
