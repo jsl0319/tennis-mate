@@ -14,7 +14,7 @@ type HostedMatch = {
   statusLabel: string;
   startsAt: string;
   endsAt: string;
-  court: { name: string | null };
+  court: { source: "EXTERNAL_RESERVED" | "COURT_TBD"; name: string | null };
   recruitCount: number;
   acceptedCount: number;
   remainingSpots: number;
@@ -63,6 +63,12 @@ function snapshotSummary(snapshot: ProfileSnapshot) {
 
 function snapshotDetails(snapshot: ProfileSnapshot) {
   return [snapshot.gameExperienceLabel, snapshot.playPurposes?.map((purpose) => purpose.label).filter(Boolean).join(" · ")].filter(Boolean).join(" · ");
+}
+
+function hostCoordinationMessage(courtSource: HostedMatch["court"]["source"]) {
+  return courtSource === "COURT_TBD"
+    ? "수락된 참가자와 오픈채팅에서 코트와 비용을 조율해요."
+    : "수락된 참가자와 오픈채팅에서 당일 준비와 비용 정산 방법을 확인해요.";
 }
 
 function useJsonLoader<T>(url: string) {
@@ -134,7 +140,7 @@ function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: 
       <p className="mt-1 text-sm text-[#405047]">📍 {match.court.name ?? "코트와 비용을 함께 정해요"}</p>
       <p className="mt-4 border-t border-[#edf0ee] pt-3 text-sm font-semibold">수락 {match.acceptedCount}명 / 모집 {match.recruitCount}명 <span className="font-normal text-[#5c6b63]">· 남은 자리 {match.remainingSpots}명</span></p>
       {match.acceptedCount > 0 && match.status !== "COMPLETED" ? <>
-        <p className="mt-4 rounded-2xl bg-[#eff9f4] px-4 py-3 text-sm leading-6 text-[#315b45]">수락된 참가자와 오픈채팅에서 코트와 비용을 조율해요.</p>
+        <p className="mt-4 rounded-2xl bg-[#eff9f4] px-4 py-3 text-sm leading-6 text-[#315b45]">{hostCoordinationMessage(match.court.source)}</p>
         <a className="mt-3 flex min-h-[52px] items-center justify-center rounded-2xl border border-[#9fc9b1] px-4 text-center text-sm font-semibold text-[#1f7a55]" href={match.contact.url} rel="noreferrer" target="_blank">{match.contact.label}</a>
       </> : null}
       {match.pendingApplicationCount > 0 ? <Link className="mt-4 flex min-h-[52px] items-center justify-center rounded-2xl bg-[#1f7a55] px-4 text-center text-sm font-semibold text-white" href={`/activity/received/${match.id}`}>신청자 보기</Link> : <p className="mt-4 text-sm text-[#5c6b63]">{match.status === "COMPLETED" ? "함께한 일정이 완료됐어요." : "새로 검토할 신청을 기다리고 있어요."}</p>}
@@ -155,9 +161,9 @@ function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: "clos
 export function M6ReceivedMatch({ params }: { params: Promise<{ matchId: string }> }) {
   const { matchId } = use(params);
   const { data, error, load } = useJsonLoader<ReceivedResponse>(`/api/v1/matches/${encodeURIComponent(matchId)}/applications?status=PENDING`);
-  if (data === null) return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" /><LoadingOrError error={error} load={load} /></PageShell>;
+  if (data === null) return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/activity/received" /><LoadingOrError error={error} load={load} /></PageShell>;
   return <PageShell>
-    <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" />
+    <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/activity/received" />
     <p className="mt-5 text-sm font-semibold text-[#1f7a55]">받은 신청</p>
     <h1 className="mt-1 text-2xl font-bold">신청자 {data.match.pendingApplicationCount}명을 검토해요</h1>
     <p className="mt-2 text-sm leading-6 text-[#5c6b63]">신청 내용을 보고 함께 치기 좋은 분을 선택하세요.</p>
@@ -198,12 +204,12 @@ export function M6ApplicantReview({ params }: { params: Promise<{ matchId: strin
     } catch (caught) { setDecisionError(caught instanceof Error ? caught.message : "신청 상태를 변경하지 못했어요."); } finally { setSubmitting(false); }
   };
 
-  return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" />{data === null ? <LoadingOrError error={error} load={load} /> : !application ? <section className="mt-10 rounded-3xl border border-[#d8e0db] bg-white p-5"><h1 className="text-xl font-bold">이미 처리된 신청이에요</h1><p className="mt-2 text-sm leading-6 text-[#5c6b63]">최신 신청 목록을 확인해 주세요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[#1f7a55] px-4 text-sm font-semibold text-white" href={`/activity/received/${matchId}`}>신청 목록 보기</Link></section> : completed ? <DecisionSuccess matchId={matchId} result={completed} /> : <ApplicantReviewContent application={application} data={data} decisionError={decisionError} onDecision={setDecision} />}{decision ? <DecisionConfirm application={application} decision={decision} error={decisionError} submitting={submitting} remainingSpots={data?.match.remainingSpots ?? 0} onCancel={() => setDecision(null)} onConfirm={() => void decide()} /> : null}</PageShell>;
+  return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath={`/activity/received/${matchId}`} />{data === null ? <LoadingOrError error={error} load={load} /> : !application ? <section className="mt-10 rounded-3xl border border-[#d8e0db] bg-white p-5"><h1 className="text-xl font-bold">이미 처리된 신청이에요</h1><p className="mt-2 text-sm leading-6 text-[#5c6b63]">최신 신청 목록을 확인해 주세요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[#1f7a55] px-4 text-sm font-semibold text-white" href={`/activity/received/${matchId}`}>신청 목록 보기</Link></section> : completed ? <DecisionSuccess matchId={matchId} result={completed} /> : <ApplicantReviewContent application={application} data={data} decisionError={decisionError} onDecision={setDecision} />}{decision ? <DecisionConfirm application={application} decision={decision} error={decisionError} submitting={submitting} remainingSpots={data?.match.remainingSpots ?? 0} onCancel={() => setDecision(null)} onConfirm={() => void decide()} /> : null}</PageShell>;
 }
 
 function ApplicantReviewContent({ application, data, decisionError, onDecision }: { application: ReceivedApplication; data: ReceivedResponse; decisionError: string; onDecision: (decision: "ACCEPT" | "REJECT") => void }) {
   const snapshot = application.applicant.profileSnapshot;
-  return <><p className="mt-5 text-sm font-semibold text-[#1f7a55]">{data.match.title} · 검토할 신청</p><h1 className="mt-1 text-2xl font-bold">{application.applicant.nickname}님을 검토해요</h1><section className="mt-6 rounded-3xl bg-[#eff9f4] p-5"><p className="text-sm font-semibold text-[#1f7a55]">신청 당시 테니스 프로필</p><h2 className="mt-3 text-lg font-bold">{snapshotSummary(snapshot)}</h2><p className="mt-2 text-sm leading-6 text-[#5c6b63]">{snapshotDetails(snapshot)}</p></section><section className="mt-4 rounded-3xl border border-[#d8e0db] bg-white p-5"><h2 className="font-bold">신청 메시지</h2><p className="mt-3 text-sm leading-6 text-[#405047]">{application.message ? `“${application.message}”` : "남긴 메시지가 없어요."}</p></section><section className="mt-4 rounded-3xl border border-[#d8e0db] bg-white p-5"><h2 className="font-bold">잘 맞는 점</h2><p className="mt-3 text-sm leading-6 text-[#5c6b63]">랠리 연습을 원하고 활동 지역이 가까워요.</p></section>{decisionError ? <p className="mt-4 rounded-2xl bg-[#fff1ef] px-4 py-3 text-sm text-[#a13d32]">{decisionError}</p> : null}<div className="mt-6 grid grid-cols-2 gap-3"><button className="min-h-[52px] w-full rounded-2xl border border-[#d8e0db] px-3 text-center font-semibold text-[#405047]" onClick={() => onDecision("REJECT")} type="button">이번에는 어려워요</button><button className="min-h-[52px] w-full rounded-2xl bg-[#1f7a55] px-3 text-center font-semibold text-white" onClick={() => onDecision("ACCEPT")} type="button">수락하기</button></div></>;
+  return <><p className="mt-5 text-sm font-semibold text-[#1f7a55]">{data.match.title} · 검토할 신청</p><h1 className="mt-1 text-2xl font-bold">{application.applicant.nickname}님을 검토해요</h1><section className="mt-6 rounded-3xl bg-[#eff9f4] p-5"><p className="text-sm font-semibold text-[#1f7a55]">신청 당시 테니스 프로필</p><h2 className="mt-3 text-lg font-bold">{snapshotSummary(snapshot)}</h2><p className="mt-2 text-sm leading-6 text-[#5c6b63]">{snapshotDetails(snapshot)}</p></section><section className="mt-4 rounded-3xl border border-[#d8e0db] bg-white p-5"><h2 className="font-bold">신청 메시지</h2><p className="mt-3 text-sm leading-6 text-[#405047]">{application.message ? `“${application.message}”` : "남긴 메시지가 없어요."}</p></section>{decisionError ? <p className="mt-4 rounded-2xl bg-[#fff1ef] px-4 py-3 text-sm text-[#a13d32]">{decisionError}</p> : null}<div className="mt-6 grid grid-cols-2 gap-3"><button className="min-h-[52px] w-full rounded-2xl border border-[#d8e0db] px-3 text-center font-semibold text-[#405047]" onClick={() => onDecision("REJECT")} type="button">이번에는 어려워요</button><button className="min-h-[52px] w-full rounded-2xl bg-[#1f7a55] px-3 text-center font-semibold text-white" onClick={() => onDecision("ACCEPT")} type="button">수락하기</button></div></>;
 }
 
 function DecisionConfirm({ application, decision, error, submitting, remainingSpots, onCancel, onConfirm }: { application: ReceivedApplication | null; decision: "ACCEPT" | "REJECT"; error: string; submitting: boolean; remainingSpots: number; onCancel: () => void; onConfirm: () => void }) {

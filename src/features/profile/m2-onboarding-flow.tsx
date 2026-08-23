@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-type Screen = "loading" | "login" | "nickname" | 0 | 1 | 2 | 3 | 4 | "result";
+import { getLoginPath, getSafeReturnTo } from "@/navigation/return-to";
+
+type Screen = "loading" | "login" | "error" | "nickname" | 0 | 1 | 2 | 3 | 4 | "result";
 type Region = { code: string; name: string; shortName: string | null; parentCode: string | null; parentName?: string | null; type: "CITY" | "DISTRICT" };
 type ProfileDraft = {
   nickname: string;
@@ -93,8 +95,15 @@ async function responseBody(response: Response) {
   return body;
 }
 
-export function M2OnboardingFlow({ onCompleted }: { onCompleted?: () => void }) {
+type M2OnboardingFlowProps = {
+  onCompleted?: () => void;
+  redirectWhenOnboarded?: boolean;
+  returnTo?: string;
+};
+
+export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, returnTo = "/" }: M2OnboardingFlowProps) {
   const router = useRouter();
+  const safeReturnTo = getSafeReturnTo(returnTo);
   const [screen, setScreen] = useState<Screen>("loading");
   const [draft, setDraft] = useState<ProfileDraft>(initialDraft);
   const [cities, setCities] = useState<Region[]>([]);
@@ -137,13 +146,17 @@ export function M2OnboardingFlow({ onCompleted }: { onCompleted?: () => void }) 
           playPurposes: profile?.playPurposes ?? [],
           version: profile?.version ?? null,
         });
+        if (me.onboardingCompleted && redirectWhenOnboarded) {
+          router.replace(safeReturnTo);
+          return;
+        }
         setScreen(!me.nicknameConfirmed ? "nickname" : me.onboardingCompleted ? "result" : 0);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "서비스를 불러오지 못했어요.");
-        setScreen("login");
+        setScreen("error");
       }
     })();
-  }, []);
+  }, [redirectWhenOnboarded, router, safeReturnTo]);
 
   useEffect(() => {
     const query = regionQuery.trim();
@@ -228,7 +241,9 @@ export function M2OnboardingFlow({ onCompleted }: { onCompleted?: () => void }) 
 
   if (screen === "loading") return <main className="grid min-h-svh place-items-center bg-[#fffdfc] text-[#1a221e]">불러오는 중이에요…</main>;
 
-  if (screen === "login") return <main className="min-h-svh bg-[#fffdfc] px-5 py-10 text-[#1a221e]"><section className="mx-auto flex min-h-[calc(100svh-5rem)] max-w-[390px] flex-col rounded-[28px] bg-white p-7 shadow-sm"><p className="font-semibold text-[#1f7a55]">● Tennis Mate</p><h1 className="mt-8 text-[32px] font-bold leading-tight">테니스 메이트를<br />가볍게 시작해요</h1><p className="mt-4 leading-7 text-[#5c6b63]">조건이 맞는 메이트를 찾고, 신청부터 약속 확인까지 한 번에 이어가세요.</p><div className="flex-1" />{error ? <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}<button className="min-h-[52px] rounded-2xl bg-[#1f7a55] px-4 font-semibold text-white disabled:opacity-60" disabled={loading} onClick={() => void signIn("kakao", { callbackUrl: "/" })} type="button">카카오 계정으로 시작하기</button><p className="mt-4 text-center text-xs leading-5 text-[#5c6b63]">계속하면 <Link className="font-semibold text-[#1f7a55] underline" href="/terms">서비스 이용약관</Link>과 <Link className="font-semibold text-[#1f7a55] underline" href="/privacy">개인정보 처리방침</Link>에 동의하게 됩니다.</p></section></main>;
+  if (screen === "login") return <LoginScreen loading={loading} onSignIn={() => { setLoading(true); void signIn("kakao", { callbackUrl: getLoginPath(safeReturnTo) }); }} />;
+
+  if (screen === "error") return <ServiceCheckError onRetry={() => window.location.reload()} />;
 
   if (screen === "nickname") {
     const nicknameValid = /^[가-힣a-zA-Z0-9]{2,12}$/.test(draft.nickname.trim());
@@ -276,7 +291,15 @@ export function M2OnboardingFlow({ onCompleted }: { onCompleted?: () => void }) 
     return <FormShell step={screen + 1} onBack={goBack}><h1>{question.title.split("\n").map((line) => <span key={line}>{line}<br /></span>)}</h1><p>{question.description}</p>{questionContent}{error ? <ErrorMessage message={error} /> : null}<ActionButton disabled={!canContinue} loading={loading} onClick={() => screen === 4 ? void saveProfile() : setScreen((screen + 1) as Screen)}>{screen === 4 ? "프로필 완성하기" : "다음"}</ActionButton></FormShell>;
   }
 
-  return <FormShell step={5} onBack={goBack}><div className="mt-8 grid size-12 place-items-center rounded-full bg-[#eff9f4] text-2xl text-[#1f7a55]">✓</div><h1 className="mt-6">{draft.nickname}님의<br />플레이 프로필이 완성됐어요</h1><p>이 정보를 기준으로 잘 맞는 매치를 먼저 보여드릴게요.</p><div className="mt-8 rounded-2xl bg-[#f4f7f5] p-5"><strong>{draft.nickname}</strong><p className="mt-2 text-sm text-[#5c6b63]">{draft.regionName} · {draft.experienceRange === "YEARS_1_TO_2" ? "1~2년" : "테니스 프로필"}</p></div><ActionButton onClick={() => onCompleted ? onCompleted() : router.replace("/")}>추천 매치 보기</ActionButton>{error ? <ErrorMessage message={error} /> : null}</FormShell>;
+  return <FormShell step={5} onBack={goBack}><div className="mt-8 grid size-12 place-items-center rounded-full bg-[#eff9f4] text-2xl text-[#1f7a55]">✓</div><h1 className="mt-6">{draft.nickname}님의<br />플레이 프로필이 완성됐어요</h1><p>이 정보를 기준으로 잘 맞는 매치를 먼저 보여드릴게요.</p><div className="mt-8 rounded-2xl bg-[#f4f7f5] p-5"><strong>{draft.nickname}</strong><p className="mt-2 text-sm text-[#5c6b63]">{draft.regionName} · {draft.experienceRange === "YEARS_1_TO_2" ? "1~2년" : "테니스 프로필"}</p></div><ActionButton onClick={() => onCompleted ? onCompleted() : router.replace(safeReturnTo)}>추천 매치 보기</ActionButton>{error ? <ErrorMessage message={error} /> : null}</FormShell>;
+}
+
+function LoginScreen({ loading, onSignIn }: { loading: boolean; onSignIn: () => void }) {
+  return <main className="min-h-svh bg-[#fffdfc] px-5 py-[72px] text-[#1a221e]"><section className="mx-auto flex min-h-[700px] max-w-[338px] flex-col rounded-[28px] bg-white p-7 shadow-[0_4px_14px_rgba(23,67,45,0.06)]"><p className="font-semibold text-[#1f7a55]">● Tennis Mate</p><h1 className="mt-12 text-[32px] font-bold leading-tight">테니스 메이트를<br />가볍게 시작해요</h1><p className="mt-4 leading-7 text-[#5c6b63]">조건이 맞는 메이트를 찾고,<br />신청부터 약속 확인까지 한 번에 이어가세요.</p><section className="mt-20 rounded-2xl bg-[#eff9f4] p-4"><h2 className="text-sm font-semibold text-[#1f7a55]">지금 보던 화면으로 돌아와요</h2><p className="mt-2 text-sm leading-6 text-[#405047]">카카오로 로그인하면 이어서 이용할 수 있어요.</p></section><div className="flex-1" /><button className="min-h-[52px] rounded-2xl bg-[#1f7a55] px-4 text-lg font-semibold text-white disabled:opacity-60" disabled={loading} onClick={onSignIn} type="button">카카오 계정으로 시작하기</button><p className="mt-4 text-center text-xs leading-5 text-[#5c6b63]">계속하면 <Link className="font-semibold text-[#1f7a55] underline" href="/terms">서비스 이용약관</Link>과<br /><Link className="font-semibold text-[#1f7a55] underline" href="/privacy">개인정보 처리방침</Link>에 동의하게 됩니다.</p></section></main>;
+}
+
+function ServiceCheckError({ onRetry }: { onRetry: () => void }) {
+  return <main className="min-h-svh bg-[#fffdfc] px-5 py-[72px] text-[#1a221e]"><section className="mx-auto flex min-h-[700px] max-w-[338px] flex-col rounded-[28px] bg-white p-7 shadow-[0_4px_14px_rgba(23,67,45,0.06)]"><p className="font-semibold text-[#1f7a55]">● Tennis Mate</p><h1 className="mt-12 text-[32px] font-bold leading-tight">서비스를<br />확인하지 못했어요</h1><p className="mt-4 leading-7 text-[#5c6b63]">잠시 네트워크 상태를 확인한 뒤<br />다시 시도해 주세요.</p><section className="mt-20 rounded-2xl bg-[#eff9f4] p-4"><h2 className="text-sm font-semibold text-[#1f7a55]">로그인 정보는 안전하게 유지돼요</h2><p className="mt-2 text-sm leading-6 text-[#405047]">반복되면 운영자에게 알려 주세요.</p></section><div className="flex-1" /><button className="min-h-[52px] rounded-2xl bg-[#1f7a55] px-4 text-lg font-semibold text-white" onClick={onRetry} type="button">다시 확인하기</button></section></main>;
 }
 
 function FormShell({ children, onBack, step }: { children: React.ReactNode; onBack: () => void; step: number }) {

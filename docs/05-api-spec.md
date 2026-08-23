@@ -431,6 +431,7 @@ ONBOARDING_REQUIRED | OWN_MATCH | ALREADY_APPLIED | MATCH_NOT_OPEN | MATCH_START
     "status": "OPEN",
     "startsAt": "2026-08-22T01:00:00.000Z",
     "endsAt": "2026-08-22T03:00:00.000Z",
+    "courtSource": "EXTERNAL_RESERVED",
     "courtName": "마포 테니스장",
     "regionName": "마포구",
     "estimatedFeePerPersonKrw": 13334
@@ -927,6 +928,11 @@ GET /api/v1/matches/{matchId}/applications?status=PENDING&cursor=...&limit=20
     "id": "0198...",
     "title": "천천히 랠리 연습해요",
     "status": "OPEN",
+    "court": {
+      "source": "COURT_TBD",
+      "sourceLabel": "코트와 비용을 함께 정해요",
+      "name": null
+    },
     "recruitCount": 2,
     "acceptedCount": 1,
     "remainingSpots": 1,
@@ -1007,6 +1013,7 @@ POST /api/v1/applications/{applicationId}/reject
 인증: 연결된 Match 모집자만
 
 - `PENDING` 신청만 거절할 수 있다.
+- 거절 전에도 시작 시각 기반 상태 보정을 수행한다. 이미 시작되어 `CLOSED` 또는 `EXPIRED`로 전환된 Match의 PENDING 신청은 `CANCELLED`로 유지하며 `REJECTED`로 바꾸지 않는다.
 - Core MVP에서는 거절 사유를 요청받거나 신청자에게 노출하지 않는다.
 - `REJECTED`와 `decidedAt`을 기록한다.
 - `WHERE id = :applicationId AND status = 'PENDING'` 조건으로 원자적으로 전환한다.
@@ -1056,7 +1063,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 | `GET /regions` | 불가 | 가능 | 가능 | 없음 |
 | `PUT /me/tennis-profile` | 불가 | 가능 | 가능 | 본인만 |
 | `GET /matches/recommended` | 불가 | 불가 | 가능 | 본인 Match 제외 |
-| `GET /matches` | 불가 | 불가 | 가능 | 없음 |
+| `GET /matches` | 불가 | 불가 | 가능 | 본인 Match와 기존 신청 Match 제외 |
 | `GET /matches/{id}` | 불가 | 권장안 불가 | 가능 | 종료 이력은 관련자 중심 |
 | `POST /matches` | 불가 | 불가 | 가능 | 세션 User가 모집자 |
 | `POST /matches/{id}/applications` | 불가 | 불가 | 가능 | 본인 Match 불가 |

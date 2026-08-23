@@ -17,14 +17,16 @@ export async function GET() {
       checkedAt,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "데이터베이스 연결에 실패했습니다.";
+    console.error({
+      event: "health.database_error",
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
 
     return NextResponse.json(
       {
         status: "degraded",
         database: "disconnected",
-        message,
+        message: "서비스 상태를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.",
         checkedAt,
       },
       { status: 503 },

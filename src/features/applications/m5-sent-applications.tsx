@@ -11,7 +11,7 @@ type SentApplication = {
   status: string;
   statusLabel: string;
   message: string | null;
-  match: { id: string; title: string; startsAt: string; courtName: string | null; regionName: string; estimatedFeePerPersonKrw: number | null };
+  match: { id: string; title: string; status: string; startsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD"; courtName: string | null; regionName: string; estimatedFeePerPersonKrw: number | null };
   contact: { type: "KAKAO_OPEN_CHAT"; url: string; label: string } | null;
   createdAt: string;
 };
@@ -24,14 +24,24 @@ function appliedDate(createdAt: string) {
   return `신청한 ${new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", timeZone: "Asia/Seoul" }).format(new Date(createdAt))}`;
 }
 
-function nextStepMessage(status: string) {
+function nextStepMessage(status: string, matchStatus: string) {
   return ({
     PENDING: "모집자가 프로필을 확인하고 있어요.",
     ACCEPTED: "같이 치게 됐어요. 매칭 정보를 확인해 주세요.",
     REJECTED: "이번에는 함께하기 어려워요. 다른 추천 매치를 찾아볼 수 있어요.",
     WITHDRAWN: "신청을 철회했어요.",
-    CANCELLED: "매칭이 마감되었거나 성사 없이 종료됐어요.",
+    CANCELLED: matchStatus === "CANCELLED"
+      ? "모집자가 매칭을 취소했어요."
+      : matchStatus === "EXPIRED"
+        ? "일정이 시작되어 매칭이 성사되지 않았어요."
+        : "모집이 마감되어 이번 신청은 진행되지 않아요.",
   } as Record<string, string>)[status] ?? "매칭 상태를 확인해 주세요.";
+}
+
+function acceptedCoordinationMessage(courtSource: SentApplication["match"]["courtSource"]) {
+  return courtSource === "COURT_TBD"
+    ? "수락된 참가자끼리 오픈채팅에서 코트와 비용을 조율해요."
+    : "수락된 참가자끼리 오픈채팅에서 당일 준비와 비용 정산 방법을 확인해요.";
 }
 
 function getErrorMessage(body: unknown, fallback: string) {
@@ -95,16 +105,16 @@ function EmptySentApplications() {
 function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentApplication; withdrawing: boolean; onWithdraw: () => void }) {
   const active = item.status === "PENDING" || item.status === "ACCEPTED";
   return <article className="rounded-3xl border border-[#d8e0db] bg-white p-5 shadow-[0_4px_14px_rgba(23,67,45,0.05)]">
-    <Link className="block transition-colors hover:text-[#1f7a55]" href={`/matches/${item.match.id}`}>
+    <Link className="block transition-colors hover:text-[#1f7a55]" href={`/matches/${item.match.id}?returnTo=${encodeURIComponent("/activity/sent")}`}>
       <div className="flex items-start justify-between gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${active ? "bg-[#eff9f4] text-[#1f7a55]" : "bg-[#f3f5f4] text-[#5c6b63]"}`}>{item.statusLabel}</span><span className="text-xs text-[#5c6b63]">{appliedDate(item.createdAt)}</span></div>
       <h2 className="mt-4 text-lg font-bold">{item.match.title}</h2>
       <p className="mt-3 text-sm text-[#405047]">🗓 {schedule(item.match.startsAt)}</p>
       <p className="mt-1 text-sm text-[#405047]">📍 {item.match.courtName ?? "코트는 함께 정해요"} · {item.match.regionName}</p>
-      <p className="mt-3 text-sm font-semibold text-[#1f7a55]">{item.match.estimatedFeePerPersonKrw === null ? "코트와 비용을 함께 정해요" : `예상 1인 약 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
-      <p className="mt-4 border-t border-[#edf0ee] pt-3 text-sm font-medium leading-6 text-[#405047]">{nextStepMessage(item.status)}</p>
+      <p className="mt-3 text-sm font-semibold text-[#1f7a55]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "예상 비용을 확인해 주세요" : `예상 1인 약 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
+      <p className="mt-4 border-t border-[#edf0ee] pt-3 text-sm font-medium leading-6 text-[#405047]">{nextStepMessage(item.status, item.match.status)}</p>
       {item.message ? <p className="mt-2 text-sm leading-6 text-[#5c6b63]">“{item.message}”</p> : null}
     </Link>
-    {item.contact ? <><p className="mt-4 rounded-2xl bg-[#eff9f4] px-4 py-3 text-sm leading-6 text-[#315b45]">수락된 참가자끼리 오픈채팅에서 코트와 비용을 조율해요.</p><a className="mt-3 flex min-h-[52px] items-center justify-center rounded-2xl bg-[#1f7a55] px-4 text-center text-sm font-semibold text-white" href={item.contact.url} rel="noreferrer" target="_blank">{item.contact.label}</a></> : null}
+    {item.contact ? <><p className="mt-4 rounded-2xl bg-[#eff9f4] px-4 py-3 text-sm leading-6 text-[#315b45]">{acceptedCoordinationMessage(item.match.courtSource)}</p><a className="mt-3 flex min-h-[52px] items-center justify-center rounded-2xl bg-[#1f7a55] px-4 text-center text-sm font-semibold text-white" href={item.contact.url} rel="noreferrer" target="_blank">{item.contact.label}</a></> : null}
     {item.status === "PENDING" ? <button className="mt-3 min-h-11 w-full rounded-2xl border border-[#d8e0db] px-4 text-sm font-semibold text-[#405047] disabled:opacity-50" disabled={withdrawing} onClick={onWithdraw} type="button">신청 철회</button> : null}
   </article>;
 }

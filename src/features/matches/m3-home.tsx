@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+import { getSafeReturnTo } from "@/navigation/return-to";
 import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
 
 import { MatchCard, MatchCardSkeleton, type MatchCardData } from "./m3-match-card";
@@ -33,7 +34,8 @@ async function requestJson<T>(url: string): Promise<T> {
   return body as T;
 }
 
-export function TennisMateHome() {
+export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
+  const safeReturnTo = getSafeReturnTo(returnTo);
   const [screen, setScreen] = useState<Screen>("loading");
   const [me, setMe] = useState<MeResponse | null>(null);
   const [recommended, setRecommended] = useState<MatchCardData[]>([]);
@@ -43,7 +45,14 @@ export function TennisMateHome() {
 
   const load = useCallback(async () => {
     try {
-      const current = await requestJson<MeResponse>("/api/v1/me");
+      const meResponse = await fetch("/api/v1/me", { cache: "no-store" });
+      if (meResponse.status === 401) {
+        setScreen("onboarding");
+        return;
+      }
+      const meBody: unknown = await meResponse.json();
+      if (!meResponse.ok) throw new Error(getErrorMessage(meBody));
+      const current = meBody as MeResponse;
       setMe(current);
       if (!current.onboardingCompleted) {
         setScreen("onboarding");
@@ -68,7 +77,7 @@ export function TennisMateHome() {
   }, [load]);
 
   if (screen === "loading") return <HomeLoading />;
-  if (screen === "onboarding") return <M2OnboardingFlow onCompleted={() => void load()} />;
+  if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
   if (screen === "error") return <main className="grid min-h-svh place-items-center bg-[#fffdfc] px-5 text-center"><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[#5c6b63]">{error}</p><button className="mt-6 rounded-2xl bg-[#1f7a55] px-5 py-3 font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></div></main>;
 
   const visibleOtherMatches = matches.filter((match) => !recommended.some((item) => item.id === match.id));

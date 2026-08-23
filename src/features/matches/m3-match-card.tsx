@@ -23,11 +23,11 @@ function formatSchedule(startsAt: string, endsAt: string) {
   return `${day} · ${time.format(date)}–${time.format(end)}`;
 }
 
-export function MatchCard({ match }: { match: MatchCardData }) {
+export function MatchCard({ match, returnTo = "/" }: { match: MatchCardData; returnTo?: string }) {
   return (
     <Link
       className="flex min-h-72 w-full flex-col rounded-3xl border border-[#d8e0db] bg-white p-5 shadow-sm transition hover:border-[#79b99a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f7a55]"
-      href={`/matches/${match.id}`}
+      href={`/matches/${match.id}?returnTo=${encodeURIComponent(returnTo)}`}
     >
       <div className="flex min-h-7 flex-wrap content-start gap-2 text-xs font-semibold">
         <span className="rounded-full bg-[#eff9f4] px-2.5 py-1 text-[#1f7a55]">{match.statusLabel}</span>

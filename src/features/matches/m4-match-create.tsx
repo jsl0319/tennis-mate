@@ -3,8 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { returnToPreviousScreen } from "@/components/navigation/back-navigation";
-
 type Region = { code: string; name: string; shortName: string | null };
 type CourtSource = "EXTERNAL_RESERVED" | "COURT_TBD";
 
@@ -79,7 +77,7 @@ export function M4MatchCreate() {
     }
   };
 
-  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]"><section className="mx-auto max-w-[560px]"><header className="sticky top-0 z-10 -mx-5 border-b border-[#edf1ee] bg-[#fffdfc]/95 px-5 pb-4 pt-1 backdrop-blur"><div className="flex items-center gap-3"><button aria-label={step === 1 ? "이전 화면으로 돌아가기" : "이전 단계"} className="grid size-11 place-items-center rounded-full text-xl" onClick={() => step === 1 ? returnToPreviousScreen(window.history.length, () => router.back(), () => router.replace("/")) : setStep((current) => current - 1)} type="button">←</button><div className="flex-1"><div className="h-1 rounded-full bg-[#d8e0db]"><div className="h-full rounded-full bg-[#1f7a55] transition-all" style={{ width: `${step * 25}%` }} /></div><p className="mt-1 text-right text-xs text-[#5c6b63]">{step}/4</p></div></div></header>
+  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]"><section className="mx-auto max-w-[560px]"><header className="sticky top-0 z-10 -mx-5 border-b border-[#edf1ee] bg-[#fffdfc]/95 px-5 pb-4 pt-1 backdrop-blur"><div className="flex items-center gap-3"><button aria-label={step === 1 ? "이전 화면으로 돌아가기" : "이전 단계"} className="grid size-11 place-items-center rounded-full text-xl" onClick={() => step === 1 ? router.replace("/") : setStep((current) => current - 1)} type="button">←</button><div className="flex-1"><div className="h-1 rounded-full bg-[#d8e0db]"><div className="h-full rounded-full bg-[#1f7a55] transition-all" style={{ width: `${step * 25}%` }} /></div><p className="mt-1 text-right text-xs text-[#5c6b63]">{step}/4</p></div></div></header>
 
     {step === 1 ? <StepOne cities={cities} districts={districts} form={form} onCourtSource={chooseCourtSource} onSelectCity={(code) => void selectCity(code)} set={(key, value) => set(key, value as never)} /> : null}
     {step === 2 ? <StepTwo form={form} set={set} onTogglePurpose={togglePurpose} /> : null}
