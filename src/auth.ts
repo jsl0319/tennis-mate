@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Kakao from "next-auth/providers/kakao";
 
+import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/server/db/prisma";
 
 function fallbackNickname(providerAccountId: string) {
@@ -31,6 +32,33 @@ async function uniqueInitialNickname(base: string) {
   return candidate;
 }
 
+async function createInitialUser(provider: string, providerAccountId: string, profile: Record<string, unknown>) {
+  const prisma = getPrisma();
+  const baseNickname = initialNickname(profile, providerAccountId);
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      await prisma.user.create({
+        data: {
+          nickname: await uniqueInitialNickname(baseNickname),
+          authAccounts: { create: { provider, providerAccountId } },
+        },
+      });
+      return;
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+
+      const linkedAccount = await prisma.authAccount.findUnique({
+        where: { provider_providerAccountId: { provider, providerAccountId } },
+        select: { id: true },
+      });
+      if (linkedAccount) return;
+    }
+  }
+
+  throw new Error("계정을 준비하지 못했어요. 잠시 후 다시 로그인해 주세요.");
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Kakao],
   session: { strategy: "jwt" },
@@ -38,18 +66,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ account, profile }) {
       if (account?.provider !== "kakao" || !account.providerAccountId || !profile) return false;
 
-      const prisma = getPrisma();
-      const existingAccount = await prisma.authAccount.findUnique({
+      const existingAccount = await getPrisma().authAccount.findUnique({
         where: { provider_providerAccountId: { provider: account.provider, providerAccountId: account.providerAccountId } },
       });
       if (existingAccount) return true;
 
-      await prisma.user.create({
-        data: {
-          nickname: await uniqueInitialNickname(initialNickname(profile as Record<string, unknown>, account.providerAccountId)),
-          authAccounts: { create: { provider: account.provider, providerAccountId: account.providerAccountId } },
-        },
-      });
+      await createInitialUser(account.provider, account.providerAccountId, profile as Record<string, unknown>);
       return true;
     },
     async jwt({ token, account }) {
