@@ -139,21 +139,30 @@ async function reconcileStartedMatch(transaction: MatchTransaction, matchId: str
       version: { increment: 1 },
     },
   });
-  if (updated.count === 1) {
-    await transaction.matchApplication.updateMany({
-      where: { matchId: match.id, status: "PENDING" },
-      data: { status: "CANCELLED", cancelledAt: now },
-    });
-  }
+  if (updated.count !== 1) return null;
+
+  await transaction.matchApplication.updateMany({
+    where: { matchId: match.id, status: "PENDING" },
+    data: { status: "CANCELLED", cancelledAt: now },
+  });
   return nextStatus;
 }
 
-async function reconcileStartedMatches(prisma: PrismaClient, now = new Date()) {
+export async function reconcileStartedMatches(prisma: PrismaClient, now = new Date()) {
   const matches = await prisma.match.findMany({
     where: { status: "OPEN", startsAt: { lte: now } },
     select: { id: true },
   });
-  await Promise.all(matches.map(({ id }) => prisma.$transaction((transaction) => reconcileStartedMatch(transaction, id, now))));
+  const statuses = await Promise.all(matches.map(({ id }) => prisma.$transaction((transaction) => reconcileStartedMatch(transaction, id, now))));
+
+  return statuses.reduce(
+    (summary, status) => {
+      if (status === "CLOSED") summary.closed += 1;
+      if (status === "EXPIRED") summary.expired += 1;
+      return summary;
+    },
+    { checked: matches.length, closed: 0, expired: 0 },
+  );
 }
 
 function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {

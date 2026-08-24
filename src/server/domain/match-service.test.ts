@@ -2,7 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { matchCreateInputSchema } from "./match";
-import { createMatch, getMatches, rejectApplication } from "./match-service";
+import { createMatch, getMatches, reconcileStartedMatches, rejectApplication } from "./match-service";
 
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
 const futureEndsAt = new Date("2030-01-02T03:00:00.000Z");
@@ -140,6 +140,34 @@ describe("match service operation safeguards", () => {
           { applications: { some: { applicantUserId: viewer.id } } },
         ],
       }),
+    }));
+  });
+
+  it("reports the started matches transitioned by the shared reconciliation function", async () => {
+    const transaction = {
+      match: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "started-match-id",
+          status: "OPEN",
+          startsAt: new Date("2026-01-01T00:00:00.000Z"),
+          applications: [],
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      matchApplication: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    };
+    const prisma = {
+      match: { findMany: vi.fn().mockResolvedValue([{ id: "started-match-id" }]) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof reconcileStartedMatches>[0];
+
+    await expect(reconcileStartedMatches(prisma, new Date("2026-01-01T01:00:00.000Z"))).resolves.toEqual({
+      checked: 1,
+      closed: 0,
+      expired: 1,
+    });
+    expect(transaction.matchApplication.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "CANCELLED" }),
     }));
   });
 });

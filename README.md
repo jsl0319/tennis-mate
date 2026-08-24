@@ -49,6 +49,7 @@ DATABASE_URL=postgresql://tennis_mate:tennis_mate@localhost:5432/tennis_mate?sch
 AUTH_SECRET=<32바이트_이상_무작위_문자열>
 AUTH_KAKAO_ID=<카카오_REST_API_키>
 AUTH_KAKAO_SECRET=<카카오_Client_Secret>
+CRON_SECRET=<32바이트_이상_무작위_문자열>
 APP_BASE_URL=http://localhost:3000
 ```
 
@@ -150,6 +151,7 @@ docker compose stop
 | `AUTH_SECRET` | Auth.js 세션 서명 비밀값 |
 | `AUTH_KAKAO_ID` | 카카오 REST API 키 |
 | `AUTH_KAKAO_SECRET` | 카카오 Client Secret |
+| `CRON_SECRET` | 운영 매칭 상태 보정 Cron의 요청 인증 비밀값 |
 | `APP_BASE_URL` | 로컬 애플리케이션 기준 URL |
 
 실제 값은 `.env.local` 또는 Vercel 환경 변수로만 관리합니다. `.env.example`은

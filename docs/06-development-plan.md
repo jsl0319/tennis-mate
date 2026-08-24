@@ -498,6 +498,7 @@ README는 이 마일스톤에서 실제 명령을 확인한 뒤 작성한다. �
 - `POST /api/v1/matches/{matchId}/close`
 - `POST /api/v1/matches/{matchId}/complete`
 - OPEN Match의 시작 시각 기반 CLOSED 또는 EXPIRED 보정
+- Vercel Cron을 통한 오래 조회되지 않은 OPEN Match의 일일 보정
 - EXPIRED 시 PENDING Application CANCELLED 전환
 - 한 명 이상 수락된 Match의 조기 마감과 PENDING 신청 취소
 - endsAt 이후 모집자의 완료 확인
@@ -508,9 +509,11 @@ README는 이 마일스톤에서 실제 명령을 확인한 뒤 작성한다. �
 초기 권장안은 다음 두 안전장치를 함께 사용하는 것이다.
 
 1. 관련 Match를 조회하거나 변경할 때 현재 시각 기준 상태를 트랜잭션 안에서 보정한다.
-2. 배포 환경에서 짧은 주기의 예약 작업을 실행해 오래 조회되지 않은 Match도 보정한다.
+2. 배포 환경에서 예약 작업을 실행해 오래 조회되지 않은 Match도 보정한다.
 
 예약 작업만 의존하면 실행 지연 중 잘못된 신청이 들어올 수 있고, 요청 시 보정만 사용하면 다시 조회되지 않은 Match가 오래 OPEN으로 남을 수 있다. 두 경로는 같은 멱등 도메인 함수를 호출한다.
+
+현재 Vercel Hobby 플랜에서는 Cron을 하루 한 번보다 자주 실행할 수 없다. 따라서 `vercel.json`의 `/api/cron/reconcile-matches`는 매일 `15:05 UTC`(한국 시간 다음 날 `00:05`)에 실행하며, 정확한 시작 시각의 차단과 상태 표시는 요청 시 트랜잭션 보정으로 즉시 처리한다. Cron endpoint는 `Authorization: Bearer $CRON_SECRET`을 요구하고, 비밀값은 production 환경 변수로만 관리한다.
 
 ### 14.3 테스트
 
