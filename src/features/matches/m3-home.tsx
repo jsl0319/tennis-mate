@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { getSafeReturnTo } from "@/navigation/return-to";
+import { EntrySelection } from "@/features/profile/entry-selection";
 import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
 
 import { MatchCard, MatchCardSkeleton, type MatchCardData } from "./m3-match-card";
@@ -16,7 +17,7 @@ type MeResponse = {
 };
 
 type MatchListResponse = { items: MatchCardData[] };
-type Screen = "loading" | "onboarding" | "home" | "error";
+type Screen = "loading" | "entry" | "onboarding" | "home" | "error";
 type MatchList = "recommended" | "other";
 
 function getErrorMessage(body: unknown) {
@@ -47,7 +48,7 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
     try {
       const meResponse = await fetch("/api/v1/me", { cache: "no-store" });
       if (meResponse.status === 401) {
-        setScreen("onboarding");
+        setScreen("entry");
         return;
       }
       const meBody: unknown = await meResponse.json();
@@ -77,6 +78,7 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
   }, [load]);
 
   if (screen === "loading") return <HomeLoading />;
+  if (screen === "entry") return <EntrySelection returnTo={safeReturnTo} />;
   if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
   if (screen === "error") return <main className="grid min-h-svh place-items-center bg-[#fffdfc] px-5 text-center"><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[#5c6b63]">{error}</p><button className="mt-6 rounded-2xl bg-[#1f7a55] px-5 py-3 font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></div></main>;
 

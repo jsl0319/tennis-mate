@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { getLoginPath, getSafeReturnTo } from "@/navigation/return-to";
+import { getSafeReturnTo, getStartAuthCallbackPath } from "@/navigation/return-to";
 
 type Screen = "loading" | "login" | "error" | "nickname" | 0 | 1 | 2 | 3 | 4 | "result";
 type Region = { code: string; name: string; shortName: string | null; parentCode: string | null; parentName?: string | null; type: "CITY" | "DISTRICT" };
@@ -99,9 +99,10 @@ type M2OnboardingFlowProps = {
   onCompleted?: () => void;
   redirectWhenOnboarded?: boolean;
   returnTo?: string;
+  skipTennisProfileOnboarding?: boolean;
 };
 
-export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, returnTo = "/" }: M2OnboardingFlowProps) {
+export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, returnTo = "/", skipTennisProfileOnboarding = false }: M2OnboardingFlowProps) {
   const router = useRouter();
   const safeReturnTo = getSafeReturnTo(returnTo);
   const [screen, setScreen] = useState<Screen>("loading");
@@ -128,6 +129,10 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
           return;
         }
         const me = await responseBody(meResponse) as MeResponse;
+        if (skipTennisProfileOnboarding) {
+          router.replace(safeReturnTo);
+          return;
+        }
         const citiesResponse = await fetch("/api/v1/regions", { cache: "no-store" });
         const cityItems = (await responseBody(citiesResponse) as { items: Region[] }).items;
         setCities(cityItems);
@@ -156,7 +161,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
         setScreen("error");
       }
     })();
-  }, [redirectWhenOnboarded, router, safeReturnTo]);
+  }, [redirectWhenOnboarded, router, safeReturnTo, skipTennisProfileOnboarding]);
 
   useEffect(() => {
     const query = regionQuery.trim();
@@ -241,7 +246,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
 
   if (screen === "loading") return <main className="grid min-h-svh place-items-center bg-[#fffdfc] text-[#1a221e]">불러오는 중이에요…</main>;
 
-  if (screen === "login") return <LoginScreen loading={loading} onSignIn={() => { setLoading(true); void signIn("kakao", { callbackUrl: getLoginPath(safeReturnTo) }); }} />;
+  if (screen === "login") return <LoginScreen loading={loading} onSignIn={() => { setLoading(true); void signIn("kakao", { callbackUrl: skipTennisProfileOnboarding ? safeReturnTo : getStartAuthCallbackPath("PLAYER", safeReturnTo) }); }} />;
 
   if (screen === "error") return <ServiceCheckError onRetry={() => window.location.reload()} />;
 
