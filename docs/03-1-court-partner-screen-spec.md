@@ -15,6 +15,12 @@
 
 `03-screen-spec.md`의 Core MVP 화면과 구현 범위를 분리하기 위한 문서다. Court Partner Pilot은 Core MVP 다음에 반드시 구현하지만, 이 문서의 Court Commerce 항목(결제·환불·정산)은 별도 승인 전까지 구현 범위에 포함하지 않는다.
 
+### 1.1 시각 기준
+
+- Figma 파일의 `Court Partner Pilot` 페이지를 OP01·OP02의 기준 화면으로 사용한다.
+- 모바일 아트보드는 `390 × 844`를 기준으로 하고, 기존 Tennis Mate 색상·간격·모서리 토큰을 재사용한다.
+- Figma와 웹은 `Noto Sans KR`을 공통 서체로 사용한다. 웹에서는 `next/font`로 자체 호스팅하여 브라우저에서 외부 폰트 요청이 발생하지 않게 한다.
+
 ## 2. 제품 단계
 
 ### 2.1 Court Partner Pilot
