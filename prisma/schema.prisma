@@ -75,20 +75,60 @@ enum ApplicationStatus {
   CANCELLED
 }
 
-model User {
-  id                   String         @id @default(uuid()) @db.Uuid
-  nickname             String         @unique @db.VarChar(12)
-  status               UserStatus     @default(ACTIVE)
-  nicknameConfirmedAt  DateTime?      @map("nickname_confirmed_at") @db.Timestamptz(6)
-  onboardingCompletedAt DateTime?     @map("onboarding_completed_at") @db.Timestamptz(6)
-  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+enum OperatorApplicationStatus {
+  DRAFT
+  VERIFYING
+  DRAFT_ACCESS_GRANTED
+  REVIEW_REQUIRED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  PUBLISH_APPROVED
+  REJECTED
+  SUSPENDED
+}
 
-  authAccounts AuthAccount[]
-  tennisProfile TennisProfile?
-  apiRateLimit ApiRateLimit?
-  hostedMatches Match[]           @relation("MatchHost")
-  matchApplications MatchApplication[]
+enum BusinessVerificationStatus {
+  PENDING
+  VERIFIED
+  MISMATCH
+  UNAVAILABLE
+}
+
+enum VenueVerificationStatus {
+  PENDING
+  MATCHED
+  REVIEW_REQUIRED
+  UNAVAILABLE
+}
+
+enum VerificationAttemptKind {
+  BUSINESS
+  VENUE
+}
+
+enum VerificationAttemptResult {
+  VERIFIED
+  MISMATCH
+  UNAVAILABLE
+  REVIEW_REQUIRED
+  PENDING
+}
+
+model User {
+  id                    String     @id @default(uuid()) @db.Uuid
+  nickname              String     @unique @db.VarChar(12)
+  status                UserStatus @default(ACTIVE)
+  nicknameConfirmedAt   DateTime?  @map("nickname_confirmed_at") @db.Timestamptz(6)
+  onboardingCompletedAt DateTime?  @map("onboarding_completed_at") @db.Timestamptz(6)
+  createdAt             DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  authAccounts         AuthAccount[]
+  tennisProfile        TennisProfile?
+  apiRateLimit         ApiRateLimit?
+  hostedMatches        Match[]                    @relation("MatchHost")
+  matchApplications    MatchApplication[]
+  operatorApplications CourtOperatorApplication[] @relation("OperatorApplicationApplicant")
 
   @@map("users")
 }
@@ -108,18 +148,18 @@ model AuthAccount {
 }
 
 model TennisProfile {
-  id                  String         @id @default(uuid()) @db.Uuid
-  userId              String         @unique @map("user_id") @db.Uuid
+  id                  String          @id @default(uuid()) @db.Uuid
+  userId              String          @unique @map("user_id") @db.Uuid
   experienceRange     ExperienceRange @map("experience_range")
-  rallyLevel          RallyLevel     @map("rally_level")
-  gameExperience      GameExperience @map("game_experience")
-  skillLabel          String?        @map("skill_label") @db.VarChar(30)
-  nearbyRegionAllowed Boolean        @default(true) @map("nearby_region_allowed")
-  version             Int            @default(1)
-  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  rallyLevel          RallyLevel      @map("rally_level")
+  gameExperience      GameExperience  @map("game_experience")
+  skillLabel          String?         @map("skill_label") @db.VarChar(30)
+  nearbyRegionAllowed Boolean         @default(true) @map("nearby_region_allowed")
+  version             Int             @default(1)
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user     User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user     User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
   regions  TennisProfileRegion[]
   purposes TennisProfilePurpose[]
 
@@ -127,15 +167,15 @@ model TennisProfile {
 }
 
 model Region {
-  code      String       @id @db.VarChar(30)
-  parentCode String?     @map("parent_code") @db.VarChar(30)
-  name      String       @db.VarChar(50)
-  shortName String?      @map("short_name") @db.VarChar(30)
-  type      RegionType
-  active    Boolean      @default(true)
+  code       String     @id @db.VarChar(30)
+  parentCode String?    @map("parent_code") @db.VarChar(30)
+  name       String     @db.VarChar(50)
+  shortName  String?    @map("short_name") @db.VarChar(30)
+  type       RegionType
+  active     Boolean    @default(true)
 
-  parent   Region?                 @relation("RegionHierarchy", fields: [parentCode], references: [code], onDelete: Restrict)
-  children Region[]                @relation("RegionHierarchy")
+  parent   Region?               @relation("RegionHierarchy", fields: [parentCode], references: [code], onDelete: Restrict)
+  children Region[]              @relation("RegionHierarchy")
   profiles TennisProfileRegion[]
   matches  Match[]
 
@@ -179,32 +219,32 @@ model ApiRateLimit {
 }
 
 model Match {
-  id                    String            @id @default(uuid()) @db.Uuid
-  hostUserId            String            @map("host_user_id") @db.Uuid
-  clientRequestId       String            @map("client_request_id") @db.Uuid
-  regionCode            String            @map("region_code") @db.VarChar(30)
-  title                 String            @db.VarChar(80)
-  startsAt              DateTime          @map("starts_at") @db.Timestamptz(6)
-  endsAt                DateTime          @map("ends_at") @db.Timestamptz(6)
-  courtSource           CourtSource       @default(EXTERNAL_RESERVED) @map("court_source")
-  externalCourtName     String?           @map("external_court_name") @db.VarChar(100)
-  externalCourtAddress  String?           @map("external_court_address") @db.VarChar(255)
-  externalCourtNumber   String?           @map("external_court_number") @db.VarChar(50)
-  recruitCount          Int               @map("recruit_count")
-  partnerPreference     PartnerPreference @map("partner_preference")
-  totalCourtFeeKrw      Int?              @map("total_court_fee_krw")
-  additionalCostNote    String?           @map("additional_cost_note") @db.VarChar(200)
-  introduction          String?           @db.VarChar(300)
-  contactOpenChatUrl    String            @map("contact_open_chat_url") @db.VarChar(500)
-  status                MatchStatus       @default(OPEN)
-  version               Int               @default(1)
-  closedAt              DateTime?         @map("closed_at") @db.Timestamptz(6)
-  completedAt           DateTime?         @map("completed_at") @db.Timestamptz(6)
-  expiredAt             DateTime?         @map("expired_at") @db.Timestamptz(6)
-  cancelledAt           DateTime?         @map("cancelled_at") @db.Timestamptz(6)
-  cancellationReason    String?           @map("cancellation_reason") @db.VarChar(200)
-  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                   String            @id @default(uuid()) @db.Uuid
+  hostUserId           String            @map("host_user_id") @db.Uuid
+  clientRequestId      String            @map("client_request_id") @db.Uuid
+  regionCode           String            @map("region_code") @db.VarChar(30)
+  title                String            @db.VarChar(80)
+  startsAt             DateTime          @map("starts_at") @db.Timestamptz(6)
+  endsAt               DateTime          @map("ends_at") @db.Timestamptz(6)
+  courtSource          CourtSource       @default(EXTERNAL_RESERVED) @map("court_source")
+  externalCourtName    String?           @map("external_court_name") @db.VarChar(100)
+  externalCourtAddress String?           @map("external_court_address") @db.VarChar(255)
+  externalCourtNumber  String?           @map("external_court_number") @db.VarChar(50)
+  recruitCount         Int               @map("recruit_count")
+  partnerPreference    PartnerPreference @map("partner_preference")
+  totalCourtFeeKrw     Int?              @map("total_court_fee_krw")
+  additionalCostNote   String?           @map("additional_cost_note") @db.VarChar(200)
+  introduction         String?           @db.VarChar(300)
+  contactOpenChatUrl   String            @map("contact_open_chat_url") @db.VarChar(500)
+  status               MatchStatus       @default(OPEN)
+  version              Int               @default(1)
+  closedAt             DateTime?         @map("closed_at") @db.Timestamptz(6)
+  completedAt          DateTime?         @map("completed_at") @db.Timestamptz(6)
+  expiredAt            DateTime?         @map("expired_at") @db.Timestamptz(6)
+  cancelledAt          DateTime?         @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason   String?           @map("cancellation_reason") @db.VarChar(200)
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   host         User               @relation("MatchHost", fields: [hostUserId], references: [id], onDelete: Restrict)
   region       Region             @relation(fields: [regionCode], references: [code], onDelete: Restrict)
@@ -250,4 +290,47 @@ model MatchApplication {
   @@index([matchId, status, createdAt])
   @@index([applicantUserId, status, createdAt(sort: Desc)])
   @@map("match_applications")
+}
+
+model CourtOperatorApplication {
+  id                             String                     @id @default(uuid()) @db.Uuid
+  applicantUserId                String                     @map("applicant_user_id") @db.Uuid
+  status                         OperatorApplicationStatus  @default(DRAFT)
+  businessName                   String                     @map("business_name") @db.VarChar(100)
+  businessRegistrationNumberHash String                     @map("business_registration_number_hash") @db.VarChar(128)
+  verificationInputRef           String?                    @map("verification_input_ref") @db.VarChar(255)
+  businessVerificationStatus     BusinessVerificationStatus @default(PENDING) @map("business_verification_status")
+  venueVerificationStatus        VenueVerificationStatus    @default(PENDING) @map("venue_verification_status")
+  venueName                      String                     @map("venue_name") @db.VarChar(100)
+  venueAddress                   String                     @map("venue_address") @db.VarChar(255)
+  normalizedVenueKey             String                     @map("normalized_venue_key") @db.VarChar(255)
+  verificationFailureCode        String?                    @map("verification_failure_code") @db.VarChar(60)
+  submittedAt                    DateTime?                  @map("submitted_at") @db.Timestamptz(6)
+  verifiedAt                     DateTime?                  @map("verified_at") @db.Timestamptz(6)
+  publishApprovedAt              DateTime?                  @map("publish_approved_at") @db.Timestamptz(6)
+  createdAt                      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  applicant            User                                     @relation("OperatorApplicationApplicant", fields: [applicantUserId], references: [id], onDelete: Restrict)
+  verificationAttempts OperatorApplicationVerificationAttempt[]
+
+  @@index([applicantUserId, createdAt(sort: Desc)])
+  @@index([businessRegistrationNumberHash, status])
+  @@index([normalizedVenueKey, status])
+  @@map("court_operator_applications")
+}
+
+model OperatorApplicationVerificationAttempt {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  applicationId      String                    @map("application_id") @db.Uuid
+  kind               VerificationAttemptKind
+  result             VerificationAttemptResult
+  safeFailureCode    String?                   @map("safe_failure_code") @db.VarChar(60)
+  providerRequestRef String?                   @map("provider_request_ref") @db.VarChar(120)
+  attemptedAt        DateTime                  @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  application CourtOperatorApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, attemptedAt(sort: Desc)])
+  @@map("operator_application_verification_attempts")
 }

@@ -1257,17 +1257,70 @@ POST /api/v1/applications/{applicationId}/withdraw
 
 이 섹션은 Core MVP 구현 대상이 아니며 Court Partner Pilot 구현 시작 시 활성화한다.
 
-### 22.0 운영자 자율 등록·검증 후보 API
+### 22.0 운영자 자율 등록·검증 API — Pilot 첫 수직 단위
+
+Pilot 첫 수직 단위에서는 다음 계약을 활성화한다. 인증된 활성 회원이면 테니스 프로필 온보딩과 관계없이 신청할 수 있다. 코트·시간대·예약 API, 증빙 파일 업로드, 내부 검토 API는 아직 활성화하지 않는다.
 
 ```text
 POST /api/v1/operator-applications
 GET  /api/v1/operator-applications/me
 PATCH /api/v1/operator-applications/{applicationId}
 POST /api/v1/operator-applications/{applicationId}/retry-verification
-POST /api/v1/operator-applications/{applicationId}/request-review
 ```
 
-등록 요청은 사업자등록번호, 개업일, 대표자명, 사업장명, 테니스장명, 도로명주소와 담당자 정보를 받는다. 서버만 국세청 사업자등록정보 API와 주소·장소 API를 호출하며 외부 API 키나 원문 응답을 클라이언트에 반환하지 않는다. 증빙 업로드는 검토가 필요한 경우에만 별도의 비공개 업로드 계약으로 추가하며, 공개 URL을 요청·응답에 넣지 않는다.
+#### `POST /api/v1/operator-applications`
+
+신청자는 다음 정보를 제출한다. 원문 사업자 정보는 검증 어댑터 호출에만 사용하고 일반 DB·로그·응답에 포함하지 않는다.
+
+```json
+{
+  "businessName": "마포 테니스파크",
+  "businessRegistrationNumber": "1234567890",
+  "businessOpenedOn": "2024-01-02",
+  "representativeName": "홍길동",
+  "venueName": "마포 테니스파크",
+  "venueAddress": "서울특별시 마포구 월드컵로 00",
+  "operatorPhone": "01012345678"
+}
+```
+
+- 로그인한 활성 회원만 요청할 수 있다. 온보딩 완료는 요구하지 않는다.
+- 사업자등록번호는 숫자 10자리, 개업일은 `YYYY-MM-DD`, 대표자명·사업자명·테니스장명·주소·연락처는 길이와 빈 값만 서버에서 검증한다.
+- 서버는 원문을 저장하지 않고, 비밀키 HMAC 중복 키와 검증 결과만 보관한다. `verificationInputRef`는 비공개 입력 저장소가 승인되기 전까지 비워 둔다. 입력 원문과 외부 공급자 응답 전문은 오류 응답·로그에 넣지 않는다.
+- 기본 수동 제공자는 외부 확인을 호출하지 않고 `UNAVAILABLE`을 반환한다. 이 경우 `REVIEW_REQUIRED`와 `retryAvailable: true`를 반환한다. 실제 국세청·주소·장소 공급자 키를 설정하거나 호출하지 않는다.
+- 신청자 본인의 진행 중인 신청이 있으면 `409 OPERATOR_APPLICATION_ALREADY_ACTIVE`다. `REJECTED` 또는 `CHANGES_REQUESTED` 신청은 새 입력으로 다시 제출한다.
+
+응답 `201 Created`와 아래 조회 응답은 같은 `OperatorApplicationView`를 반환한다.
+
+```json
+{
+  "id": "0198...",
+  "status": "REVIEW_REQUIRED",
+  "statusLabel": "추가 확인이 필요해요",
+  "businessVerificationStatus": "UNAVAILABLE",
+  "venueVerificationStatus": "UNAVAILABLE",
+  "venue": { "name": "마포 테니스파크", "address": "서울특별시 마포구 월드컵로 00" },
+  "canCreatePrivateDraft": false,
+  "canPublish": false,
+  "retryAvailable": true,
+  "nextAction": "정보를 다시 확인하거나 추가 확인을 요청해 주세요.",
+  "updatedAt": "2026-08-24T01:00:00.000Z"
+}
+```
+
+#### `GET /api/v1/operator-applications/me`
+
+신청자 본인의 가장 최근 신청을 반환한다. 신청 이력이 없으면 `404 OPERATOR_APPLICATION_NOT_FOUND`다. 반환 DTO에는 사업자등록번호, 개업일, 대표자명, 담당자 연락처와 증빙 참조를 포함하지 않는다.
+
+#### `PATCH /api/v1/operator-applications/{applicationId}`
+
+신청자 본인만 `REVIEW_REQUIRED`, `CHANGES_REQUESTED`, `REJECTED` 상태의 신청을 새 입력으로 보완할 수 있다. 새 입력으로 자동 확인을 다시 시작하며 원문은 저장하지 않는다. 다른 상태면 `409 OPERATOR_APPLICATION_STATE_CONFLICT`다.
+
+#### `POST /api/v1/operator-applications/{applicationId}/retry-verification`
+
+신청자 본인만 `REVIEW_REQUIRED` 또는 `DRAFT_ACCESS_GRANTED` 상태에서 다시 확인을 요청할 수 있다. 검증 원문을 일반 DB에 보관하지 않으므로 첫 구현은 `409 OPERATOR_APPLICATION_RESUBMISSION_REQUIRED`로 새 입력 제출을 안내한다. 암호화된 비공개 입력 저장소와 공급자 설정이 승인되면 이 경로에서 제한된 자동 재시도를 활성화한다.
+
+등록 요청은 사업자등록번호, 개업일, 대표자명, 사업장명, 테니스장명, 도로명주소와 담당자 정보를 받는다. 실제 제공자를 연결할 때는 서버만 국세청 사업자등록정보 API와 주소·장소 API를 호출하며 외부 API 키나 원문 응답을 클라이언트에 반환하지 않는다. 증빙 업로드는 검토가 필요한 경우에만 별도의 비공개 업로드 계약으로 추가하며, 공개 URL을 요청·응답에 넣지 않는다.
 
 응답은 `applicationStatus`, `businessVerificationStatus`, `venueVerificationStatus`, `canCreatePrivateDraft`, `canPublish`, 사용자 문구와 다음 행동만 제공한다. 사업자 확인 완료는 `canCreatePrivateDraft: true`만 부여할 수 있다. `VERIFIED` 사업자, `MATCHED` 장소·주소, 활성 동일 장소 운영자 부재를 모두 충족하거나 운영 검토가 승인하기 전에는 `canPublish: false`이며 코트·Slot 공개 API를 허용하지 않는다.
 

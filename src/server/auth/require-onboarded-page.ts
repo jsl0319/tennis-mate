@@ -22,3 +22,14 @@ export async function requireOnboardedPage(returnTo: string) {
 
   if (!user?.onboardingCompletedAt) redirect(getOnboardingPath(returnTo));
 }
+
+/** Operator registration is available before the tennis-profile onboarding. */
+export async function requireActivePage(returnTo: string) {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) redirect(getLoginPath(returnTo));
+
+  const user = await getPrisma().user.findUnique({ where: { id: userId }, select: { status: true } });
+  if (!user || user.status !== "ACTIVE") redirect(getLoginPath(returnTo));
+}

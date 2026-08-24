@@ -714,6 +714,37 @@ erDiagram
 
 ## 13. Court Partner 엔터티 상세
 
+### 13.0 Pilot 첫 수직 단위 — 운영자 신청·심사 상태
+
+Court Partner Pilot의 첫 구현은 `CourtOperatorApplication`과 자동 확인 시도 이력까지만 활성화한다. `Court`, `CourtUnit`, `CourtSlot`, `CourtBooking`, 결제·환불·정산은 이 단위에 포함하지 않는다.
+
+이 단위가 해결하는 문제는 실제 코트 운영자가 등록을 시작한 뒤 심사 진행 상황과 다음 행동을 알 수 없다는 점이다. 공개 권한을 `PUBLISH_APPROVED`로 분리해, 검증 전 입력 정보가 이용자 공개나 예약 요청으로 이어지지 않게 한다. 코트·시간대 초안, 외부 실제 검증 API, 증빙 파일 업로드와 내부 검토 화면은 다음 수직 단위로 남긴다. 더 단순한 대안인 신청 상태 문자열 하나만 저장하는 방식은 사업자 유효와 장소 운영 권한을 구분할 수 없어 사용하지 않는다.
+
+첫 구현 마이그레이션에는 다음만 포함한다.
+
+- `CourtOperatorApplication`, `OperatorApplicationVerificationAttempt`
+- 신청 상태·사업자 확인 상태·장소 확인 상태 enum
+- 신청자별 현재 진행 중인 신청을 빠르게 찾는 인덱스와 사업자·장소 중복 검토용 HMAC 키 인덱스
+
+`verificationInputRef`는 사업자등록번호·개업일·대표자명 원문을 담지 않는 비공개 저장소 참조다. 실제 비공개 저장소와 암호화 키가 배포 환경에 준비되기 전에는 원문을 DB, 로그, 분석 이벤트에 저장하지 않는다. 따라서 첫 구현의 기본 `ManualVerificationProvider`는 외부 사업자·주소·장소 확인을 호출하지 않고 안전한 `UNAVAILABLE` 결과만 돌려준다. 테스트에서만 주입하는 fake provider가 상태 전이를 검증한다.
+
+상태 전이는 다음과 같이 제한한다.
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT
+    DRAFT --> VERIFYING: 제출 또는 재확인 요청
+    VERIFYING --> DRAFT_ACCESS_GRANTED: 사업자 확인 완료·장소 확인 계속
+    VERIFYING --> REVIEW_REQUIRED: 장소·권한 확인 필요 또는 제공자 불가
+    VERIFYING --> PUBLISH_APPROVED: 사업자·장소 일치·중복 없음
+    VERIFYING --> REJECTED: 사업자 불일치 또는 휴·폐업
+    REVIEW_REQUIRED --> VERIFYING: 정보 수정 후 재확인 요청
+    REJECTED --> [*]
+    PUBLISH_APPROVED --> SUSPENDED: 재확인 또는 운영 중지
+```
+
+`DRAFT_ACCESS_GRANTED`와 `PUBLISH_APPROVED`는 별도 권한이다. 첫 수직 단위에서는 코트 초안 API도 아직 열지 않지만, 후속 API는 전자에서 비공개 초안만, 후자에서 공개를 허용해야 한다.
+
 ### 13.1 CourtOperatorApplication
 
 운영자 신청과 심사 이력을 보존한다. 승인된 운영자와 신청 데이터를 하나의 테이블로 합치지 않는다. 신청 단계의 사업자 확인 완료는 비공개 Court·Slot 초안 작성 권한만 줄 수 있고, 공개 권한은 `PUBLISH_APPROVED` 상태에서만 부여한다.
@@ -727,7 +758,7 @@ erDiagram
 | `businessRegistrationNumberHash` | 정규화 사업자번호의 키 관리 HMAC. 원문 대입 공격 없이 중복 신청만 탐지 |
 | `verificationInputRef` | 사업자번호·개업일·대표자명·제출 주소를 재확인에만 쓰는 암호화된 비공개 참조 |
 | `businessVerificationStatus` | `PENDING`, `VERIFIED`, `MISMATCH`, `UNAVAILABLE` |
-| `venueVerificationStatus` | `PENDING`, `MATCHED`, `REVIEW_REQUIRED` |
+| `venueVerificationStatus` | `PENDING`, `MATCHED`, `REVIEW_REQUIRED`, `UNAVAILABLE` |
 | `normalizedVenueKey` | 표준 주소·장소 식별자로 만든 중복 탐지 키. 원문 장소 검색 응답을 저장하지 않음 |
 | `verifiedAt` | 자동 또는 운영 검토로 확인된 시각 |
 | `publishApprovedAt` | 코트·Slot 공개를 허용한 시각 |
@@ -736,7 +767,7 @@ erDiagram
 
 `businessVerificationStatus = VERIFIED`만으로 운영자를 승인하지 않는다. `venueVerificationStatus = MATCHED`, 주소·장소 일치, 활성 동일 장소 운영자 부재를 함께 충족하거나 운영 검토가 이를 대체해야 `PUBLISH_APPROVED` 및 `CourtOperator.ACTIVE`로 전환한다. 동일 `businessRegistrationNumberHash` 또는 `normalizedVenueKey`의 활성 신청·운영자가 있으면 자동 승인을 금지하고 검토 대상으로 만든다.
 
-`UNAVAILABLE`은 외부 서비스 장애·지연을 뜻하므로 반려와 구분한다. 재시도는 별도 Attempt 이력으로 남기고 제한된 횟수 이후 `REVIEW_REQUIRED`로 전환한다. `MISMATCH` 또는 휴·폐업처럼 명백히 잘못된 사업자 상태만 정정 후 새 신청하도록 `REJECTED`로 전환할 수 있다.
+`UNAVAILABLE`은 외부 서비스 장애·지연을 뜻하므로 반려와 구분한다. 재시도는 별도 Attempt 이력으로 남기고 제한된 횟수 이후 `REVIEW_REQUIRED`로 전환한다. 첫 구현은 검증 원문을 일반 DB에 저장하지 않아 새 입력 제출로만 재확인을 시작한다. `MISMATCH` 또는 휴·폐업처럼 명백히 잘못된 사업자 상태만 정정 후 새 신청하도록 `REJECTED`로 전환할 수 있다.
 
 #### OperatorApplicationVerificationAttempt
 
