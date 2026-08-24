@@ -39,6 +39,7 @@ const matchInclude = {
     },
   },
   applications: { select: { id: true, applicantUserId: true, status: true } },
+  externalCourtImageUpload: { select: { id: true } },
 } satisfies Prisma.MatchInclude;
 
 type MatchWithRelations = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
@@ -116,10 +117,14 @@ function getRecommendationForMatch(match: MatchWithRelations, viewer: Viewer) {
   });
 }
 
-function getCourtView(match: Pick<MatchWithRelations, "courtSource" | "externalCourtName">) {
+function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "externalCourtName" | "externalCourtImageUpload">) {
+  const image = match.externalCourtImageUpload
+    ? { url: `/api/v1/matches/${match.id}/court-image`, sourceLabel: "모집자 제공 사진", fallback: "TENNIS_COURT_ILLUSTRATION" as const }
+    : { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const };
+
   return match.courtSource === "EXTERNAL_RESERVED"
-    ? { source: match.courtSource, sourceLabel: "모집자가 코트를 예약했어요", name: match.externalCourtName }
-    : { source: match.courtSource, sourceLabel: "코트와 비용을 함께 정해요", name: null };
+    ? { source: match.courtSource, sourceLabel: "모집자가 코트를 예약했어요", name: match.externalCourtName, image }
+    : { source: match.courtSource, sourceLabel: "코트와 비용을 함께 정해요", name: null, image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const } };
 }
 
 async function reconcileStartedMatch(transaction: MatchTransaction, matchId: string, now = new Date()) {
@@ -362,6 +367,7 @@ function isSameCreateRequest(match: MatchWithRelations, input: MatchCreateInput)
     match.externalCourtName === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null) &&
     match.externalCourtAddress === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null) &&
     match.externalCourtNumber === (input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null) &&
+    match.externalCourtImageUploadId === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.imageUploadId ?? null : null) &&
     match.recruitCount === input.recruitCount &&
     match.partnerPreference === input.partnerPreference &&
     match.totalCourtFeeKrw === input.totalCourtFeeKrw &&
@@ -393,18 +399,32 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
   }
 
   try {
-    const created = await prisma.match.create({
-      data: {
-        hostUserId: viewer.id, clientRequestId: input.clientRequestId, regionCode: input.regionCode, title: input.title,
-        startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), courtSource: input.courtSource,
-        externalCourtName: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null,
-        externalCourtAddress: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null,
-        externalCourtNumber: input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null, recruitCount: input.recruitCount,
-        partnerPreference: input.partnerPreference, totalCourtFeeKrw: input.totalCourtFeeKrw,
-        additionalCostNote: optionalText(input.additionalCostNote), introduction: optionalText(input.introduction),
-        contactOpenChatUrl: input.contactOpenChatUrl, purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
-      },
-      select: { id: true },
+    const created = await prisma.$transaction(async (transaction) => {
+      const imageUploadId = input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.imageUploadId ?? null : null;
+      if (imageUploadId) {
+        const imageClaimed = await transaction.courtImageUpload.updateMany({
+          where: { id: imageUploadId, ownerUserId: viewer.id, status: "PENDING" },
+          data: { status: "ATTACHED", attachedAt: new Date() },
+        });
+        if (imageClaimed.count !== 1) {
+          throw new DomainError("COURT_IMAGE_UPLOAD_UNAVAILABLE", 409, "이 코트 사진은 사용할 수 없어요. 사진을 다시 올려 주세요.");
+        }
+      }
+
+      return transaction.match.create({
+        data: {
+          hostUserId: viewer.id, clientRequestId: input.clientRequestId, regionCode: input.regionCode, title: input.title,
+          startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), courtSource: input.courtSource,
+          externalCourtName: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null,
+          externalCourtAddress: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null,
+          externalCourtNumber: input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null,
+          externalCourtImageUploadId: imageUploadId, recruitCount: input.recruitCount,
+          partnerPreference: input.partnerPreference, totalCourtFeeKrw: input.totalCourtFeeKrw,
+          additionalCostNote: optionalText(input.additionalCostNote), introduction: optionalText(input.introduction),
+          contactOpenChatUrl: input.contactOpenChatUrl, purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
+        },
+        select: { id: true },
+      });
     });
     return { match: await getMatchDetail(prisma, viewer, created.id), created: true };
   } catch (error) {

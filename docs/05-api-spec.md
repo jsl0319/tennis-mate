@@ -220,13 +220,22 @@ PlayPurpose = CASUAL_HIT | RALLY_PRACTICE | STROKE_PRACTICE | GAME_INTRO | GAME
 ### 5.2 매칭
 
 ```text
-CourtSource = EXTERNAL_RESERVED | COURT_TBD
+CourtSource = EXTERNAL_RESERVED | COURT_TBD | PARTNER_COURT
 PartnerPreference = COMPLETE_BEGINNER_WELCOME | SIMILAR_LEVEL | GAME_CAPABLE
 MatchStatus = OPEN | CLOSED | COMPLETED | EXPIRED | CANCELLED
 ApplicationStatus = PENDING | ACCEPTED | REJECTED | WITHDRAWN | CANCELLED
 ```
 
-Core MVP 생성 API는 `EXTERNAL_RESERVED`와 `COURT_TBD`를 허용한다. `COURT_TBD`는 코트·비용이 확정되지 않았음을 응답에서 명시한다.
+Core MVP 생성 API는 `EXTERNAL_RESERVED`와 `COURT_TBD`만 허용한다. `PARTNER_COURT`는 Court Partner Pilot에서만 `courtSlotId`와 함께 허용한다. `COURT_TBD`는 코트·비용이 확정되지 않았음을 응답에서 명시한다.
+
+### 5.3 Court Partner Pilot 시간 공급
+
+```text
+CourtSlotVisibility = PRIVATE | PUBLIC
+CourtSlotStatus = DRAFT | AVAILABLE | ALLOCATED | ENDED | BLOCKED | CANCELLED
+```
+
+`visibility`는 시간대가 일반 회원에게 보이는지를, `status`는 세션 개설·상세 이동·읽기 전용 여부를 정한다. Pilot에서 새 Slot은 `DRAFT`·`PRIVATE`로 시작하고, 한 번 공개한 Slot은 상태가 바뀌어도 `PUBLIC`을 유지한다. `PUBLIC`은 예약 가능·운영자 승인 대기 상태가 아니다.
 
 ## 6. 공통 응답 모델
 
@@ -289,7 +298,12 @@ Core MVP 생성 API는 `EXTERNAL_RESERVED`와 `COURT_TBD`를 허용한다. `COUR
   "court": {
     "source": "EXTERNAL_RESERVED",
     "sourceLabel": "모집자가 코트를 예약했어요",
-    "name": "마포 테니스장"
+    "name": "마포 테니스장",
+    "image": {
+      "url": null,
+      "sourceLabel": null,
+      "fallback": "TENNIS_COURT_ILLUSTRATION"
+    }
   },
   "playPurposes": [
     {
@@ -313,13 +327,17 @@ Core MVP 생성 API는 `EXTERNAL_RESERVED`와 `COURT_TBD`를 허용한다. `COUR
 }
 ```
 
-예약 코트의 예상 1인 비용은 `ceil(totalCourtFeeKrw / (recruitCount + 1))`로 계산하고 사용자가 수정할 수 없다. `COURT_TBD`의 `estimatedFeePerPersonKrw`는 `null`이며, 실제 정산은 서비스 밖에서 참가자들이 확인한다.
+예약 코트와 Partner Court Match의 예상 1인 비용은 `ceil(totalCourtFeeKrw / (recruitCount + 1))`로 계산하고 사용자가 수정할 수 없다. Partner Court Match의 전체 비용은 연결 CourtSlot에서만 읽는다. `COURT_TBD`의 `estimatedFeePerPersonKrw`는 `null`이며, 실제 정산은 서비스 밖에서 참가자들이 확인한다.
 
 ### 6.4 MatchDetailView
 
 `MatchCardView`의 모든 필드에 다음 정보를 추가한다.
 
 `COURT_TBD` 응답에서는 `court.name`, `court.address`, `totalCourtFeeKrw`, `additionalCostNote`, `estimatedFeePerPersonKrw`가 모두 `null`이고 `court.sourceLabel`은 `코트와 비용을 함께 정해요`다.
+
+모든 Match 응답의 `court.image`는 `url`, `sourceLabel`, `fallback`을 제공한다. 사진이 없으면 `url`과 `sourceLabel`은 `null`이며 클라이언트는 `TENNIS_COURT_ILLUSTRATION`을 표시한다. `url`은 비공개 객체 URL이 아니라 인증·권한을 확인하는 같은 출처의 사진 읽기 API다. 외부 예약 사진의 `sourceLabel`은 `모집자 제공 사진`, 제휴 코트 사진의 값은 `운영자 제공 사진`이다. 사진은 예약 검증이나 Tennis Mate 보증을 뜻하지 않는다.
+
+`PARTNER_COURT` 응답에서는 `court.sourceLabel`이 `Tennis Mate에서 준비한 코트예요`이고, `court.participationNote`가 `참가 신청은 세션을 연 모집자에게 보내요.`다. Match 응답에는 `courtSlotId`와 운영자 내부 식별자를 응답하지 않으며 코트명·주소·시각·전체 비용은 연결 Slot에서 서버가 조합한다. 공개 Slot 목록 응답은 별도 `PublicCourtSlotView`만 사용한다.
 
 ```json
 {
@@ -666,7 +684,44 @@ GET /api/v1/matches/{matchId}
 - `viewer`는 로그인 사용자와 현재 Application 상태를 기준으로 서버가 계산한다.
 - 추천 이유가 없으면 빈 배열을 반환한다.
 
+### 10.4 외부 예약 코트 사진 읽기
+
+```http
+GET /api/v1/matches/{matchId}/court-image
+```
+
+인증 및 온보딩: 필수
+
+- 원본은 비공개 객체 저장소에서만 읽고, 이 경로가 권한 확인 뒤 스트림으로 반환한다.
+- `OPEN` Match는 온보딩을 마친 이용자에게, 종료 상태는 모집자 또는 해당 Match 신청자에게만 반환한다.
+- 사진이 없거나 권한이 없으면 객체 존재 여부를 드러내지 않고 `404 MATCH_NOT_FOUND`를 반환한다.
+- `Content-Type`은 업로드 시 검증한 JPEG, PNG, WebP 중 하나이며 응답은 `Cache-Control: private`를 사용한다.
+
 ## 11. 매칭 등록·관리 API
+
+### 11.0 외부 예약 코트 사진 업로드
+
+```http
+POST /api/v1/court-image-uploads
+Content-Type: multipart/form-data
+```
+
+인증 및 온보딩: 필수
+
+요청은 `file` 하나만 받는다. 서버는 JPEG, PNG, WebP만 허용하고 선언 MIME 타입과 파일 시그니처를 함께 검사하며, 4 MiB를 초과하거나 SVG·GIF·영상·문서는 거절한다. 원본은 Vercel Blob의 `private` 저장소에만 저장한다.
+
+응답 `201 Created`:
+
+```json
+{
+  "id": "0198d5a2-51f5-7be2-a044-6f68d37e61d1"
+}
+```
+
+- 업로드한 모집자 본인만 이 `id`를 매칭 생성에 사용할 수 있다.
+- 한 업로드는 한 Match에만 원자적으로 연결한다.
+- 연결되지 않은 업로드는 24시간 뒤 정리한다. 업로드 경로·비공개 객체 URL·파일명은 응답하지 않는다.
+- 사진 내용에 인물 얼굴·연락처·예약번호·예약 확인서가 보이지 않도록 업로드 전에 안내한다. 이 첫 단계는 실행 파일 형식을 허용하지 않는 파일 형식·크기·시그니처 검사이며, 별도 유료 악성코드 검사 서비스는 활성화하지 않는다.
 
 ### 11.1 매칭 등록
 
@@ -689,7 +744,8 @@ POST /api/v1/matches
   "externalCourt": {
     "name": "마포 테니스장",
     "address": "서울 마포구 ...",
-    "courtNumber": "2번 코트"
+    "courtNumber": "2번 코트",
+    "imageUploadId": null
   },
   "recruitCount": 2,
   "playPurposes": ["RALLY_PRACTICE"],
@@ -734,6 +790,7 @@ POST /api/v1/matches
 - `startsAt < endsAt`이며 시작은 현재보다 미래
 - 활성 `regionCode`
 - `courtSource = EXTERNAL_RESERVED`이면 코트명 1~100자, 주소 1~255자, 비용 0 이상이 필수이고 코트 번호는 최대 50자다.
+- `imageUploadId`는 모집자 본인의 `PENDING` 단일 업로드만 허용하며 Match 생성 트랜잭션 안에서 `ATTACHED`로 전환한다. 다른 사용자의 업로드, 이미 연결·정리 중·삭제된 업로드는 `409 COURT_IMAGE_UPLOAD_UNAVAILABLE`이다.
 - `courtSource = COURT_TBD`이면 `externalCourt`, `totalCourtFeeKrw`, `additionalCostNote`는 `null` 또는 생략한다.
 - 예약 코트의 코트 번호에 예약번호나 연락처를 넣지 않도록 클라이언트에서 안내하고 서버에서도 명백한 형식을 제한한다.
 - `recruitCount >= 1`
@@ -1112,6 +1169,9 @@ POST /api/v1/applications/{applicationId}/withdraw
 | `MATCH_NOT_COMPLETABLE` | 완료할 수 없는 상태 또는 시각 |
 | `NO_REMAINING_SPOTS` | 남은 자리 없음 |
 | `UNSUPPORTED_COURT_SOURCE` | Core에서 지원하지 않는 코트 출처 |
+| `PARTNER_SLOT_NOT_AVAILABLE` | 공개되지 않았거나 세션에 연결할 수 없는 Slot |
+| `PARTNER_SLOT_ALREADY_ALLOCATED` | 다른 Partner Court Match가 먼저 연결한 Slot |
+| `PARTNER_SLOT_CAPACITY_EXCEEDED` | 모집자를 포함한 인원이 해당 코트 시간의 최대 인원을 초과 |
 | `IDEMPOTENCY_KEY_REUSED` | 같은 clientRequestId를 다른 내용으로 재사용 |
 
 ### 14.3 신청
@@ -1261,7 +1321,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 
 ### 22.0 운영자 자율 등록·검증 API — Pilot 첫 수직 단위
 
-Pilot 첫 수직 단위에서는 다음 계약을 활성화한다. 인증된 활성 회원이면 테니스 프로필 온보딩과 관계없이 신청할 수 있다. 코트·시간대·예약 API, 증빙 파일 업로드, 내부 검토 API는 아직 활성화하지 않는다.
+Pilot 첫 수직 단위에서는 다음 계약을 활성화한다. 인증된 활성 회원이면 테니스 프로필 온보딩과 관계없이 신청할 수 있다. 코트·시간대·제휴 코트 세션 API, 증빙 파일 업로드, 내부 검토 API는 아직 활성화하지 않는다.
 
 ```text
 POST /api/v1/operator-applications
@@ -1338,20 +1398,65 @@ POST /api/internal/operator-applications/{applicationId}/suspend
 
 권한 있는 내부 검토자만 호출할 수 있으며, 신청자는 자신의 신청을 검토할 수 없다. 각 판정은 안전한 사유 코드, 내부 메모, 검토자와 시각을 감사 이력에 기록한다. 이 내부 API와 역할 모델은 Pilot 구현 시 별도 인증·권한 설계와 함께 활성화한다.
 
-### 22.1 사용자 측 후보 API
+### 22.1 일반 회원·세션 모집자 API
+
+일반 참가자는 기존 Match 목록·상세·참가 신청 API를 사용한다. 제휴 코트 세션은 `courtSource=PARTNER_COURT` 필터로 조회한다. 공개 Slot에는 안전한 상태·코트·시간·비용·이용 안내만 반환하고, 운영자 내부 메모·연락처·사업자 정보·상태 변경 사유 원문은 반환하지 않는다.
 
 ```text
-GET  /api/v1/partner-courts
-GET  /api/v1/partner-courts/{courtId}
-GET  /api/v1/partner-courts/{courtId}/slots
-POST /api/v1/court-bookings
-GET  /api/v1/me/court-bookings
-GET  /api/v1/court-bookings/{bookingId}
-POST /api/v1/court-bookings/{bookingId}/cancel
-POST /api/v1/court-bookings/{bookingId}/matches
+GET  /api/v1/matches?courtSource=PARTNER_COURT
+GET  /api/v1/matches/{matchId}
+POST /api/v1/matches/{matchId}/applications
+GET  /api/v1/partner-session-slots
+GET  /api/v1/partner-session-slots/available
+POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
 ```
 
-`POST /court-bookings/{bookingId}/matches`는 `CONFIRMED` 예약만 허용하고, Match의 참가 신청과는 별개의 흐름이다.
+`GET /partner-session-slots`는 인증된 일반 회원에게 `PUBLIC` Slot의 읽기 전용 상태를 반환한다. 상태별 행동은 `AVAILABLE`의 세션 개설, `ALLOCATED`의 연결 세션 상세 이동, 그 외 상태의 읽기 전용뿐이다. 이 API는 코트 예약 탐색 API가 아니며 운영자 연락처·예약 승인 CTA·결제 정보를 제공하지 않는다.
+
+예시 `PublicCourtSlotView`:
+
+```json
+{
+  "id": "0198...",
+  "status": "ALLOCATED",
+  "statusLabel": "세션 모집 중",
+  "statusChangedAt": "2026-08-24T01:00:00.000Z",
+  "startsAt": "2026-08-28T10:00:00.000Z",
+  "endsAt": "2026-08-28T12:00:00.000Z",
+  "court": {
+    "name": "마포 테니스파크",
+    "courtNumber": "2번 코트",
+    "address": "서울특별시 마포구 ..."
+  },
+  "totalCourtFeeKrw": 40000,
+  "usageNote": "실내 전용 테니스화를 준비해 주세요.",
+  "session": {
+    "matchId": "0198...",
+    "status": "OPEN",
+    "statusLabel": "세션 모집 중"
+  },
+  "availableAction": "VIEW_SESSION"
+}
+```
+
+`GET /partner-session-slots/available`은 온보딩 완료 일반 회원이 세션을 열 때만 사용한다. `visibility = PUBLIC`, `status = AVAILABLE`, 시작 전인 Slot의 코트·시간·비용·현장 최대 인원·이용 안내만 반환하며, 응답의 행동 문구는 `이 시간으로 세션 열기`다. 참가자에게 보이는 코트 예약 탐색 API가 아니다.
+
+`POST /api/v1/matches`의 Pilot 확장은 다음을 받는다.
+
+```json
+{
+  "courtSource": "PARTNER_COURT",
+  "courtSlotId": "0198...",
+  "clientRequestId": "0198...",
+  "title": "편하게 랠리해요",
+  "recruitCount": 3,
+  "partnerPreference": "SIMILAR_LEVEL",
+  "playPurposes": ["RALLY_PRACTICE"],
+  "contactOpenChatUrl": "https://open.kakao.com/o/example"
+}
+```
+
+서버는 Slot row를 잠그고 `visibility = PUBLIC`, `AVAILABLE`, 시작 전인지와 활성 Match 부재를 확인한 뒤 Match 생성과 `ALLOCATED` 전환을 하나의 트랜잭션으로 처리한다. `recruitCount + 1`이 Slot의 현장 최대 인원을 넘으면 `409 PARTNER_SLOT_CAPACITY_EXCEEDED`다. 클라이언트가 코트명·주소·시각·전체 비용·현장 최대 인원을 보내거나 바꾸는 것을 허용하지 않는다. 상태 충돌은 `409 PARTNER_SLOT_ALREADY_ALLOCATED`이며, MatchApplication을 만들지 않는다.
 
 ### 22.2 운영자 측 후보 API
 
@@ -1362,13 +1467,11 @@ PATCH /api/v1/operator/courts/{courtId}
 GET   /api/v1/operator/courts/{courtId}/slots
 POST  /api/v1/operator/courts/{courtId}/slots
 PATCH /api/v1/operator/slots/{slotId}
-GET   /api/v1/operator/bookings
-GET   /api/v1/operator/bookings/{bookingId}
-POST  /api/v1/operator/bookings/{bookingId}/approve
-POST  /api/v1/operator/bookings/{bookingId}/reject
+POST  /api/v1/operator/slots/{slotId}/publish
+POST  /api/v1/operator/slots/{slotId}/block
 ```
 
-운영자 예약 승인 API는 CourtBooking만 변경한다. 연결 Match의 Application을 수락하지 않는다.
+운영자 API는 자신의 Court·CourtSlot 공개 여부·공급 상태만 변경한다. Slot 등록은 현장 최대 인원을 필수로 받는다. 공개한 Slot의 상태 변경은 안전한 상태 문구와 `statusChangedAt`을 일반 회원에게 반환하고, 내부 사유 원문은 반환하지 않는다. MatchApplication 수락·거절, 일반 사용자 예약 요청, 예약 승인 API를 제공하지 않는다.
 
 `POST /api/v1/operator/courts`는 `PUBLISH_APPROVED` 신청에 연결된 한 시설만 생성할 수 있다. 다른 지점·주소를 새로 등록하려는 요청은 기존 Court를 수정하거나 복제하지 않고 새 운영자 신청 흐름으로 보낸다.
 
@@ -1378,33 +1481,17 @@ POST  /api/v1/operator/bookings/{bookingId}/reject
 - 내부 운영 검토자 권한, 심사 SLA와 이의·보완 처리 기준
 - 사업자·증빙 원문 보관 기간과 삭제 절차, 재확인 알림 채널
 - 검증 공급자별 장애·할당량 초과 시 재시도와 수동 검토 전환 기준
-- 예약 요청의 임시 점유와 만료 시간
-- 한 Slot에 여러 대기 요청을 허용할지 여부
-- 운영자 승인 후 즉시 확정인지 결제 대기인지
-- 사용자·운영자 취소 가능 시점
-- 확정 예약 취소 시 연결 Match 처리
+- 시작 전 세션 모집자 취소 시 `ALLOCATED` Slot을 다시 열 조건
+- 운영자가 `ALLOCATED` Slot을 중지·취소할 수 있는 시점과 연결 Match 안내 정책
+- 한 Slot의 활성 Partner Court Match 수 — Pilot 권장안은 한 건
+- Slot 공개 상태를 계속 유지하는 기간, 종료·취소 상태의 목록 정렬과 표시 정책
+- 코트 면별 현장 최대 인원과 시간 전환·정리 버퍼의 등록 기준
+- 운영자가 현장에서 확인할 세션 대표자 정보와 개인정보 최소 공개 범위
 - 코트 정보와 운영자 연락처 공개 범위
 
 ## 23. Court Commerce API 확장 방향
 
-이 섹션은 구현 대상이 아니다.
-
-후보 범위:
-
-```text
-POST /api/v1/court-bookings/{bookingId}/payment-session
-GET  /api/v1/payments/{paymentId}
-POST /api/v1/payments/webhooks/{provider}
-POST /api/v1/payments/{paymentId}/refunds
-GET  /api/v1/operator/settlements
-GET  /api/v1/operator/settlements/{settlementId}
-```
-
-- 결제 세션 생성은 멱등성 키가 필수다.
-- 웹훅은 제공자 이벤트 ID로 중복 처리를 막는다.
-- 결제 상태, CourtBooking 상태와 CourtSlot 상태를 하나의 enum으로 합치지 않는다.
-- 웹훅 서명 검증 전에는 어떤 상태도 변경하지 않는다.
-- 결제 제공자와 환불·정산 정책이 확정되기 전에는 상세 요청·응답을 고정하지 않는다.
+이 섹션은 구현 대상이 아니며 후보 엔드포인트를 고정하지 않는다. 일반 사용자의 CourtBooking 모델이 없으므로 과거 예약 결제 API를 재사용하지 않는다. 결제 대상·계약 주체·환불과 정산 책임·개인정보 처리가 승인된 뒤에만 별도 API 계약을 작성한다.
 
 ## 24. API 테스트 시나리오
 
@@ -1424,7 +1511,7 @@ GET  /api/v1/operator/settlements/{settlementId}
 4. 과거 시작 시각과 종료가 빠른 일정
 5. 0명 모집과 음수 비용
 6. 너무 긴 제목·코트명·신청 메시지
-7. Core API에 `PARTNER_COURT` 전송
+7. Pilot 비활성 Core API에 `PARTNER_COURT` 전송
 8. 잘못된 clientRequestId와 다른 payload로 키 재사용
 9. HTTPS가 아니거나 `open.kakao.com`이 아닌 연락 링크
 
@@ -1441,15 +1528,27 @@ GET  /api/v1/operator/settlements/{settlementId}
 9. 수락자 없이 조기 마감 요청
 10. 일정 종료 전 완료 요청과 종료 후 중복 완료 요청
 
-### 24.4 응답과 개인정보
+### 24.4 Court Partner Pilot
+
+1. `PUBLISH_APPROVED`가 아닌 운영자의 Court·Slot 공개 시도
+2. 온보딩 미완료 사용자의 제휴 코트 세션 Slot 조회·개설 시도
+3. 같은 `AVAILABLE` Slot으로 동시에 두 Partner Court Match 생성 요청
+4. `ALLOCATED` Slot의 시간·가격·코트 수정 시도
+5. 운영자가 MatchApplication 수락·거절 API를 호출하는 경우
+6. 참가자가 CourtSlot 상태 변경 API를 호출하는 경우
+7. `PARTNER_COURT` Match에 클라이언트가 코트명·주소·시간·비용을 함께 보내는 경우
+8. 이미 배정된 Slot의 재시도와 `clientRequestId` 멱등 응답
+
+### 24.5 응답과 개인정보
 
 1. 목록·상세의 예상 비용 계산 일치
 2. 목록·상세·수락 응답의 남은 자리 계산 일치
 3. 프로필 수정 후 받은 신청에서 신청 당시 스냅샷 유지
 4. Application 응답에 이메일·연락처·인증 ID가 없는지 확인
-5. 직접 예약 코트가 제휴 확인 코트 문구로 표시되지 않는지 확인
-6. PENDING·REJECTED 사용자가 오픈채팅 링크를 받지 않는지 확인
-7. 모집자와 ACCEPTED 신청자만 오픈채팅 링크를 받는지 확인
+5. 직접 예약 코트가 제휴 코트 세션 문구로 표시되지 않는지 확인
+6. Partner Court Match가 `Tennis Mate에서 준비한 코트예요`와 모집자 참가 신청 안내를 반환하는지 확인
+7. PENDING·REJECTED 사용자가 오픈채팅 링크를 받지 않는지 확인
+8. 모집자와 ACCEPTED 신청자만 오픈채팅 링크를 받는지 확인
 
 ## 25. 확정 정책과 남은 확장 계약
 

@@ -7,6 +7,8 @@ import { useSearchParams } from "next/navigation";
 import { BackButton } from "@/components/navigation/back-button";
 import { getSafeReturnTo } from "@/navigation/return-to";
 
+import { CourtMedia, type CourtImageView } from "./court-media";
+
 type ProfileSummary = {
   experienceLabel: string;
   rallyLevelLabel: string;
@@ -21,7 +23,7 @@ type Detail = {
   startsAt: string;
   endsAt: string;
   region: { name: string };
-  court: { source: "EXTERNAL_RESERVED" | "COURT_TBD"; sourceLabel: string; name: string | null; address: string | null; courtNumber: string | null };
+  court: { source: "EXTERNAL_RESERVED" | "COURT_TBD"; sourceLabel: string; name: string | null; address: string | null; courtNumber: string | null; image: CourtImageView };
   playPurposes: Array<{ code: string; label: string }>;
   beginnerWelcome: boolean;
   remainingSpots: number;
@@ -115,7 +117,7 @@ export function M3MatchDetail({ params }: { params: Promise<{ matchId: string }>
   if (submitted) return <ApplicationSuccess title={detail.title} />;
 
   const hostProfile = detail.host.tennisProfile;
-  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]"><article className="mx-auto max-w-[560px]"><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath={returnTo} /><div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold"><span className="rounded-full bg-[#eff9f4] px-2.5 py-1 text-[#1f7a55]">{detail.statusLabel}</span>{detail.beginnerWelcome ? <span className="rounded-full bg-[#f6f4e9] px-2.5 py-1 text-[#6c5a18]">🌱 초보자 환영</span> : null}</div><h1 className="mt-4 text-2xl font-bold leading-snug">{detail.title}</h1><p className="mt-3 text-sm text-[#405047]">🗓 {schedule(detail.startsAt, detail.endsAt)}</p><p className="mt-2 text-sm text-[#405047]">📍 {detail.region.name} · 남은 자리 {detail.remainingSpots}명</p>
+  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]"><article className="mx-auto max-w-[560px]"><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath={returnTo} /><CourtMedia alt={detail.court.name ? `${detail.court.name} 코트 사진` : "코트 정보"} className="mt-4 aspect-[7/4] w-full" fallbackLabel={detail.court.source === "COURT_TBD" ? "코트 미정" : "코트 사진 없음"} image={detail.court.image} priority /><div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold"><span className="rounded-full bg-[#eff9f4] px-2.5 py-1 text-[#1f7a55]">{detail.statusLabel}</span>{detail.beginnerWelcome ? <span className="rounded-full bg-[#f6f4e9] px-2.5 py-1 text-[#6c5a18]">🌱 초보자 환영</span> : null}</div><h1 className="mt-4 text-2xl font-bold leading-snug">{detail.title}</h1><p className="mt-3 text-sm text-[#405047]">🗓 {schedule(detail.startsAt, detail.endsAt)}</p><p className="mt-2 text-sm text-[#405047]">📍 {detail.region.name} · 남은 자리 {detail.remainingSpots}명</p>
 
     {detail.recommendationReasons.length > 0 ? <section className="mt-4 flex min-h-[140px] flex-col rounded-3xl bg-[#eff9f4] p-5"><h2 className="font-bold">왜 잘 맞나요?</h2><ul className="mt-4 space-y-2 text-sm text-[#315b45]">{detail.recommendationReasons.map((reason) => <li key={reason.code}>• {reason.label}</li>)}</ul></section> : null}
 

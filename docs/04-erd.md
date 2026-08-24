@@ -48,9 +48,9 @@ Core MVP의 통화는 KRW로 가정하고 금액을 정수 원 단위로 저장�
 
 | 단계 | 엔터티 |
 | --- | --- |
-| Core MVP | User, AuthAccount, TennisProfile, Region, TennisProfileRegion, TennisProfilePurpose, Match, MatchPurpose, MatchApplication |
-| Court Partner Pilot | CourtOperatorApplication, CourtOperator, Court, CourtUnit, CourtAmenity, CourtImage, CourtSlot, CourtBooking, CourtBookingStatusHistory |
-| Court Commerce | Payment, Refund, Settlement, SettlementItem |
+| Core MVP | User, AuthAccount, TennisProfile, Region, TennisProfileRegion, TennisProfilePurpose, Match, MatchPurpose, MatchApplication, CourtImageUpload |
+| Court Partner Pilot | CourtOperatorApplication, CourtOperator, Court, CourtUnit, CourtAmenity, CourtImage, CourtSlot, Match.courtSlotId |
+| Court Commerce | 미정 — 결제 대상·계약 주체·환불 책임 승인 후 별도 설계 |
 
 ## 4. Core MVP ERD
 
@@ -62,7 +62,9 @@ erDiagram
     REGION ||--o{ TENNIS_PROFILE_REGION : includes
     TENNIS_PROFILE ||--o{ TENNIS_PROFILE_PURPOSE : prefers
     USER ||--o{ MATCH : hosts
+    USER ||--o{ COURT_IMAGE_UPLOAD : owns
     REGION ||--o{ MATCH : locates
+    COURT_IMAGE_UPLOAD ||--o| MATCH : attached_to
     MATCH ||--o{ MATCH_PURPOSE : has
     MATCH ||--o{ MATCH_APPLICATION : receives
     USER ||--o{ MATCH_APPLICATION : submits
@@ -130,6 +132,7 @@ erDiagram
         varchar external_court_name
         varchar external_court_address
         varchar external_court_number
+        uuid external_court_image_upload_id FK_UK
         int recruit_count
         partner_preference partner_preference
         int total_court_fee_krw
@@ -143,6 +146,20 @@ erDiagram
         timestamptz expired_at
         timestamptz cancelled_at
         varchar cancellation_reason
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    COURT_IMAGE_UPLOAD {
+        uuid id PK
+        uuid owner_user_id FK
+        varchar private_object_ref UK
+        varchar content_type
+        int byte_size
+        court_image_upload_status status
+        timestamptz attached_at
+        timestamptz cleanup_claimed_at
+        timestamptz deleted_at
         timestamptz created_at
         timestamptz updated_at
     }
@@ -309,6 +326,7 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `externalCourtName` | varchar(100) | 예약 코트만 O | 외부 예약 코트명 |
 | `externalCourtAddress` | varchar(255) | 예약 코트만 O | 상세 장소 |
 | `externalCourtNumber` | varchar(50) | 예약 코트에서 X | 코트 번호, 예약번호 금지 |
+| `externalCourtImageUploadId` | UUID | 예약 코트에서 X | 모집자 본인의 `CourtImageUpload` 1건. 한 Match에만 연결하며 사진 URL을 직접 받지 않음 |
 | `recruitCount` | int | O | 모집자 외 추가 인원, 1 이상 |
 | `partnerPreference` | PartnerPreference | O | 원하는 상대 선택지 |
 | `totalCourtFeeKrw` | int | 예약 코트만 O | 0 이상, 코트 미정이면 NULL |
@@ -325,12 +343,31 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `createdAt` | timestamptz | O | 생성 시각 |
 | `updatedAt` | timestamptz | O | 수정 시각 |
 
+#### CourtImageUpload
+
+외부 예약 코트 사진을 Match에 연결하기 전의 비공개 업로드 메타데이터다. 사진 원본은 비공개 객체 저장소에만 두고, 일반 API·클라이언트에는 객체 URL을 반환하지 않는다.
+
+| 컬럼 | 타입 | 필수 | 규칙 |
+| --- | --- | ---: | --- |
+| `id` | UUID | O | PK, 매칭 등록 요청에는 이 식별자만 보냄 |
+| `ownerUserId` | UUID | O | 업로드한 모집자 User FK |
+| `privateObjectRef` | varchar(500) | O | Vercel Blob의 비공개 객체 참조, 일반 응답에 직접 노출하지 않음 |
+| `contentType` | varchar(100) | O | JPEG, PNG, WebP만 허용 |
+| `byteSize` | int | O | 4 MiB 이하 |
+| `status` | CourtImageUploadStatus | O | `PENDING`, `ATTACHED`, `CLEANUP_PENDING`, `DELETED` |
+| `attachedAt` | timestamptz | X | Match에 원자적으로 연결된 시각 |
+| `cleanupClaimedAt` | timestamptz | X | 미연결 업로드 정리 작업이 점유한 시각 |
+| `deletedAt` | timestamptz | X | 객체 삭제가 끝난 시각 |
+
+`PENDING` 업로드는 24시간 안에 Match에 연결되지 않으면 정리 대상이다. `ATTACHED` 원본의 보관·삭제는 연결 Match의 이력 보관 정책과 함께 정식 개인정보 처리방침에서 확정한다. `CLEANUP_PENDING`은 Match 연결과 정리 작업의 경합을 막기 위한 내부 상태이며 API에 반환하지 않는다.
+
 #### CourtSource
 
 - `EXTERNAL_RESERVED`: 모집자가 외부에서 직접 예약
 - `COURT_TBD`: 일정과 활동 지역은 정했지만 코트·비용은 수락자와 오픈채팅에서 조율
+- `PARTNER_COURT`: Court Partner Pilot에서 운영자가 준비한 Slot에 일반 모집자가 연 Match
 
-`COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한다. 오픈채팅 링크는 두 상태 모두 필수이며 모집자와 수락자에게만 공개한다.
+Core MVP에서는 첫 두 값만 허용한다. `COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한다. `PARTNER_COURT`의 CourtSlot 연결 규칙은 13.5에서 정의한다. 오픈채팅 링크는 세 상태 모두 필수이며 모집자와 수락자에게만 공개한다.
 
 #### PartnerPreference
 
@@ -579,10 +616,8 @@ erDiagram
     COURT ||--o{ COURT_AMENITY : offers
     COURT ||--o{ COURT_IMAGE : displays
     COURT_UNIT ||--o{ COURT_SLOT : opens
-    COURT_SLOT ||--o{ COURT_BOOKING : receives
-    USER ||--o{ COURT_BOOKING : requests
-    COURT_BOOKING ||--o{ COURT_BOOKING_STATUS_HISTORY : records
-    COURT_BOOKING ||--o| MATCH : creates
+    COURT_SLOT ||--o{ COURT_SLOT_STATUS_HISTORY : records
+    COURT_SLOT ||--o{ MATCH : allocated_to_over_time
 
     COURT_OPERATOR_APPLICATION {
         uuid id PK
@@ -671,6 +706,7 @@ erDiagram
         varchar private_object_ref
         varchar alt_text
         int sort_order
+        boolean is_representative
     }
 
     COURT_SLOT {
@@ -679,35 +715,24 @@ erDiagram
         timestamptz starts_at
         timestamptz ends_at
         int price_krw
+        int max_participant_count
+        court_slot_visibility visibility
         court_slot_status status
+        timestamptz published_at
         varchar usage_note
         int version
         timestamptz created_at
         timestamptz updated_at
     }
 
-    COURT_BOOKING {
+    COURT_SLOT_STATUS_HISTORY {
         uuid id PK
         uuid court_slot_id FK
-        uuid booker_user_id FK
-        court_booking_status status
-        timestamptz expires_at
-        timestamptz confirmed_at
-        timestamptz cancelled_at
-        varchar cancellation_reason
-        int version
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    COURT_BOOKING_STATUS_HISTORY {
-        uuid id PK
-        uuid court_booking_id FK
-        court_booking_status from_status
-        court_booking_status to_status
-        uuid actor_user_id
+        court_slot_status from_status
+        court_slot_status to_status
+        slot_status_change_actor actor
+        uuid actor_user_id FK
         varchar reason_code
-        varchar note
         timestamptz created_at
     }
 ```
@@ -716,9 +741,9 @@ erDiagram
 
 ### 13.0 Pilot 첫 수직 단위 — 운영자 신청·심사 상태
 
-Court Partner Pilot의 첫 구현은 `CourtOperatorApplication`과 자동 확인 시도 이력까지만 활성화한다. `Court`, `CourtUnit`, `CourtSlot`, `CourtBooking`, 결제·환불·정산은 이 단위에 포함하지 않는다.
+Court Partner Pilot의 첫 구현은 `CourtOperatorApplication`과 자동 확인 시도 이력까지만 활성화한다. `Court`, `CourtUnit`, `CourtSlot`, `Match.courtSlotId`, 결제·환불·정산은 이 단위에 포함하지 않는다.
 
-이 단위가 해결하는 문제는 실제 코트 운영자가 등록을 시작한 뒤 심사 진행 상황과 다음 행동을 알 수 없다는 점이다. 공개 권한을 `PUBLISH_APPROVED`로 분리해, 검증 전 입력 정보가 이용자 공개나 예약 요청으로 이어지지 않게 한다. 코트·시간대 초안, 외부 실제 검증 API, 증빙 파일 업로드와 내부 검토 화면은 다음 수직 단위로 남긴다. 더 단순한 대안인 신청 상태 문자열 하나만 저장하는 방식은 사업자 유효와 장소 운영 권한을 구분할 수 없어 사용하지 않는다.
+이 단위가 해결하는 문제는 실제 코트 운영자가 등록을 시작한 뒤 심사 진행 상황과 다음 행동을 알 수 없다는 점이다. 공개 권한을 `PUBLISH_APPROVED`로 분리해, 검증 전 입력 정보가 이용자 공개나 제휴 코트 세션 연결로 이어지지 않게 한다. 코트·시간대 초안, 외부 실제 검증 API, 증빙 파일 업로드와 내부 검토 화면은 다음 수직 단위로 남긴다. 더 단순한 대안인 신청 상태 문자열 하나만 저장하는 방식은 사업자 유효와 장소 운영 권한을 구분할 수 없어 사용하지 않는다.
 
 첫 구현 마이그레이션에는 다음만 포함한다.
 
@@ -813,7 +838,11 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 
 `Court.normalizedVenueKey`는 연결된 신청의 정규화 장소 키와 일치해야 한다. 활성 또는 중지 상태의 Court에 같은 키가 존재하면 자동 공개를 허용하지 않는 부분 유일 인덱스를 둔다. 권리 관계가 확인된 공동 운영·명의 변경만 내부 검토의 명시적 결정으로 예외 처리한다.
 
+`CourtImage`는 운영자가 직접 제공한 사진만 저장한다. `privateObjectRef`, `altText`, `sortOrder`에 더해 대표 표시 여부를 두며, 카드에는 대표 1장만 사용한다. 외부 예약 Match는 Court 엔터티와 연결하지 않고 `Match.externalCourtImageObjectRef`로 모집자 제공 사진을 1장만 참조한다. 두 경우 모두 이미지 원본은 비공개 객체 저장소에 두고 API가 제한된 URL만 반환하며, 웹·지도 사진을 자동 수집하지 않는다.
+
 ### 13.4 CourtSlot
+
+운영자가 공급하는 특정 코트 면·시간대다. 일반 사용자의 예약 단위가 아니며, `AVAILABLE` Slot은 일반 모집자의 활성 Partner Court Match 한 건에만 연결될 수 있다. 공개 여부와 공급 상태를 분리해, 한 번 `PUBLIC`이 된 Slot은 `ENDED`, `BLOCKED`, `CANCELLED`가 되어도 상태를 보여 주는 공개 기록으로 남길 수 있다.
 
 | 컬럼 | 타입 | 필수 | 규칙 |
 | --- | --- | ---: | --- |
@@ -822,7 +851,10 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 | `startsAt` | timestamptz | O | 시작 시각 |
 | `endsAt` | timestamptz | O | 종료 시각 |
 | `priceKrw` | int | O | 코트 전체 가격, 0 이상 |
+| `maxParticipantCount` | int | O | 모집자를 포함한 현장 최대 인원, 2 이상 |
+| `visibility` | CourtSlotVisibility | O | 기본 `PRIVATE`, 공개 후 상태와 별개로 유지 |
 | `status` | CourtSlotStatus | O | 기본 `DRAFT` |
+| `publishedAt` | timestamptz | X | 최초 공개 시각. 공개 상태를 다시 비공개로 숨기지 않는 Pilot 정책에서는 NULL 여부가 공개 시작 이력을 뜻함 |
 | `usageNote` | varchar(500) | X | 준비물·이용 안내 |
 | `version` | int | O | 동시 수정 제어 |
 | `createdAt` | timestamptz | O | 생성 시각 |
@@ -832,54 +864,39 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 
 - `DRAFT`
 - `AVAILABLE`
-- `HELD`
-- `BOOKED`
+- `ALLOCATED`
+- `ENDED`
 - `BLOCKED`
 - `CANCELLED`
 
-### 13.5 CourtBooking
+#### CourtSlotVisibility
 
-| 컬럼 | 타입 | 필수 | 규칙 |
-| --- | --- | ---: | --- |
-| `id` | UUID | O | PK |
-| `courtSlotId` | UUID | O | CourtSlot FK |
-| `bookerUserId` | UUID | O | 예약 요청자 FK |
-| `status` | CourtBookingStatus | O | 기본 `REQUESTED` |
-| `expiresAt` | timestamptz | X | 요청·결제 제한 시간 |
-| `confirmedAt` | timestamptz | X | 확정 시각 |
-| `cancelledAt` | timestamptz | X | 취소 시각 |
-| `cancellationReason` | varchar(300) | X | 사용자 공개 사유와 내부 사유 분리 검토 |
-| `version` | int | O | 동시성 제어 |
-| `createdAt` | timestamptz | O | 생성 시각 |
-| `updatedAt` | timestamptz | O | 수정 시각 |
+- `PRIVATE`: 운영자 초안만 조회 가능
+- `PUBLIC`: 인증된 일반 회원과 운영자가 안전한 상태·코트·시간·비용·이용 안내를 조회 가능
 
-#### CourtBookingStatus
+`visibility = PUBLIC`은 코트 예약 가능이나 운영자 승인 대기가 아니다. `status`가 실제 행동을 제한한다. Pilot의 공개 정책은 새 Slot을 `DRAFT`·`PRIVATE`로 시작하고, 한 번 `PUBLIC`이 된 Slot은 취소·종료 후에도 `PUBLIC`을 유지해 최신 상태를 보여 주는 것이다. 한 번도 공개하지 않은 초안을 취소한 경우에는 `PRIVATE`를 유지할 수 있다.
 
-- `REQUESTED`
-- `AWAITING_PAYMENT`
-- `CONFIRMED`
-- `REJECTED`
-- `EXPIRED`
-- `CANCELLED_BY_USER`
-- `CANCELLED_BY_OPERATOR`
+#### CourtSlotStatusHistory
 
-Pilot에서는 `REQUESTED → CONFIRMED`, Commerce에서는 `REQUESTED → AWAITING_PAYMENT → CONFIRMED` 흐름을 사용한다.
+공개 Slot의 상태 변경을 운영상 분쟁과 이용자 안내에 사용할 최소 감사 이력이다. `actor`는 `OPERATOR`, `SESSION_HOST`, `SYSTEM`, `ADMIN` 중 하나이며, `actorUserId`는 시스템 작업이면 NULL일 수 있다. `reasonCode`는 `OPERATOR_CANCELLED`, `HOST_CANCELLED`, `TIME_ELAPSED`, `REOPENED`처럼 안전한 코드만 저장하며 자유 입력 사유와 개인정보는 저장하지 않는다.
 
-### 13.6 Match 연결 확장
+### 13.5 Match 연결 확장
 
 Court Partner 도입 시 `Match`에 다음 컬럼을 추가한다.
 
 | 컬럼 | 타입 | 규칙 |
 | --- | --- | --- |
-| `courtBookingId` | UUID nullable | CourtBooking FK, 활성 Match 기준 UNIQUE 권장 |
+| `courtSlotId` | UUID nullable | CourtSlot FK, 활성 Partner Court Match 기준 UNIQUE. 과거 Match는 같은 Slot을 참조할 수 있음 |
 
 그리고 다음 CHECK 제약을 추가한다.
 
-- `courtSource = EXTERNAL_RESERVED`이면 `courtBookingId IS NULL`이고 외부 코트 필드 필수
-- `courtSource = PARTNER_COURT`이면 `courtBookingId IS NOT NULL`이고 외부 코트 필드 NULL
-- 연결 가능한 CourtBooking은 `CONFIRMED` 상태여야 함
+- `courtSource = EXTERNAL_RESERVED`이면 `courtSlotId IS NULL`이고 외부 코트 필드 필수
+- `courtSource = COURT_TBD`이면 `courtSlotId IS NULL`이고 외부 코트 필드 NULL
+- `courtSource = PARTNER_COURT`이면 `courtSlotId IS NOT NULL`이고 외부 코트 필드 NULL
+- 연결 가능한 CourtSlot은 `AVAILABLE` 상태여야 하며 생성 트랜잭션 안에서 `ALLOCATED`가 됨
+- `PARTNER_COURT` Match의 `recruitCount + 1 <= CourtSlot.maxParticipantCount`를 생성 트랜잭션 안에서 검증
 
-확정 코트명, 주소, 시간과 가격은 CourtBooking을 통해 조회한다. 매칭 화면에서 수정할 수 없다. 예약 당시 표시 정보 보존이 필요하면 별도 예약 스냅샷을 CourtBooking에 추가한다.
+제휴 코트의 명칭·주소·코트 면·시간·전체 비용은 연결된 CourtSlot과 Court에서 조회한다. Match 생성 이후 운영자·모집자 모두 시간과 비용을 직접 수정할 수 없다. 사용자 응답은 이 정보를 MatchDetailView에 조합해 반환하며, 예상 1인 비용은 기존 모집 인원 규칙으로 계산한다. 연결된 Match가 취소돼 Slot을 다시 열더라도, 기존 Match는 해당 Slot을 계속 참조하고 Slot 상태 이력으로 재개 경위를 남긴다.
 
 ## 14. Court Partner 동시성 제약
 
@@ -894,32 +911,33 @@ EXCLUDE USING gist (
   court_unit_id WITH =,
   tstzrange(starts_at, ends_at, '[)') WITH &&
 )
-WHERE (status IN ('AVAILABLE', 'HELD', 'BOOKED', 'BLOCKED'));
+WHERE (status IN ('DRAFT', 'AVAILABLE', 'ALLOCATED', 'BLOCKED', 'CANCELLED'));
 ```
 
 Prisma schema로 직접 표현되지 않으면 SQL migration에 작성한다.
 
-### 14.2 활성 예약 요청 한 건
+### 14.2 활성 제휴 코트 세션 한 건
 
-Pilot 권장안은 한 Slot에 활성 CourtBooking 한 건만 허용하는 것이다.
-
-부분 유일 인덱스 개념:
+Pilot 권장안은 한 Slot에 활성 `PARTNER_COURT` Match 한 건만 허용하는 것이다. 부분 유일 인덱스가 Match의 `courtSlotId`를 기준으로 활성 상태만 제한한다.
 
 ```sql
-CREATE UNIQUE INDEX uq_active_booking_per_slot
-ON court_booking (court_slot_id)
-WHERE status IN ('REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED');
+CREATE UNIQUE INDEX uq_active_partner_match_per_slot
+ON match (court_slot_id)
+WHERE court_source = 'PARTNER_COURT'
+  AND status IN ('OPEN', 'CLOSED');
 ```
 
-요청이 생성되면 Slot을 `HELD`로 변경한다. 거절·만료·사용자 취소 시 정책에 따라 `AVAILABLE`로 되돌리고, 확정 시 `BOOKED`로 변경한다.
+`COMPLETED`, `EXPIRED`, `CANCELLED` Match가 있더라도 공개 Slot은 상태와 이력을 유지한다. 과거 Match와 현재 세션은 분리하고, Slot을 다시 `AVAILABLE`로 전환하는 조건은 상태 이력에 기록한다. 이 문서는 자동 재개 조건을 확정하지 않으며, 승인 전에는 시스템이 임의로 재개하지 않는다.
 
-### 14.3 예약 요청 트랜잭션
+### 14.3 세션 개설 트랜잭션
 
 1. CourtSlot row를 잠근다.
-2. 상태가 `AVAILABLE`인지 확인한다.
-3. CourtBooking을 `REQUESTED`로 생성한다.
-4. CourtSlot을 `HELD`로 변경한다.
+2. `visibility = PUBLIC`, 상태가 `AVAILABLE`, 시작 시각 전이며 연결된 활성 Partner Court Match가 없는지 확인한다.
+3. `recruitCount + 1`이 `maxParticipantCount` 이내인지 검증하고, 고정 코트·시간·비용을 사용해 `courtSource = PARTNER_COURT` Match를 생성한다.
+4. Match의 `courtSlotId`를 설정하고 CourtSlot을 `ALLOCATED`로 변경한다.
 5. 두 변경을 하나의 트랜잭션으로 커밋한다.
+
+이 과정은 일반 사용자 CourtBooking이나 운영자 승인 상태를 생성하지 않는다.
 
 ## 15. Court Partner 상태 전이
 
@@ -928,150 +946,25 @@ WHERE status IN ('REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED');
 ```mermaid
 stateDiagram-v2
     [*] --> DRAFT
-    DRAFT --> AVAILABLE: 공개
-    AVAILABLE --> HELD: 예약 요청
+    DRAFT --> AVAILABLE: 공개 (visibility = PUBLIC)
+    AVAILABLE --> ALLOCATED: 일반 모집자의 세션 개설
     AVAILABLE --> BLOCKED: 운영 중지
-    HELD --> AVAILABLE: 거절·만료·요청 취소
-    HELD --> BOOKED: 예약 확정
-    BOOKED --> CANCELLED: 예약 운영 취소
+    ALLOCATED --> ENDED: 이용 종료
+    ALLOCATED --> CANCELLED: 운영 취소
     BLOCKED --> AVAILABLE: 재공개
+    CANCELLED --> AVAILABLE: 운영자 재개
     DRAFT --> CANCELLED: 삭제 대신 취소
-    CANCELLED --> [*]
 ```
 
-사용자 취소 후 Slot을 다시 `AVAILABLE`로 열지는 취소 시점과 운영 정책에 따라 결정한다.
-
-### 15.2 CourtBooking
-
-```mermaid
-stateDiagram-v2
-    [*] --> REQUESTED
-    REQUESTED --> CONFIRMED: Pilot 운영자 승인
-    REQUESTED --> AWAITING_PAYMENT: Commerce 운영자 승인
-    REQUESTED --> REJECTED: 운영자 거절
-    REQUESTED --> EXPIRED: 승인 제한 시간 만료
-    REQUESTED --> CANCELLED_BY_USER: 사용자 요청 취소
-    AWAITING_PAYMENT --> CONFIRMED: 결제 성공
-    AWAITING_PAYMENT --> EXPIRED: 결제 시간 만료
-    CONFIRMED --> CANCELLED_BY_USER: 사용자 취소
-    CONFIRMED --> CANCELLED_BY_OPERATOR: 운영자 취소
-```
+`visibility`는 상태 전이와 독립적이며, 한 번 `PUBLIC`이 된 Slot은 이후 상태 전이에서도 `PUBLIC`을 유지한다. 한 번도 공개하지 않은 초안을 취소하면 `PRIVATE`를 유지할 수 있다. 세션 모집자가 시작 전 Match를 취소할 때 `ALLOCATED → AVAILABLE`로 되돌릴지 여부는 미확정이다. 구현 전 정책 승인이 필요하며, 승인 전에는 자동 재개하지 않는다. 운영자가 연결된 Slot 공급을 철회하면 `ALLOCATED → CANCELLED`와 연결 Match의 취소·안내를 같은 작업으로 처리해야 하며, 단순 `BLOCKED` 전환으로 대체하지 않는다.
 
 ## 16. Court Commerce ERD
 
-Court Commerce 단계가 승인될 때 추가한다.
+Court Commerce는 Pilot 범위 밖이며 이 정책은 결제·환불·정산 모델을 아직 정의하지 않는다. 일반 사용자의 코트 예약 모델이 없으므로 과거 `CourtBooking → Payment` 관계도 사용하지 않는다.
 
-```mermaid
-erDiagram
-    COURT_OPERATOR ||--o{ SETTLEMENT : receives
-    COURT_BOOKING ||--o{ PAYMENT : pays
-    PAYMENT ||--o{ REFUND : refunds
-    SETTLEMENT ||--o{ SETTLEMENT_ITEM : contains
-    PAYMENT ||--o{ SETTLEMENT_ITEM : settles
+결제 대상, 계약 주체, 환불·분쟁 책임, 운영자 정산 주기와 개인정보 처리 방식이 사용자 승인으로 확정될 때에만 Payment·Refund·Settlement의 관계와 멱등성 규칙을 별도 문서·마이그레이션으로 설계한다.
 
-    PAYMENT {
-        uuid id PK
-        uuid court_booking_id FK
-        varchar provider
-        varchar provider_payment_ref UK
-        varchar idempotency_key UK
-        int amount_krw
-        payment_status status
-        timestamptz paid_at
-        timestamptz failed_at
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    REFUND {
-        uuid id PK
-        uuid payment_id FK
-        varchar provider_refund_ref UK
-        int amount_krw
-        refund_status status
-        varchar reason_code
-        timestamptz requested_at
-        timestamptz completed_at
-    }
-
-    SETTLEMENT {
-        uuid id PK
-        uuid operator_id FK
-        date period_start
-        date period_end
-        int gross_amount_krw
-        int fee_amount_krw
-        int refund_amount_krw
-        int net_amount_krw
-        settlement_status status
-        timestamptz scheduled_at
-        timestamptz paid_at
-    }
-
-    SETTLEMENT_ITEM {
-        uuid id PK
-        uuid settlement_id FK
-        uuid payment_id FK
-        int amount_krw
-        timestamptz created_at
-    }
-```
-
-## 17. Court Commerce 상세 원칙
-
-### 17.1 Payment
-
-하나의 CourtBooking에는 실패와 재시도를 포함해 여러 Payment 시도가 있을 수 있다. 성공한 결제는 한 건만 허용한다.
-
-#### PaymentStatus
-
-- `PENDING`
-- `PAID`
-- `FAILED`
-- `CANCELLED`
-- `PARTIALLY_REFUNDED`
-- `REFUNDED`
-
-결제수단 원문, 카드번호, 인증정보를 저장하지 않는다. 결제 제공자가 반환한 안전한 참조값만 저장한다.
-
-### 17.2 Refund
-
-부분 환불 가능성을 고려해 Payment와 1:N으로 설계한다. 환불 합계는 결제 금액을 초과할 수 없다.
-
-#### RefundStatus
-
-- `REQUESTED`
-- `PROCESSING`
-- `COMPLETED`
-- `FAILED`
-- `CANCELLED`
-
-### 17.3 Settlement
-
-정산은 CourtOperator와 기간을 기준으로 생성한다. 정산 금액은 Payment 원장을 근거로 계산하며 화면에서 직접 수정한 숫자를 진실 원장으로 사용하지 않는다.
-
-#### SettlementStatus
-
-- `PENDING`
-- `SCHEDULED`
-- `PAID`
-- `HELD`
-- `FAILED`
-
-## 18. 결제와 예약의 일관성
-
-결제 성공 웹훅 처리 시 다음을 하나의 멱등한 처리 흐름으로 수행한다.
-
-1. 제공자 이벤트 ID 또는 결제 참조값의 중복 여부를 확인한다.
-2. Payment를 `PAID`로 변경한다.
-3. CourtBooking이 `AWAITING_PAYMENT`인지 확인한다.
-4. CourtBooking을 `CONFIRMED`로 변경한다.
-5. CourtSlot을 `BOOKED`로 변경한다.
-6. 상태 이력을 기록한다.
-
-결제 결과가 불확실하면 자동으로 새 Payment를 만들지 않고 제공자 상태를 조회한다.
-
-## 19. 확장 모델 인덱스
+## 17. 확장 모델 인덱스
 
 | 테이블 | 인덱스 | 목적 |
 | --- | --- | --- |
@@ -1080,18 +973,15 @@ erDiagram
 | Court | `(regionCode, status)` | 지역별 코트 탐색 |
 | Court | 활성 `normalizedVenueKey` 부분 유일 | 승인 시설의 중복 공개 방지 |
 | CourtUnit | `(courtId, status)` | 코트장 면 관리 |
-| CourtSlot | `(status, startsAt)` | 예약 가능 시간 탐색 |
+| CourtSlot | `(visibility, status, startsAt)` | 공개 상태 조회와 세션 연결 가능 시간 탐색 |
 | CourtSlot | `(courtUnitId, startsAt, endsAt)` | 시간 충돌 확인 |
-| CourtBooking | `(bookerUserId, status, createdAt DESC)` | 내 코트 예약 |
-| CourtBooking | `(courtSlotId, status)` | Slot 활성 예약 확인 |
-| CourtBooking | `(status, expiresAt)` | 만료 처리 작업 |
-| Payment | `(courtBookingId, status)` | 예약 결제 상태 |
-| Payment | `(provider, providerPaymentRef)` UNIQUE | 웹훅 멱등성 |
-| Settlement | `(operatorId, periodStart, periodEnd)` | 운영자 정산 조회 |
+| CourtSlotStatusHistory | `(courtSlotId, createdAt)` | 공개 상태 변경 이력 조회 |
+| Match | 활성 `courtSlotId` 부분 유일 | 같은 Slot의 활성 Partner Court Match 중복 방지 |
+| Match | `(courtSource, startsAt)` | 제휴 코트 세션 탐색 |
 
-## 20. Prisma 및 PostgreSQL 구현 지침
+## 18. Prisma 및 PostgreSQL 구현 지침
 
-### 20.1 타입
+### 18.1 타입
 
 - 식별자: UUID
 - 시간: `@db.Timestamptz(3)`
@@ -1099,7 +989,7 @@ erDiagram
 - 짧은 사용자 문구: 길이가 제한된 varchar
 - 스냅샷: JSONB, 애플리케이션 스키마 검증 필수
 
-### 20.2 Prisma 밖에서 관리할 가능성이 높은 제약
+### 18.2 Prisma 밖에서 관리할 가능성이 높은 제약
 
 - 부분 유일 인덱스
 - CourtSlot 시간 겹침 exclusion constraint
@@ -1108,13 +998,13 @@ erDiagram
 
 이 제약은 migration SQL에 명시하고 테스트에서 실제 DB 동작을 검증한다.
 
-### 20.3 Enum 변경
+### 18.3 Enum 변경
 
 PostgreSQL enum 값 삭제·이름 변경은 운영 마이그레이션 비용이 크다. 사용자 문구는 enum 값과 분리하고, enum 이름은 안정적인 도메인 용어로 정한다.
 
-### 20.4 낙관적 잠금
+### 18.4 낙관적 잠금
 
-Match, TennisProfile, CourtSlot과 CourtBooking의 `version`을 갱신 조건에 포함할 수 있다.
+Match, TennisProfile과 CourtSlot의 `version`을 갱신 조건에 포함할 수 있다.
 
 ```text
 UPDATE ...
@@ -1124,7 +1014,7 @@ WHERE id = :id AND version = :expectedVersion
 
 수정 행이 0개면 최신 상태를 다시 조회하고 충돌 응답을 반환한다.
 
-## 21. 개인정보와 보존
+## 19. 개인정보와 보존
 
 | 데이터 | 처리 원칙 |
 | --- | --- |
@@ -1132,14 +1022,14 @@ WHERE id = :id AND version = :expectedVersion
 | 프로필 스냅샷 | 연락처와 인증정보 포함 금지 |
 | 카카오 오픈채팅 URL | 모집자와 ACCEPTED 신청자에게만 반환, 로그·스냅샷 제외 |
 | 외부 코트 주소 | 매칭 참여 판단에 필요한 범위로 노출 |
+| 코트 사진 | 운영자 또는 모집자가 직접 제공한 사진만 비공개 객체 참조로 저장. 사진 출처와 표시 권한을 안내하고, 인물·연락처·예약번호 노출을 금지 |
 | 사업자 증빙 | 비공개 저장, 접근 감사와 보존 기간 필요 |
-| 운영자 연락처 | 예약 확정 후 필요한 범위만 공개 |
-| 결제 제공자 참조 | 카드정보가 아닌 안전한 참조만 저장 |
-| 상태 이력 | 분쟁 대응에 필요한 기간 보존 후 정책에 따라 삭제·비식별화 |
+| 운영자 연락처 | 일반 참가자에게 공개하지 않음. 운영 연락이 필요하면 별도 정책 승인 후 최소 범위만 사용 |
+| CourtSlot·Match 상태 이력 | 운영상 분쟁 대응에 필요한 기간 보존 후 정책에 따라 삭제·비식별화 |
 
-## 22. 테스트 데이터 시나리오
+## 20. 테스트 데이터 시나리오
 
-### 22.1 Core MVP
+### 20.1 Core MVP
 
 1. 랠리 수준과 목적이 같은 두 사용자
 2. 지역은 같지만 랠리 수준이 두 단계 차이 나는 사용자
@@ -1153,17 +1043,17 @@ WHERE id = :id AND version = :expectedVersion
 10. endsAt 이전과 이후의 완료 확인 요청
 11. 수락 전·후 오픈채팅 링크 조회 권한
 
-### 22.2 Court Partner
+### 20.2 Court Partner
 
 1. 같은 CourtUnit에 겹치는 두 Slot 등록
-2. 같은 Slot에 동시에 들어온 두 예약 요청
-3. 운영자 승인과 요청 만료가 동시에 발생
-4. 확정 예약으로 Match 생성 후 운영자 취소
-5. AWAITING_PAYMENT 상태에서 결제 시간 만료
-6. 결제 성공 웹훅 중복 수신
-7. 부분 환불 후 정산 금액 계산
+2. 같은 Slot으로 동시에 들어온 두 Partner Court Match 생성 요청
+3. `AVAILABLE → ALLOCATED`와 Match 생성이 함께 실패 없이 완료되는지
+4. `recruitCount + 1`이 `maxParticipantCount`를 넘는 Match 생성 거절
+5. `ALLOCATED` Slot의 시간·가격 수정 거절
+6. 운영자가 `ALLOCATED` Slot을 취소할 때 연결 Match 안내와 상태 이력 기록
+7. 시작 시간이 지나 Match 종료와 Slot `ENDED` 전환, 공개 상태 유지
 
-## 23. 남은 후속 결정과 데이터 영향
+## 21. 남은 후속 결정과 데이터 영향
 
 | 결정 항목 | 현재 처리 | 데이터 영향 |
 | --- | --- | --- |
@@ -1172,12 +1062,14 @@ WHERE id = :id AND version = :expectedVersion
 | 수락 후 참가 취소 | 운영 문의 | 정식 기능 시 ApplicationStatus와 이력 확장 |
 | 공개 후 일정·코트 변경 | Core 금지 | 허용 시 변경 이력과 수락자 동의 정책 필요 |
 | 외부 코트 정보 오류 | 모집자 책임·운영 문의 | 신고·정정 이력 추가 가능 |
-| Slot 활성 요청 수 | 한 건 권장 | 여러 건 허용 시 Slot HELD 의미와 승인 경쟁 변경 |
-| 예약-매칭 연결 | 활성 Match 한 건 권장 | 다중 모집 허용 시 연결 테이블 필요 |
-| 예약 취소 연쇄 처리 | 정책 미정 | Match 자동 취소 또는 위험 상태 추가 필요 |
+| Slot 활성 세션 수 | 한 건 권장 | 다중 세션 허용 시 자원 단위·정원 모델 재설계 필요 |
+| Slot-Match 연결 | 활성 Match 한 건, 과거 Match 참조 보존 | 다중 동시 모집 허용 시 연결 테이블과 용량 배분 필요 |
+| 세션 취소 연쇄 처리 | 정책 미정 | Slot 자동 재공개 또는 운영자 검토 상태 필요 |
+| 공개 Slot 상태 보존 | 한 번 공개하면 상태와 이력을 계속 공개 | 상태 이력, `visibility`, 공개 응답 DTO 필요 |
+| 현장 최대 인원 | Slot별 `maxParticipantCount` 필수 | Partner Match 생성 시 정원 검증 필요 |
 | 운영자 직원 계정 | Pilot 소유자 한 명 | 필요 시 CourtOperatorMember 추가 |
 
-## 24. 구현 순서
+## 22. 구현 순서
 
 ### Core MVP
 
@@ -1192,21 +1084,13 @@ WHERE id = :id AND version = :expectedVersion
 
 1. CourtOperatorApplication·VerificationAttempt·Review·CourtOperator와 공개 권한 분리
 2. Court·CourtUnit·Amenity·Image
-3. CourtSlot과 시간 중복 제약 및 `PUBLISH_APPROVED` 공개 게이트
-4. CourtBooking과 상태 이력
-5. Match.courtBookingId 확장
-6. 운영자 재확인·중지와 예약 안내 정책 적용
-7. 예약·매칭 연쇄 취소 정책 적용
+3. CourtSlot 공개 여부·상태 이력·현장 최대 인원, 시간 중복 제약 및 `PUBLISH_APPROVED` 공개 게이트
+4. `Match.courtSlotId` 확장과 정원 검증, `AVAILABLE → ALLOCATED` 트랜잭션
+5. Partner Court Match 탐색·기존 참가 신청 재사용
+6. 운영자 재확인·중지와 연결 세션 안내 정책 적용
+7. 세션 취소와 Slot 재공개 정책 적용 — 사용자 승인 후
 
-### Court Commerce
-
-1. Payment와 멱등성
-2. Refund
-3. Settlement·SettlementItem
-4. 결제·예약 상태 일관성 처리
-5. 환불·정산 검증
-
-## 25. 다음 단계
+## 23. 다음 단계
 
 `05-api-spec.md`에서는 Core MVP API를 먼저 정의한다.
 

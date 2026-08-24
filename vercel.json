@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/reconcile-matches",
       "schedule": "5 15 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-court-image-uploads",
+      "schedule": "20 15 * * *"
     }
   ]
 }

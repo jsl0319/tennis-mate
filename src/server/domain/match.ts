@@ -37,6 +37,7 @@ const externalReservedMatchSchema = matchCreateCommonSchema.extend({
     name: z.string().trim().min(1, "코트장 이름을 입력해 주세요.").max(100),
     address: z.string().trim().min(1, "코트 주소를 입력해 주세요.").max(255),
     courtNumber: z.string().trim().max(50).nullable().optional(),
+    imageUploadId: z.string().uuid("코트 사진을 다시 올려 주세요.").nullable().optional(),
   }),
   totalCourtFeeKrw: z.number().int().min(0, "코트 비용은 0원 이상이어야 해요."),
   additionalCostNote: z.string().trim().max(200).nullable().optional(),

@@ -3,8 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { CourtMedia } from "./court-media";
+
 type Region = { code: string; name: string; shortName: string | null };
 type CourtSource = "EXTERNAL_RESERVED" | "COURT_TBD";
+type CourtImageDraft = { fileName: string; previewUrl: string; uploadId: string };
 
 const purposes = [["CASUAL_HIT", "편하게 공 주고받기"], ["RALLY_PRACTICE", "랠리"], ["STROKE_PRACTICE", "스트로크 연습"], ["GAME_INTRO", "게임 입문"], ["GAME", "게임"]] as const;
 const preferences = [["COMPLETE_BEGINNER_WELCOME", "완전 초보도 좋아요"], ["SIMILAR_LEVEL", "비슷한 수준이면 좋아요"], ["GAME_CAPABLE", "게임 가능한 분을 찾고 있어요"]] as const;
@@ -21,11 +24,18 @@ export function M4MatchCreate() {
   const [districts, setDistricts] = useState<Region[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [courtImage, setCourtImage] = useState<CourtImageDraft | null>(null);
+  const [courtImageError, setCourtImageError] = useState("");
+  const [courtImageUploading, setCourtImageUploading] = useState(false);
   const [form, setForm] = useState(() => ({ clientRequestId: crypto.randomUUID(), courtSource: "COURT_TBD" as CourtSource, date: "", time: "", duration: 120, cityCode: "", regionCode: "", courtName: "", address: "", courtNumber: "", title: "", recruitCount: 1, playPurposes: ["RALLY_PRACTICE"], partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: "", additionalCostNote: "", introduction: "", contactOpenChatUrl: "" }));
 
   useEffect(() => {
     void fetch("/api/v1/regions").then((response) => response.json()).then((body: { items: Region[] }) => setCities(body.items));
   }, []);
+
+  useEffect(() => () => {
+    if (courtImage) URL.revokeObjectURL(courtImage.previewUrl);
+  }, [courtImage]);
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }));
   const chooseCourtSource = (courtSource: CourtSource) => setForm((current) => ({ ...current, courtSource, ...(courtSource === "COURT_TBD" ? { courtName: "", address: "", courtNumber: "", totalCourtFeeKrw: "", additionalCostNote: "" } : {}) }));
@@ -39,10 +49,36 @@ export function M4MatchCreate() {
   const togglePurpose = (purpose: string) => setForm((current) => current.playPurposes.includes(purpose) ? { ...current, playPurposes: current.playPurposes.filter((item) => item !== purpose) } : current.playPurposes.length < 2 ? { ...current, playPurposes: [...current.playPurposes, purpose] } : current);
   const fee = form.totalCourtFeeKrw === "" ? 0 : Math.ceil(Number(form.totalCourtFeeKrw) / (form.recruitCount + 1));
 
+  const uploadCourtImage = async (file: File | null) => {
+    if (!file) return;
+    setCourtImageError("");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return setCourtImageError("코트 사진은 JPEG, PNG, WebP만 올릴 수 있어요.");
+    if (file.size < 1 || file.size > 4 * 1024 * 1024) return setCourtImageError("코트 사진은 4 MiB 이하로 올려 주세요.");
+
+    const previewUrl = URL.createObjectURL(file);
+    setCourtImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch("/api/v1/court-image-uploads", { method: "POST", body: formData });
+      const body: unknown = await response.json();
+      if (!response.ok) throw new Error(apiMessage(body));
+      const uploadId = typeof body === "object" && body !== null && "id" in body && typeof body.id === "string" ? body.id : null;
+      if (!uploadId) throw new Error("코트 사진을 다시 올려 주세요.");
+      setCourtImage({ fileName: file.name, previewUrl, uploadId });
+    } catch (caught) {
+      URL.revokeObjectURL(previewUrl);
+      setCourtImageError(caught instanceof Error ? caught.message : "코트 사진을 올리지 못했어요.");
+    } finally {
+      setCourtImageUploading(false);
+    }
+  };
+
   const next = () => {
     setError("");
     if (step === 1 && (!form.date || !form.time || !form.regionCode)) return setError("날짜, 시작 시간, 활동 지역을 모두 선택해 주세요.");
     if (step === 1 && form.courtSource === "EXTERNAL_RESERVED" && (!form.courtName.trim() || !form.address.trim())) return setError("예약한 코트의 이름과 주소를 입력해 주세요.");
+    if (step === 1 && courtImageUploading) return setError("코트 사진을 올리는 중이에요. 잠시만 기다려 주세요.");
     if (step === 2 && (!form.title.trim() || form.playPurposes.length === 0 || form.recruitCount < 1)) return setError("매칭 제목, 모집 인원, 원하는 플레이를 확인해 주세요.");
     if (step === 3 && form.courtSource === "EXTERNAL_RESERVED" && (form.totalCourtFeeKrw === "" || Number(form.totalCourtFeeKrw) < 0)) return setError("전체 코트 비용을 0원 이상으로 입력해 주세요.");
     if (step === 3 && !form.contactOpenChatUrl.trim()) return setError("코트와 비용을 조율할 카카오 오픈채팅 링크를 입력해 주세요.");
@@ -60,7 +96,7 @@ export function M4MatchCreate() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientRequestId: form.clientRequestId, title: form.title, startsAt, endsAt, regionCode: form.regionCode, courtSource: form.courtSource,
-          externalCourt: form.courtSource === "EXTERNAL_RESERVED" ? { name: form.courtName, address: form.address, courtNumber: form.courtNumber || null } : null,
+          externalCourt: form.courtSource === "EXTERNAL_RESERVED" ? { name: form.courtName, address: form.address, courtNumber: form.courtNumber || null, imageUploadId: courtImage?.uploadId ?? null } : null,
           recruitCount: form.recruitCount, playPurposes: form.playPurposes, partnerPreference: form.partnerPreference,
           totalCourtFeeKrw: form.courtSource === "EXTERNAL_RESERVED" ? Number(form.totalCourtFeeKrw) : null,
           additionalCostNote: form.courtSource === "EXTERNAL_RESERVED" ? form.additionalCostNote || null : null,
@@ -79,19 +115,24 @@ export function M4MatchCreate() {
 
   return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-6 text-[#1a221e]"><section className="mx-auto max-w-[560px]"><header className="sticky top-0 z-10 -mx-5 border-b border-[#edf1ee] bg-[#fffdfc]/95 px-5 pb-4 pt-1 backdrop-blur"><div className="flex items-center gap-3"><button aria-label={step === 1 ? "이전 화면으로 돌아가기" : "이전 단계"} className="grid size-11 place-items-center rounded-full text-xl" onClick={() => step === 1 ? router.replace("/") : setStep((current) => current - 1)} type="button">←</button><div className="flex-1"><div className="h-1 rounded-full bg-[#d8e0db]"><div className="h-full rounded-full bg-[#1f7a55] transition-all" style={{ width: `${step * 25}%` }} /></div><p className="mt-1 text-right text-xs text-[#5c6b63]">{step}/4</p></div></div></header>
 
-    {step === 1 ? <StepOne cities={cities} districts={districts} form={form} onCourtSource={chooseCourtSource} onSelectCity={(code) => void selectCity(code)} set={(key, value) => set(key, value as never)} /> : null}
+    {step === 1 ? <StepOne cities={cities} courtImage={courtImage} courtImageError={courtImageError} courtImageUploading={courtImageUploading} districts={districts} form={form} onCourtImageChange={(file) => void uploadCourtImage(file)} onCourtSource={chooseCourtSource} onSelectCity={(code) => void selectCity(code)} set={(key, value) => set(key, value as never)} /> : null}
     {step === 2 ? <StepTwo form={form} set={set} onTogglePurpose={togglePurpose} /> : null}
     {step === 3 ? <StepThree fee={fee} form={form} set={set} /> : null}
     {step === 4 ? <StepFour fee={fee} form={form} /> : null}
 
     {error ? <p className="mt-5 rounded-2xl bg-[#fff1ef] px-4 py-3 text-sm leading-6 text-[#a13d32]">{error}</p> : null}
-    <button className="mt-8 min-h-[52px] w-full rounded-2xl bg-[#1f7a55] font-semibold text-white shadow-[0_8px_20px_rgba(31,122,85,0.18)] disabled:opacity-40" disabled={saving} onClick={() => step < 4 ? next() : void submit()} type="button">{saving ? "등록 중…" : step < 4 ? "다음" : "매칭 공개하기"}</button>
+    <button className="mt-8 min-h-[52px] w-full rounded-2xl bg-[#1f7a55] font-semibold text-white shadow-[0_8px_20px_rgba(31,122,85,0.18)] disabled:opacity-40" disabled={saving || courtImageUploading} onClick={() => step < 4 ? next() : void submit()} type="button">{saving ? "등록 중…" : courtImageUploading ? "사진 올리는 중…" : step < 4 ? "다음" : "매칭 공개하기"}</button>
   </section></main>;
 }
 
-function StepOne({ cities, districts, form, onCourtSource, onSelectCity, set }: { cities: Region[]; districts: Region[]; form: { courtSource: CourtSource; date: string; time: string; duration: number; cityCode: string; regionCode: string; courtName: string; address: string; courtNumber: string }; onCourtSource: (source: CourtSource) => void; onSelectCity: (code: string) => void; set: (key: "date" | "time" | "duration" | "cityCode" | "regionCode" | "courtName" | "address" | "courtNumber", value: string | number) => void }) {
+function StepOne({ cities, courtImage, courtImageError, courtImageUploading, districts, form, onCourtImageChange, onCourtSource, onSelectCity, set }: { cities: Region[]; courtImage: CourtImageDraft | null; courtImageError: string; courtImageUploading: boolean; districts: Region[]; form: { courtSource: CourtSource; date: string; time: string; duration: number; cityCode: string; regionCode: string; courtName: string; address: string; courtNumber: string }; onCourtImageChange: (file: File | null) => void; onCourtSource: (source: CourtSource) => void; onSelectCity: (code: string) => void; set: (key: "date" | "time" | "duration" | "cityCode" | "regionCode" | "courtName" | "address" | "courtNumber", value: string | number) => void }) {
   const selected = (source: CourtSource) => form.courtSource === source;
-  return <div className="mt-8"><p className="text-sm font-semibold text-[#1f7a55]">매칭 만들기</p><h1 className="mt-1 text-2xl font-bold">언제, 어디서 칠까요?</h1><p className="mt-2 text-sm leading-6 text-[#5c6b63]">코트는 나중에 함께 정해도 괜찮아요.</p><h2 className="mt-7 text-lg font-bold">코트 예약 상태</h2><div className="mt-3 grid grid-cols-2 gap-2"><Choice selected={selected("COURT_TBD")} onClick={() => onCourtSource("COURT_TBD")} title="코트는 같이 정해요" description="예약 전에도 만들 수 있어요" /><Choice selected={selected("EXTERNAL_RESERVED")} onClick={() => onCourtSource("EXTERNAL_RESERVED")} title="코트를 예약했어요" description="코트 정보와 비용을 입력해요" /></div><Fields><label>날짜<input min={new Date().toISOString().slice(0, 10)} onChange={(event) => set("date", event.target.value)} type="date" value={form.date} /></label><label>시작 시간<input onChange={(event) => set("time", event.target.value)} type="time" value={form.time} /></label><label>이용 시간<select onChange={(event) => set("duration", Number(event.target.value))} value={form.duration}><option value={60}>1시간</option><option value={90}>1시간 30분</option><option value={120}>2시간</option></select></label><label>시<select onChange={(event) => onSelectCity(event.target.value)} value={form.cityCode}><option value="">선택</option>{cities.map((city) => <option key={city.code} value={city.code}>{city.shortName ?? city.name}</option>)}</select></label><label>구<select onChange={(event) => set("regionCode", event.target.value)} value={form.regionCode}><option value="">선택</option>{districts.map((district) => <option key={district.code} value={district.code}>{district.name}</option>)}</select></label></Fields>{form.courtSource === "COURT_TBD" ? <Notice /> : <Fields><label>코트장 이름<input onChange={(event) => set("courtName", event.target.value)} value={form.courtName} /></label><label>주소<input onChange={(event) => set("address", event.target.value)} value={form.address} /></label><label>코트 번호 <span className="font-normal text-[#5c6b63]">(선택)</span><input onChange={(event) => set("courtNumber", event.target.value)} value={form.courtNumber} /></label></Fields>}</div>;
+  return <div className="mt-8"><p className="text-sm font-semibold text-[#1f7a55]">매칭 만들기</p><h1 className="mt-1 text-2xl font-bold">언제, 어디서 칠까요?</h1><p className="mt-2 text-sm leading-6 text-[#5c6b63]">코트는 나중에 함께 정해도 괜찮아요.</p><h2 className="mt-7 text-lg font-bold">코트 예약 상태</h2><div className="mt-3 grid grid-cols-2 gap-2"><Choice selected={selected("COURT_TBD")} onClick={() => onCourtSource("COURT_TBD")} title="코트는 같이 정해요" description="예약 전에도 만들 수 있어요" /><Choice selected={selected("EXTERNAL_RESERVED")} onClick={() => onCourtSource("EXTERNAL_RESERVED")} title="코트를 예약했어요" description="코트 정보와 비용을 입력해요" /></div><Fields><label>날짜<input min={new Date().toISOString().slice(0, 10)} onChange={(event) => set("date", event.target.value)} type="date" value={form.date} /></label><label>시작 시간<input onChange={(event) => set("time", event.target.value)} type="time" value={form.time} /></label><label>이용 시간<select onChange={(event) => set("duration", Number(event.target.value))} value={form.duration}><option value={60}>1시간</option><option value={90}>1시간 30분</option><option value={120}>2시간</option></select></label><label>시<select onChange={(event) => onSelectCity(event.target.value)} value={form.cityCode}><option value="">선택</option>{cities.map((city) => <option key={city.code} value={city.code}>{city.shortName ?? city.name}</option>)}</select></label><label>구<select onChange={(event) => set("regionCode", event.target.value)} value={form.regionCode}><option value="">선택</option>{districts.map((district) => <option key={district.code} value={district.code}>{district.name}</option>)}</select></label></Fields>{form.courtSource === "COURT_TBD" ? <Notice /> : <><Fields><label>코트장 이름<input onChange={(event) => set("courtName", event.target.value)} value={form.courtName} /></label><label>주소<input onChange={(event) => set("address", event.target.value)} value={form.address} /></label><label>코트 번호 <span className="font-normal text-[#5c6b63]">(선택)</span><input onChange={(event) => set("courtNumber", event.target.value)} value={form.courtNumber} /></label></Fields><CourtImageUpload courtImage={courtImage} error={courtImageError} isUploading={courtImageUploading} onChange={onCourtImageChange} /></>}</div>;
+}
+
+function CourtImageUpload({ courtImage, error, isUploading, onChange }: { courtImage: CourtImageDraft | null; error: string; isUploading: boolean; onChange: (file: File | null) => void }) {
+  const previewLabel = isUploading ? "사진 올리는 중…" : "선택한 코트 사진";
+  return <section className="mt-6"><div className="flex items-baseline justify-between gap-3"><h2 className="text-lg font-bold">코트 사진 <span className="text-sm font-normal text-[#5c6b63]">(선택)</span></h2><p className="text-xs text-[#5c6b63]">매칭 화면에서만 보여요</p></div><p className="mt-2 text-sm leading-6 text-[#5c6b63]">사진이 있으면 함께 칠 분이 코트를 더 쉽게 알아볼 수 있어요.</p>{courtImage ? <CourtMedia alt="선택한 코트 사진 미리보기" className="mt-4 aspect-[350/212] w-full" fallbackLabel="코트 사진을 선택해 보세요" image={null} previewLabel={previewLabel} previewUrl={courtImage.previewUrl} /> : <CourtMedia alt="코트 사진을 선택할 수 있는 영역" className="mt-4 aspect-[350/212] w-full" fallbackLabel="코트 사진을 선택해 보세요" image={null} />}<label className={`mt-4 flex min-h-[52px] cursor-pointer items-center justify-center rounded-2xl border border-[#d8e0db] bg-white text-lg font-medium text-[#1a221e] ${isUploading ? "cursor-wait opacity-60" : ""}`}><span>{isUploading ? "사진 올리는 중…" : courtImage ? "사진 바꾸기" : "사진 선택하기"}</span><input accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={isUploading} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ""; onChange(file); }} type="file" /></label><p className="mt-3 text-sm leading-6 text-[#5c6b63]">JPEG · PNG · WebP · 최대 4MB<br />사진에 얼굴, 연락처, 예약번호가 보이지 않는지 확인해 주세요.</p>{courtImage ? <p className="mt-2 truncate text-xs text-[#5c6b63]">선택한 파일: {courtImage.fileName}</p> : null}{error ? <p className="mt-3 rounded-2xl bg-[#fff1ef] px-4 py-3 text-sm leading-6 text-[#a13d32]">{error}</p> : null}</section>;
 }
 
 function StepTwo({ form, set, onTogglePurpose }: { form: { title: string; recruitCount: number; playPurposes: string[]; partnerPreference: string }; set: (key: "title" | "recruitCount" | "partnerPreference", value: string | number) => void; onTogglePurpose: (value: string) => void }) {

@@ -75,6 +75,13 @@ enum ApplicationStatus {
   CANCELLED
 }
 
+enum CourtImageUploadStatus {
+  PENDING
+  ATTACHED
+  CLEANUP_PENDING
+  DELETED
+}
+
 enum OperatorApplicationStatus {
   DRAFT
   VERIFYING
@@ -128,6 +135,7 @@ model User {
   apiRateLimit         ApiRateLimit?
   hostedMatches        Match[]                    @relation("MatchHost")
   matchApplications    MatchApplication[]
+  courtImageUploads    CourtImageUpload[]
   operatorApplications CourtOperatorApplication[] @relation("OperatorApplicationApplicant")
 
   @@map("users")
@@ -230,6 +238,7 @@ model Match {
   externalCourtName    String?           @map("external_court_name") @db.VarChar(100)
   externalCourtAddress String?           @map("external_court_address") @db.VarChar(255)
   externalCourtNumber  String?           @map("external_court_number") @db.VarChar(50)
+  externalCourtImageUploadId String?     @unique @map("external_court_image_upload_id") @db.Uuid
   recruitCount         Int               @map("recruit_count")
   partnerPreference    PartnerPreference @map("partner_preference")
   totalCourtFeeKrw     Int?              @map("total_court_fee_krw")
@@ -250,12 +259,34 @@ model Match {
   region       Region             @relation(fields: [regionCode], references: [code], onDelete: Restrict)
   purposes     MatchPurpose[]
   applications MatchApplication[]
+  externalCourtImageUpload CourtImageUpload? @relation("ExternalCourtImage", fields: [externalCourtImageUploadId], references: [id], onDelete: Restrict)
 
   @@unique([hostUserId, clientRequestId])
   @@index([status, startsAt])
   @@index([regionCode, status, startsAt])
   @@index([hostUserId, status, startsAt])
   @@map("matches")
+}
+
+model CourtImageUpload {
+  id               String                 @id @default(uuid()) @db.Uuid
+  ownerUserId      String                 @map("owner_user_id") @db.Uuid
+  privateObjectRef String                 @unique @map("private_object_ref") @db.VarChar(500)
+  contentType      String                 @map("content_type") @db.VarChar(100)
+  byteSize         Int                    @map("byte_size")
+  status           CourtImageUploadStatus @default(PENDING)
+  attachedAt       DateTime?              @map("attached_at") @db.Timestamptz(6)
+  cleanupClaimedAt DateTime?              @map("cleanup_claimed_at") @db.Timestamptz(6)
+  deletedAt        DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner         User   @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  attachedMatch Match? @relation("ExternalCourtImage")
+
+  @@index([ownerUserId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("court_image_uploads")
 }
 
 model MatchPurpose {
