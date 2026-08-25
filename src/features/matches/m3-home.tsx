@@ -80,7 +80,7 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
   if (screen === "loading") return <HomeLoading />;
   if (screen === "entry") return <EntrySelection returnTo={safeReturnTo} />;
   if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
-  if (screen === "error") return <main className="grid min-h-svh place-items-center bg-[#fffdfc] px-5 text-center"><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[#5c6b63]">{error}</p><button className="mt-6 rounded-2xl bg-[#1f7a55] px-5 py-3 font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></div></main>;
+  if (screen === "error") return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center text-[var(--tm-text-primary)]"><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><button className="mt-6 rounded-2xl bg-[var(--tm-action-primary)] px-5 py-3 font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></div></main>;
 
   const visibleOtherMatches = matches.filter((match) => !recommended.some((item) => item.id === match.id));
   const isRecommendedList = activeList === "recommended";
@@ -91,14 +91,14 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
     : "추천 조건과 달라도, 지금 함께 칠 수 있는 매칭이에요.";
 
   return (
-    <main className="min-h-svh bg-[#fffdfc] pb-28 text-[#1a221e]">
-      <header className="sticky top-0 z-20 border-b border-[#e6ece8] bg-[#fffdfc]/95 backdrop-blur">
+    <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
+      <header className="sticky top-0 z-20 border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)] backdrop-blur">
         <div className="mx-auto max-w-[560px] px-5 pb-4 pt-8">
-          <p className="text-sm font-semibold text-[#1f7a55]">Tennis Mate</p>
+          <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Tennis Mate</p>
           <h1 className="mt-3 text-2xl font-bold leading-snug">{me?.nickname}님, 오늘도<br />부담 없이 테니스해요.</h1>
-          <p className="mt-3 inline-flex rounded-full bg-[#f0f5f2] px-3 py-2 text-sm text-[#405047]">📍 {me?.tennisProfile?.activityRegion?.name ?? "활동 지역"}에서 메이트를 찾고 있어요</p>
+          <p className="mt-3 inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-2 text-sm text-[var(--tm-text-secondary)]">📍 {me?.tennisProfile?.activityRegion?.name ?? "활동 지역"}에서 메이트를 찾고 있어요</p>
 
-          <div aria-label="매칭 목록 선택" className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-[#f0f5f2] p-1" role="group">
+          <div aria-label="매칭 목록 선택" className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-[var(--tm-bg-subtle)] p-1" role="group">
             <ListTab active={isRecommendedList} label="추천 매칭" onClick={() => setActiveList("recommended")} />
             <ListTab active={!isRecommendedList} label="다른 매칭" onClick={() => setActiveList("other")} />
           </div>
@@ -107,7 +107,7 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
 
       <section className="mx-auto max-w-[560px] px-5 pt-6">
         <h2 className="text-xl font-bold">{listTitle}</h2>
-        <p className="mt-2 text-sm leading-6 text-[#5c6b63]">{listDescription}</p>
+        <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{listDescription}</p>
         {activeMatches.length > 0 ? (
           <div className="mt-4 grid gap-4">{activeMatches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : isRecommendedList && visibleOtherMatches.length > 0 ? (
@@ -115,12 +115,12 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
         ) : isRecommendedList ? (
           <EmptyMatchState />
         ) : (
-          <p className="mt-4 rounded-3xl bg-[#f4f7f5] p-5 text-sm leading-6 text-[#405047]">지금은 추천 매칭이 전부예요. 나와 잘 맞는 매칭을 다시 확인해 보세요.</p>
+          <p className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-5 text-sm leading-6 text-[var(--tm-text-secondary)]">지금은 추천 매칭이 전부예요. 나와 잘 맞는 매칭을 다시 확인해 보세요.</p>
         )}
       </section>
 
-      <Link aria-label="매칭 만들기" className="fixed bottom-24 right-5 z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[#1f7a55] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(19,82,56,0.26)] transition-transform active:scale-95" href="/matches/new">
-        <span aria-hidden="true" className="text-lg leading-none">+</span>
+      <Link aria-label="매칭 만들기" className="fixed bottom-24 right-5 z-30 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[var(--tm-action-primary)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(49,94,158,0.26)] transition-transform active:scale-95" href="/matches/new">
+        <span aria-hidden="true" className="text-lg leading-none text-[var(--tm-tennis-ball)]">+</span>
         매칭 만들기
       </Link>
       <BottomNavigation />
@@ -129,17 +129,17 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
 }
 
 function ListTab({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return <button aria-pressed={active} className={`min-h-11 rounded-xl px-3 text-sm font-semibold transition-colors ${active ? "bg-[#1f7a55] text-white shadow-sm" : "text-[#5c6b63]"}`} onClick={onClick} type="button">{label}</button>;
+  return <button aria-pressed={active} className={`min-h-11 rounded-xl px-3 text-sm font-semibold transition-colors ${active ? "bg-[var(--tm-action-primary)] text-white shadow-sm" : "text-[var(--tm-text-secondary)]"}`} onClick={onClick} type="button">{label}</button>;
 }
 
 function EmptyRecommendedState({ onShowOtherMatches }: { onShowOtherMatches: () => void }) {
-  return <div className="mt-4 rounded-3xl bg-[#f4f7f5] p-5"><p className="font-bold">조건이 꼭 맞는 매칭은 아직 없어요.</p><p className="mt-2 text-sm leading-6 text-[#5c6b63]">다른 초보자 매칭도 편하게 둘러볼 수 있어요.</p><button className="mt-4 text-sm font-semibold text-[#1f7a55] underline" onClick={onShowOtherMatches} type="button">다른 매칭 보기</button></div>;
+  return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-5"><p className="font-bold">조건이 꼭 맞는 매칭은 아직 없어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">다른 초보자 매칭도 편하게 둘러볼 수 있어요.</p><button className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)] underline" onClick={onShowOtherMatches} type="button">다른 매칭 보기</button></div>;
 }
 
 function EmptyMatchState() {
-  return <div className="mt-4 rounded-3xl bg-[#f4f7f5] p-6"><p className="font-bold">아직 둘러볼 매칭이 없어요.</p><p className="mt-2 text-sm leading-6 text-[#5c6b63]">새로운 매칭이 등록되면 여기에서 확인할 수 있어요.</p><Link className="mt-4 inline-block text-sm font-semibold text-[#1f7a55] underline" href="/matches/new">매칭 만들기</Link></div>;
+  return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-6"><p className="font-bold">아직 둘러볼 매칭이 없어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">새로운 매칭이 등록되면 여기에서 확인할 수 있어요.</p><Link className="mt-4 inline-block text-sm font-semibold text-[var(--tm-action-primary)] underline" href="/matches/new">매칭 만들기</Link></div>;
 }
 
 function HomeLoading() {
-  return <main className="min-h-svh bg-[#fffdfc] px-5 pt-8"><section className="mx-auto max-w-[560px]"><div className="h-4 w-24 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-4 h-16 w-64 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-10"><div className="h-6 w-52 animate-pulse rounded bg-[#eaf0ec]" /><div className="mt-4 grid gap-4"><MatchCardSkeleton /><MatchCardSkeleton /></div></div></section></main>;
+  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-8"><section className="mx-auto max-w-[560px]"><div className="h-4 w-24 animate-pulse rounded bg-[var(--tm-bg-subtle)]" /><div className="mt-4 h-16 w-64 animate-pulse rounded bg-[var(--tm-bg-subtle)]" /><div className="mt-10"><div className="h-6 w-52 animate-pulse rounded bg-[var(--tm-bg-subtle)]" /><div className="mt-4 grid gap-4"><MatchCardSkeleton /><MatchCardSkeleton /></div></div></section></main>;
 }
