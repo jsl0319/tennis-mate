@@ -89,11 +89,11 @@ export function M8MyPage() {
     setEditingNickname(false);
   };
 
-  return <main className="min-h-svh bg-[#fffdfc] px-5 pb-28 pt-8 text-[#1a221e]">
+  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
     <section className="mx-auto max-w-[560px]">
-      <p className="text-sm font-semibold text-[#1f7a55]">마이</p>
+      <p className="text-sm font-semibold text-[var(--tm-action-primary)]">마이</p>
       <h1 className="mt-1 text-2xl font-bold">내 테니스 이야기</h1>
-      {me === null ? error ? <LoadError error={error} onRetry={load} /> : <p className="mt-12 text-center text-sm text-[#5c6b63]">내 정보를 불러오는 중이에요…</p> : <>
+      {me === null ? error ? <LoadError error={error} onRetry={load} /> : <p className="mt-12 text-center text-sm text-[var(--tm-text-secondary)]">내 정보를 불러오는 중이에요…</p> : <>
         <ProfileCard me={me} />
         <ActivityCard />
         <AccountCard
@@ -114,26 +114,26 @@ export function M8MyPage() {
 }
 
 function LoadError({ error, onRetry }: { error: string; onRetry: () => Promise<void> }) {
-  return <section className="mt-8 rounded-3xl border border-[#d8e0db] bg-white p-5"><p className="text-sm leading-6">{error}</p><button className="mt-4 min-h-11 rounded-2xl bg-[#1f7a55] px-4 text-sm font-semibold text-white" onClick={() => void onRetry()} type="button">다시 불러오기</button></section>;
+  return <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p className="text-sm leading-6">{error}</p><button className="mt-4 min-h-11 rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" onClick={() => void onRetry()} type="button">다시 불러오기</button></section>;
 }
 
 function ProfileCard({ me }: { me: Me }) {
-  return <section className="mt-6 rounded-3xl border border-[#d8e0db] bg-white p-5 shadow-[0_4px_14px_rgba(23,67,45,0.05)]">
-    <p className="text-sm font-semibold text-[#1f7a55]">{me.nickname}님의 테니스 프로필</p>
-    {me.tennisProfile ? <><h2 className="mt-3 text-xl font-bold">{rallyLabels[me.tennisProfile.rallyLevel]}</h2><p className="mt-2 text-sm leading-6 text-[#5c6b63]">{experienceLabels[me.tennisProfile.experienceRange]} · {gameLabels[me.tennisProfile.gameExperience]}</p><p className="mt-2 text-sm leading-6 text-[#5c6b63]">📍 {me.tennisProfile.activityRegion?.name ?? "활동 지역"} · {me.tennisProfile.playPurposes.map((purpose) => purposeLabels[purpose]).filter(Boolean).join(" · ")}</p></> : <><h2 className="mt-3 text-xl font-bold">테니스 프로필을 만들어 볼까요?</h2><p className="mt-2 text-sm leading-6 text-[#5c6b63]">내게 잘 맞는 메이트를 찾기 위한 정보예요.</p></>}
-    <Link className="mt-5 flex min-h-[52px] items-center justify-between rounded-2xl border border-[#9fc9b1] px-4 text-sm font-semibold text-[#1f7a55]" href={me.tennisProfile ? "/my/profile" : "/"}><span>{me.tennisProfile ? "테니스 프로필 수정" : "테니스 프로필 만들기"}</span><span aria-hidden="true">→</span></Link>
+  return <section className="mt-6 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
+    <p className="text-sm font-semibold text-[var(--tm-action-primary)]">{me.nickname}님의 테니스 프로필</p>
+    {me.tennisProfile ? <><h2 className="mt-3 text-xl font-bold">{rallyLabels[me.tennisProfile.rallyLevel]}</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{experienceLabels[me.tennisProfile.experienceRange]} · {gameLabels[me.tennisProfile.gameExperience]}</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">📍 {me.tennisProfile.activityRegion?.name ?? "활동 지역"} · {me.tennisProfile.playPurposes.map((purpose) => purposeLabels[purpose]).filter(Boolean).join(" · ")}</p></> : <><h2 className="mt-3 text-xl font-bold">테니스 프로필을 만들어 볼까요?</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">내게 잘 맞는 메이트를 찾기 위한 정보예요.</p></>}
+    <Link className="mt-5 flex min-h-[52px] items-center justify-between rounded-2xl border border-[var(--tm-border-strong)] px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href={me.tennisProfile ? "/my/profile" : "/"}><span>{me.tennisProfile ? "테니스 프로필 수정" : "테니스 프로필 만들기"}</span><span aria-hidden="true">→</span></Link>
   </section>;
 }
 
 function ActivityCard() {
-  return <section className="mt-4 rounded-3xl border border-[#d8e0db] bg-white p-5 shadow-[0_4px_14px_rgba(23,67,45,0.05)]"><h2 className="font-bold">내 활동</h2><p className="mt-2 text-sm leading-6 text-[#5c6b63]">받은 신청과 보낸 신청, 내가 만든 매칭을 한곳에서 확인해요.</p><Link className="mt-4 flex min-h-[52px] items-center justify-center rounded-2xl bg-[#1f7a55] px-4 text-sm font-semibold text-white" href="/activity/received">내 활동 보기</Link></section>;
+  return <section className="mt-4 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]"><h2 className="font-bold">내 활동</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">받은 신청과 보낸 신청, 내가 만든 매칭을 한곳에서 확인해요.</p><Link className="mt-4 flex min-h-[52px] items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" href="/activity/received">내 활동 보기</Link></section>;
 }
 
 function AccountCard({ editingNickname, nicknameDraft, nicknameError, nickname, savingNickname, onCancelEdit, onChangeNickname, onEditNickname, onSaveNickname }: { editingNickname: boolean; nicknameDraft: string; nicknameError: string; nickname: string; savingNickname: boolean; onCancelEdit: () => void; onChangeNickname: (value: string) => void; onEditNickname: () => void; onSaveNickname: () => void }) {
-  return <section className="mt-4 rounded-3xl border border-[#d8e0db] bg-white p-5 shadow-[0_4px_14px_rgba(23,67,45,0.05)]">
+  return <section className="mt-4 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
     <h2 className="font-bold">계정과 안내</h2>
-    {editingNickname ? <div className="mt-4"><label className="block text-sm font-semibold" htmlFor="my-nickname">닉네임</label><input className="mt-2 h-12 w-full rounded-xl border border-[#d8e0db] px-3" id="my-nickname" maxLength={12} onChange={(event) => onChangeNickname(event.target.value)} value={nicknameDraft} />{nicknameError ? <p className="mt-2 text-sm text-[#a13d32]" role="alert">{nicknameError}</p> : <p className="mt-2 text-sm text-[#5c6b63]">2–12자 · 한글, 영문, 숫자를 사용할 수 있어요.</p>}<div className="mt-3 grid grid-cols-2 gap-3"><button className="min-h-11 rounded-2xl border border-[#d8e0db] px-3 text-sm font-semibold text-[#405047]" disabled={savingNickname} onClick={onCancelEdit} type="button">취소</button><button className="min-h-11 rounded-2xl bg-[#1f7a55] px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingNickname} onClick={onSaveNickname} type="button">{savingNickname ? "저장 중…" : "저장"}</button></div></div> : <div className="mt-4 flex items-center justify-between gap-3"><div><p className="text-sm text-[#5c6b63]">닉네임</p><p className="mt-1 font-semibold">{nickname}</p></div><button className="min-h-11 rounded-2xl px-3 text-sm font-semibold text-[#1f7a55]" onClick={onEditNickname} type="button">수정</button></div>}
-    <div className="mt-5 border-t border-[#edf0ee] pt-2"><Link className="flex min-h-11 items-center text-sm text-[#405047]" href="/terms">서비스 이용약관 <span className="ml-auto" aria-hidden="true">→</span></Link><Link className="flex min-h-11 items-center text-sm text-[#405047]" href="/privacy">개인정보 처리방침 <span className="ml-auto" aria-hidden="true">→</span></Link></div>
-    <button className="mt-2 min-h-11 text-sm font-semibold text-[#5c6b63]" onClick={() => void signOut({ callbackUrl: "/login" })} type="button">로그아웃</button>
+    {editingNickname ? <div className="mt-4"><label className="block text-sm font-semibold" htmlFor="my-nickname">닉네임</label><input className="mt-2 h-12 w-full rounded-xl border border-[var(--tm-border-default)] px-3" id="my-nickname" maxLength={12} onChange={(event) => onChangeNickname(event.target.value)} value={nicknameDraft} />{nicknameError ? <p className="mt-2 text-sm text-[var(--tm-status-error-text)]" role="alert">{nicknameError}</p> : <p className="mt-2 text-sm text-[var(--tm-text-secondary)]">2–12자 · 한글, 영문, 숫자를 사용할 수 있어요.</p>}<div className="mt-3 grid grid-cols-2 gap-3"><button className="min-h-11 rounded-2xl border border-[var(--tm-border-default)] px-3 text-sm font-semibold text-[var(--tm-text-muted)]" disabled={savingNickname} onClick={onCancelEdit} type="button">취소</button><button className="min-h-11 rounded-2xl bg-[var(--tm-action-primary)] px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={savingNickname} onClick={onSaveNickname} type="button">{savingNickname ? "저장 중…" : "저장"}</button></div></div> : <div className="mt-4 flex items-center justify-between gap-3"><div><p className="text-sm text-[var(--tm-text-secondary)]">닉네임</p><p className="mt-1 font-semibold">{nickname}</p></div><button className="min-h-11 rounded-2xl px-3 text-sm font-semibold text-[var(--tm-action-primary)]" onClick={onEditNickname} type="button">수정</button></div>}
+    <div className="mt-5 border-t border-[var(--tm-border-subtle)] pt-2"><Link className="flex min-h-11 items-center text-sm text-[var(--tm-text-muted)]" href="/terms">서비스 이용약관 <span className="ml-auto" aria-hidden="true">→</span></Link><Link className="flex min-h-11 items-center text-sm text-[var(--tm-text-muted)]" href="/privacy">개인정보 처리방침 <span className="ml-auto" aria-hidden="true">→</span></Link></div>
+    <button className="mt-2 min-h-11 text-sm font-semibold text-[var(--tm-text-secondary)]" onClick={() => void signOut({ callbackUrl: "/login" })} type="button">로그아웃</button>
   </section>;
 }
