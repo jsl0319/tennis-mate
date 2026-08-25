@@ -21,9 +21,6 @@ const playPurposeValues = ["CASUAL_HIT", "RALLY_PRACTICE", "STROKE_PRACTICE", "G
 const matchCreateCommonSchema = z.object({
   clientRequestId: z.string().uuid("요청 식별자를 다시 만들어 주세요."),
   title: z.string().trim().min(1, "매칭 제목을 입력해 주세요.").max(80, "제목은 80자 이하여야 해요."),
-  startsAt: z.string().datetime({ offset: true }),
-  endsAt: z.string().datetime({ offset: true }),
-  regionCode: z.string().trim().min(1, "지역을 선택해 주세요."),
   recruitCount: z.number().int().min(1, "추가 모집 인원은 1명 이상이어야 해요."),
   playPurposes: z.array(z.enum(playPurposeValues)).min(1, "원하는 플레이를 선택해 주세요.").max(2).refine((items) => new Set(items).size === items.length, "같은 플레이를 중복 선택할 수 없어요."),
   partnerPreference: z.enum(["COMPLETE_BEGINNER_WELCOME", "SIMILAR_LEVEL", "GAME_CAPABLE"]),
@@ -31,7 +28,14 @@ const matchCreateCommonSchema = z.object({
   contactOpenChatUrl: z.string().trim().url("카카오 오픈채팅 링크를 확인해 주세요."),
 });
 
+const directMatchTimingSchema = {
+  startsAt: z.string().datetime({ offset: true }),
+  endsAt: z.string().datetime({ offset: true }),
+  regionCode: z.string().trim().min(1, "지역을 선택해 주세요."),
+};
+
 const externalReservedMatchSchema = matchCreateCommonSchema.extend({
+  ...directMatchTimingSchema,
   courtSource: z.literal("EXTERNAL_RESERVED"),
   externalCourt: z.object({
     name: z.string().trim().min(1, "코트장 이름을 입력해 주세요.").max(100),
@@ -44,17 +48,25 @@ const externalReservedMatchSchema = matchCreateCommonSchema.extend({
 });
 
 const courtTbdMatchSchema = matchCreateCommonSchema.extend({
+  ...directMatchTimingSchema,
   courtSource: z.literal("COURT_TBD"),
   externalCourt: z.null().default(null),
   totalCourtFeeKrw: z.null().default(null),
   additionalCostNote: z.null().default(null),
 });
 
-export const matchCreateInputSchema = z.discriminatedUnion("courtSource", [externalReservedMatchSchema, courtTbdMatchSchema]).superRefine((input, context) => {
-  const startsAt = new Date(input.startsAt);
-  const endsAt = new Date(input.endsAt);
-  if (startsAt <= new Date()) context.addIssue({ code: "custom", path: ["startsAt"], message: "시작 시간은 현재보다 미래여야 해요." });
-  if (startsAt >= endsAt) context.addIssue({ code: "custom", path: ["endsAt"], message: "종료 시간은 시작 시간보다 늦어야 해요." });
+const partnerCourtMatchSchema = matchCreateCommonSchema.extend({
+  courtSource: z.literal("PARTNER_COURT"),
+  courtSlotId: z.string().uuid("제휴 코트 시간대를 다시 선택해 주세요."),
+}).strict();
+
+export const matchCreateInputSchema = z.discriminatedUnion("courtSource", [externalReservedMatchSchema, courtTbdMatchSchema, partnerCourtMatchSchema]).superRefine((input, context) => {
+  if (input.courtSource !== "PARTNER_COURT") {
+    const startsAt = new Date(input.startsAt);
+    const endsAt = new Date(input.endsAt);
+    if (startsAt <= new Date()) context.addIssue({ code: "custom", path: ["startsAt"], message: "시작 시간은 현재보다 미래여야 해요." });
+    if (startsAt >= endsAt) context.addIssue({ code: "custom", path: ["endsAt"], message: "종료 시간은 시작 시간보다 늦어야 해요." });
+  }
   try {
     const url = new URL(input.contactOpenChatUrl);
     if (url.protocol !== "https:" || url.hostname !== "open.kakao.com" || !url.pathname.startsWith("/o/") || url.pathname.length <= 3) {

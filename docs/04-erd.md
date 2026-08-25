@@ -739,17 +739,19 @@ erDiagram
 
 ## 13. Court Partner 엔터티 상세
 
-### 13.0 Pilot 첫 수직 단위 — 운영자 신청·심사 상태
+### 13.0 Pilot 현재 수직 단위 — 운영자 신청, 코트 시간 공급, 제휴 세션 연결
 
-Court Partner Pilot의 첫 구현은 `CourtOperatorApplication`과 자동 확인 시도 이력까지만 활성화한다. `Court`, `CourtUnit`, `CourtSlot`, `Match.courtSlotId`, 결제·환불·정산은 이 단위에 포함하지 않는다.
+Court Partner Pilot의 현재 구현은 `CourtOperatorApplication`·자동 확인 시도 이력에 더해, 비공개 `Court`·`CourtUnit`·`CourtSlot` 초안과 공개된 Slot의 `PARTNER_COURT` Match 연결까지 활성화한다. 결제·환불·정산, 운영자 사진, 증빙 파일, 내부 운영 검토 화면은 이 단위에 포함하지 않는다.
 
-이 단위가 해결하는 문제는 실제 코트 운영자가 등록을 시작한 뒤 심사 진행 상황과 다음 행동을 알 수 없다는 점이다. 공개 권한을 `PUBLISH_APPROVED`로 분리해, 검증 전 입력 정보가 이용자 공개나 제휴 코트 세션 연결로 이어지지 않게 한다. 코트·시간대 초안, 외부 실제 검증 API, 증빙 파일 업로드와 내부 검토 화면은 다음 수직 단위로 남긴다. 더 단순한 대안인 신청 상태 문자열 하나만 저장하는 방식은 사업자 유효와 장소 운영 권한을 구분할 수 없어 사용하지 않는다.
+이 단위가 해결하는 문제는 실제 코트 운영자가 등록을 시작한 뒤 심사 진행 상황과 다음 행동을 알 수 없고, 승인 전 코트 시간이 이용자에게 공개되는 위험이 있다는 점이다. 공개 권한을 `PUBLISH_APPROVED`로 분리해, 검증 전 입력 정보가 이용자 공개나 제휴 코트 세션 연결로 이어지지 않게 한다. `DRAFT_ACCESS_GRANTED` 또는 `PUBLISH_APPROVED` 신청자는 비공개 Court·Slot 초안만 만들 수 있고, 공개 전환은 후자만 할 수 있다. 더 단순한 대안인 신청 상태 문자열 하나만 저장하는 방식은 사업자 유효와 장소 운영 권한을 구분할 수 없어 사용하지 않는다.
 
-첫 구현 마이그레이션에는 다음만 포함한다.
+현재 수직 단위 마이그레이션에는 다음을 포함한다.
 
 - `CourtOperatorApplication`, `OperatorApplicationVerificationAttempt`
 - 신청 상태·사업자 확인 상태·장소 확인 상태 enum
 - 신청자별 현재 진행 중인 신청을 빠르게 찾는 인덱스와 사업자·장소 중복 검토용 HMAC 키 인덱스
+- `Court`, `CourtUnit`, `CourtSlot`, `CourtSlotStatusHistory`, `Match.courtSlotId`
+- `PARTNER_COURT` source, Slot 공개/공급 상태 enum, 동일 CourtUnit 활성 Slot 시간 겹침 방지 제약
 
 `verificationInputRef`는 사업자등록번호·개업일·대표자명 원문을 담지 않는 비공개 저장소 참조다. 실제 비공개 저장소와 암호화 키가 배포 환경에 준비되기 전에는 원문을 DB, 로그, 분석 이벤트에 저장하지 않는다. 따라서 첫 구현의 기본 `ManualVerificationProvider`는 외부 사업자·주소·장소 확인을 호출하지 않고 안전한 `UNAVAILABLE` 결과만 돌려준다. 테스트에서만 주입하는 fake provider가 상태 전이를 검증한다.
 
@@ -768,7 +770,7 @@ stateDiagram-v2
     PUBLISH_APPROVED --> SUSPENDED: 재확인 또는 운영 중지
 ```
 
-`DRAFT_ACCESS_GRANTED`와 `PUBLISH_APPROVED`는 별도 권한이다. 첫 수직 단위에서는 코트 초안 API도 아직 열지 않지만, 후속 API는 전자에서 비공개 초안만, 후자에서 공개를 허용해야 한다.
+`DRAFT_ACCESS_GRANTED`와 `PUBLISH_APPROVED`는 별도 권한이다. 현재 API는 전자와 후자에 비공개 Court·Slot 초안을, 후자에만 공개를 허용한다. 한 신청에는 한 시설만 연결하며, 별도 지점은 기존 공개 권한을 재사용하지 않고 새 신청·장소 확인 흐름으로 처리한다. 별도의 `CourtOperator` 계정 테이블과 직원 멤버십은 아직 만들지 않고, 연결된 운영자 신청의 상태를 이 Pilot 권한의 단일 근거로 사용한다.
 
 ### 13.1 CourtOperatorApplication
 
@@ -855,6 +857,7 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 | `visibility` | CourtSlotVisibility | O | 기본 `PRIVATE`, 공개 후 상태와 별개로 유지 |
 | `status` | CourtSlotStatus | O | 기본 `DRAFT` |
 | `publishedAt` | timestamptz | X | 최초 공개 시각. 공개 상태를 다시 비공개로 숨기지 않는 Pilot 정책에서는 NULL 여부가 공개 시작 이력을 뜻함 |
+| `statusChangedAt` | timestamptz | O | 가장 최근 공급 상태 전환 시각 |
 | `usageNote` | varchar(500) | X | 준비물·이용 안내 |
 | `version` | int | O | 동시 수정 제어 |
 | `createdAt` | timestamptz | O | 생성 시각 |

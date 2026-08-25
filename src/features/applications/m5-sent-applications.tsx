@@ -11,7 +11,7 @@ type SentApplication = {
   status: string;
   statusLabel: string;
   message: string | null;
-  match: { id: string; title: string; status: string; startsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD"; courtName: string | null; regionName: string; estimatedFeePerPersonKrw: number | null };
+  match: { id: string; title: string; status: string; startsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; courtName: string | null; regionName: string; estimatedFeePerPersonKrw: number | null };
   contact: { type: "KAKAO_OPEN_CHAT"; url: string; label: string } | null;
   createdAt: string;
 };
@@ -41,6 +41,8 @@ function nextStepMessage(status: string, matchStatus: string) {
 function acceptedCoordinationMessage(courtSource: SentApplication["match"]["courtSource"]) {
   return courtSource === "COURT_TBD"
     ? "수락된 참가자끼리 오픈채팅에서 코트와 비용을 조율해요."
+    : courtSource === "PARTNER_COURT"
+      ? "Tennis Mate에서 준비한 코트예요. 수락된 뒤 당일 준비와 비용 정산 방법을 확인해요."
     : "수락된 참가자끼리 오픈채팅에서 당일 준비와 비용 정산 방법을 확인해요.";
 }
 
@@ -110,7 +112,7 @@ function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentAppl
       <h2 className="mt-4 text-lg font-bold">{item.match.title}</h2>
       <p className="mt-3 text-sm text-[#405047]">🗓 {schedule(item.match.startsAt)}</p>
       <p className="mt-1 text-sm text-[#405047]">📍 {item.match.courtName ?? "코트는 함께 정해요"} · {item.match.regionName}</p>
-      <p className="mt-3 text-sm font-semibold text-[#1f7a55]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.estimatedFeePerPersonKrw === null ? "예상 비용을 확인해 주세요" : `예상 1인 약 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
+      <p className="mt-3 text-sm font-semibold text-[#1f7a55]">{item.match.courtSource === "COURT_TBD" ? "코트와 비용을 함께 정해요" : item.match.courtSource === "PARTNER_COURT" ? "Tennis Mate에서 준비한 코트예요" : item.match.estimatedFeePerPersonKrw === null ? "예상 비용을 확인해 주세요" : `예상 1인 약 ${item.match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p>
       <p className="mt-4 border-t border-[#edf0ee] pt-3 text-sm font-medium leading-6 text-[#405047]">{nextStepMessage(item.status, item.match.status)}</p>
       {item.message ? <p className="mt-2 text-sm leading-6 text-[#5c6b63]">“{item.message}”</p> : null}
     </Link>

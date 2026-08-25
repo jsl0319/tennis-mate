@@ -40,6 +40,11 @@ const matchInclude = {
   },
   applications: { select: { id: true, applicantUserId: true, status: true } },
   externalCourtImageUpload: { select: { id: true } },
+  courtSlot: {
+    include: {
+      courtUnit: { include: { court: true } },
+    },
+  },
 } satisfies Prisma.MatchInclude;
 
 type MatchWithRelations = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
@@ -117,14 +122,42 @@ function getRecommendationForMatch(match: MatchWithRelations, viewer: Viewer) {
   });
 }
 
-function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "externalCourtName" | "externalCourtImageUpload">) {
+function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "externalCourtName" | "externalCourtAddress" | "externalCourtNumber" | "externalCourtImageUpload" | "courtSlot">) {
   const image = match.externalCourtImageUpload
     ? { url: `/api/v1/matches/${match.id}/court-image`, sourceLabel: "모집자 제공 사진", fallback: "TENNIS_COURT_ILLUSTRATION" as const }
     : { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const };
 
-  return match.courtSource === "EXTERNAL_RESERVED"
-    ? { source: match.courtSource, sourceLabel: "모집자가 코트를 예약했어요", name: match.externalCourtName, image }
-    : { source: match.courtSource, sourceLabel: "코트와 비용을 함께 정해요", name: null, image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const } };
+  if (match.courtSource === "EXTERNAL_RESERVED") {
+    return {
+      source: match.courtSource,
+      sourceLabel: "모집자가 코트를 예약했어요",
+      name: match.externalCourtName,
+      address: match.externalCourtAddress,
+      courtNumber: match.externalCourtNumber,
+      image,
+    };
+  }
+
+  if (match.courtSource === "PARTNER_COURT") {
+    const court = match.courtSlot?.courtUnit.court;
+    return {
+      source: match.courtSource,
+      sourceLabel: "Tennis Mate에서 준비한 코트예요",
+      name: court?.name ?? null,
+      address: court?.address ?? null,
+      courtNumber: match.courtSlot?.courtUnit.name ?? null,
+      image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
+    };
+  }
+
+  return {
+    source: match.courtSource,
+    sourceLabel: "코트와 비용을 함께 정해요",
+    name: null,
+    address: null,
+    courtNumber: null,
+    image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
+  };
 }
 
 async function reconcileStartedMatch(transaction: MatchTransaction, matchId: string, now = new Date()) {
@@ -328,8 +361,6 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
     recommendationReasons,
     court: {
       ...card.court,
-      address: match.externalCourtAddress,
-      courtNumber: match.externalCourtNumber,
     },
     totalCourtFeeKrw: match.totalCourtFeeKrw,
     additionalCostNote: match.additionalCostNote,
@@ -359,22 +390,26 @@ function optionalText(value: string | null | undefined) {
 }
 
 function isSameCreateRequest(match: MatchWithRelations, input: MatchCreateInput) {
-  return match.title === input.title &&
-    match.startsAt.getTime() === new Date(input.startsAt).getTime() &&
+  const sameCommonInput = match.title === input.title &&
+    match.courtSource === input.courtSource &&
+    match.recruitCount === input.recruitCount &&
+    match.partnerPreference === input.partnerPreference &&
+    match.introduction === optionalText(input.introduction) &&
+    match.contactOpenChatUrl === input.contactOpenChatUrl &&
+    match.purposes.map(({ purpose }) => purpose).sort().join(",") === [...input.playPurposes].sort().join(",");
+
+  if (!sameCommonInput) return false;
+  if (input.courtSource === "PARTNER_COURT") return match.courtSlotId === input.courtSlotId;
+
+  return match.startsAt.getTime() === new Date(input.startsAt).getTime() &&
     match.endsAt.getTime() === new Date(input.endsAt).getTime() &&
     match.regionCode === input.regionCode &&
-    match.courtSource === input.courtSource &&
     match.externalCourtName === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null) &&
     match.externalCourtAddress === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null) &&
     match.externalCourtNumber === (input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null) &&
     match.externalCourtImageUploadId === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.imageUploadId ?? null : null) &&
-    match.recruitCount === input.recruitCount &&
-    match.partnerPreference === input.partnerPreference &&
     match.totalCourtFeeKrw === input.totalCourtFeeKrw &&
-    match.additionalCostNote === optionalText(input.additionalCostNote) &&
-    match.introduction === optionalText(input.introduction) &&
-    match.contactOpenChatUrl === input.contactOpenChatUrl &&
-    match.purposes.map(({ purpose }) => purpose).sort().join(",") === [...input.playPurposes].sort().join(",");
+    match.additionalCostNote === optionalText(input.additionalCostNote);
 }
 
 async function findExistingCreateRequest(prisma: PrismaClient, viewer: Viewer, input: MatchCreateInput) {
@@ -390,16 +425,81 @@ async function findExistingCreateRequest(prisma: PrismaClient, viewer: Viewer, i
 }
 
 export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: MatchCreateInput) {
-  const region = await prisma.region.findFirst({ where: { code: input.regionCode, active: true, type: "DISTRICT" }, select: { code: true } });
-  if (!region) throw new DomainError("INVALID_REGION", 422, "활성화된 시·군·구를 선택해 주세요.");
-
   const existing = await findExistingCreateRequest(prisma, viewer, input);
   if (existing) {
     return { match: await getMatchDetail(prisma, viewer, existing.id), created: false };
   }
 
+  if (input.courtSource !== "PARTNER_COURT") {
+    const region = await prisma.region.findFirst({ where: { code: input.regionCode, active: true, type: "DISTRICT" }, select: { code: true } });
+    if (!region) throw new DomainError("INVALID_REGION", 422, "활성화된 시·군·구를 선택해 주세요.");
+  }
+
   try {
     const created = await prisma.$transaction(async (transaction) => {
+      if (input.courtSource === "PARTNER_COURT") {
+        const now = new Date();
+        const slot = await transaction.courtSlot.findUnique({
+          where: { id: input.courtSlotId },
+          include: {
+            courtUnit: {
+              include: {
+                court: { include: { operatorApplication: { select: { status: true } } } },
+              },
+            },
+          },
+        });
+        if (!slot || slot.visibility !== "PUBLIC" || slot.status !== "AVAILABLE" || slot.startsAt <= now || slot.courtUnit.court.operatorApplication.status !== "PUBLISH_APPROVED") {
+          throw new DomainError("PARTNER_SLOT_ALREADY_ALLOCATED", 409, "이 코트 시간대는 더 이상 세션을 열 수 없어요.");
+        }
+        if (input.recruitCount + 1 > slot.maxParticipantCount) {
+          throw new DomainError("PARTNER_SLOT_CAPACITY_EXCEEDED", 409, "현장 최대 인원보다 많은 참가자를 모집할 수 없어요.");
+        }
+
+        const allocated = await transaction.courtSlot.updateMany({
+          where: { id: slot.id, visibility: "PUBLIC", status: "AVAILABLE", startsAt: { gt: now } },
+          data: { status: "ALLOCATED", statusChangedAt: now, version: { increment: 1 } },
+        });
+        if (allocated.count !== 1) {
+          throw new DomainError("PARTNER_SLOT_ALREADY_ALLOCATED", 409, "이 코트 시간대는 이미 다른 세션에 연결됐어요.");
+        }
+        await transaction.courtSlotStatusHistory.create({
+          data: {
+            courtSlotId: slot.id,
+            fromStatus: "AVAILABLE",
+            toStatus: "ALLOCATED",
+            actor: "SESSION_HOST",
+            actorUserId: viewer.id,
+            reasonCode: "PARTNER_SESSION_CREATED",
+          },
+        });
+
+        return transaction.match.create({
+          data: {
+            hostUserId: viewer.id,
+            clientRequestId: input.clientRequestId,
+            regionCode: slot.courtUnit.court.regionCode,
+            title: input.title,
+            startsAt: slot.startsAt,
+            endsAt: slot.endsAt,
+            courtSource: "PARTNER_COURT",
+            courtSlotId: slot.id,
+            externalCourtName: null,
+            externalCourtAddress: null,
+            externalCourtNumber: null,
+            externalCourtImageUploadId: null,
+            recruitCount: input.recruitCount,
+            partnerPreference: input.partnerPreference,
+            totalCourtFeeKrw: slot.priceKrw,
+            additionalCostNote: null,
+            introduction: optionalText(input.introduction),
+            contactOpenChatUrl: input.contactOpenChatUrl,
+            purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
+          },
+          select: { id: true },
+        });
+      }
+
       const imageUploadId = input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.imageUploadId ?? null : null;
       if (imageUploadId) {
         const imageClaimed = await transaction.courtImageUpload.updateMany({
@@ -418,7 +518,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           externalCourtName: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null,
           externalCourtAddress: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null,
           externalCourtNumber: input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null,
-          externalCourtImageUploadId: imageUploadId, recruitCount: input.recruitCount,
+          externalCourtImageUploadId: imageUploadId, courtSlotId: null, recruitCount: input.recruitCount,
           partnerPreference: input.partnerPreference, totalCourtFeeKrw: input.totalCourtFeeKrw,
           additionalCostNote: optionalText(input.additionalCostNote), introduction: optionalText(input.introduction),
           contactOpenChatUrl: input.contactOpenChatUrl, purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
@@ -440,7 +540,12 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
 
 const applicationInclude = {
   applicantUser: { select: { nickname: true } },
-  match: { include: { region: true } },
+  match: {
+    include: {
+      region: true,
+      courtSlot: { include: { courtUnit: { include: { court: true } } } },
+    },
+  },
 } satisfies Prisma.MatchApplicationInclude;
 
 type ApplicationWithRelations = Prisma.MatchApplicationGetPayload<{ include: typeof applicationInclude }>;
@@ -463,7 +568,9 @@ function toApplicationView(application: ApplicationWithRelations) {
       startsAt: application.match.startsAt.toISOString(),
       endsAt: application.match.endsAt.toISOString(),
       courtSource: application.match.courtSource,
-      courtName: application.match.externalCourtName,
+      courtName: application.match.courtSource === "PARTNER_COURT"
+        ? application.match.courtSlot?.courtUnit.court.name ?? null
+        : application.match.externalCourtName,
       regionName: application.match.region.name,
       estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw, application.match.recruitCount),
     },

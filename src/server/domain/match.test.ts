@@ -64,6 +64,23 @@ describe("M4 match creation input", () => {
     }).courtSource).toBe("COURT_TBD");
   });
 
+  it("accepts a partner court match only with the selected public slot", () => {
+    const partner = matchCreateInputSchema.parse({
+      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cf",
+      courtSource: "PARTNER_COURT",
+      courtSlotId: "e3e70682-c209-4cac-a29f-6fbed82c07ce",
+      title: "제휴 코트에서 랠리해요",
+      recruitCount: 2,
+      playPurposes: ["RALLY_PRACTICE"],
+      partnerPreference: "SIMILAR_LEVEL",
+      contactOpenChatUrl: "https://open.kakao.com/o/example",
+    });
+
+    expect(partner.courtSource).toBe("PARTNER_COURT");
+    expect(() => matchCreateInputSchema.parse({ ...partner, startsAt: validInput.startsAt })).toThrow();
+    expect(() => matchCreateInputSchema.parse({ ...partner, totalCourtFeeKrw: 40_000 })).toThrow();
+  });
+
   it("does not calculate an estimated fee before the court is decided", () => {
     expect(getEstimatedFeePerPerson(null, 2)).toBeNull();
   });

@@ -23,7 +23,7 @@ type Detail = {
   startsAt: string;
   endsAt: string;
   region: { name: string };
-  court: { source: "EXTERNAL_RESERVED" | "COURT_TBD"; sourceLabel: string; name: string | null; address: string | null; courtNumber: string | null; image: CourtImageView };
+  court: { source: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; sourceLabel: string; name: string | null; address: string | null; courtNumber: string | null; image: CourtImageView };
   playPurposes: Array<{ code: string; label: string }>;
   beginnerWelcome: boolean;
   remainingSpots: number;

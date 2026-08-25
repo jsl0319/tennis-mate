@@ -55,7 +55,9 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
     externalCourtAddress: null,
     externalCourtNumber: null,
     externalCourtImageUploadId: null,
+    courtSlotId: null,
     externalCourtImageUpload: null,
+    courtSlot: null,
     recruitCount: 1,
     partnerPreference: "COMPLETE_BEGINNER_WELCOME",
     totalCourtFeeKrw: null,
@@ -175,7 +177,7 @@ describe("match service operation safeguards", () => {
       externalCourtAddress: courtAddress,
       externalCourtImageUploadId: imageUploadId,
       externalCourtImageUpload: { id: imageUploadId },
-      totalCourtFeeKrw: imageInput.totalCourtFeeKrw,
+      totalCourtFeeKrw: 40_000,
     });
     const transaction = {
       courtImageUpload: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
@@ -199,6 +201,120 @@ describe("match service operation safeguards", () => {
     expect(transaction.match.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ externalCourtImageUploadId: imageUploadId }),
     }));
+  });
+
+  it("derives partner court match fields from one available public slot and allocates it atomically", async () => {
+    const partnerSlotId = "e3e70682-c209-4cac-a29f-6fbed82c07ce";
+    const partnerInput = matchCreateInputSchema.parse({
+      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cf",
+      courtSource: "PARTNER_COURT",
+      courtSlotId: partnerSlotId,
+      title: "제휴 코트에서 랠리해요",
+      recruitCount: 2,
+      playPurposes: ["RALLY_PRACTICE"],
+      partnerPreference: "SIMILAR_LEVEL",
+      contactOpenChatUrl: "https://open.kakao.com/o/example",
+    });
+    const courtSlot = {
+      id: partnerSlotId,
+      visibility: "PUBLIC",
+      status: "AVAILABLE",
+      startsAt: futureStartsAt,
+      endsAt: futureEndsAt,
+      priceKrw: 40_000,
+      maxParticipantCount: 3,
+      courtUnit: {
+        name: "2번 코트",
+        court: { regionCode: "SEOUL-001", operatorApplication: { status: "PUBLISH_APPROVED" } },
+      },
+    };
+    const createdMatch = makeMatch({
+      id: "partner-match-id",
+      clientRequestId: partnerInput.clientRequestId,
+      courtSource: "PARTNER_COURT",
+      courtSlotId: courtSlot.id,
+      totalCourtFeeKrw: courtSlot.priceKrw,
+      courtSlot: {
+        id: courtSlot.id,
+        courtUnit: { name: courtSlot.courtUnit.name, court: { name: "마포 테니스파크", address: "서울 마포구", regionCode: "SEOUL-001" } },
+      },
+    });
+    const transaction = {
+      courtSlot: {
+        findUnique: vi.fn().mockResolvedValue(courtSlot),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      courtSlotStatusHistory: { create: vi.fn().mockResolvedValue({ id: "history-id" }) },
+      match: {
+        create: vi.fn().mockResolvedValue({ id: createdMatch.id }),
+        findUnique: vi.fn().mockResolvedValue({ id: createdMatch.id, status: "OPEN", startsAt: futureStartsAt, applications: [] }),
+      },
+      matchApplication: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    };
+    const findUnique = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(createdMatch);
+    const prisma = {
+      match: { findUnique },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof createMatch>[0];
+
+    await expect(createMatch(prisma, viewer, partnerInput)).resolves.toMatchObject({ created: true, match: { id: createdMatch.id } });
+    expect(transaction.courtSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: partnerSlotId, status: "AVAILABLE", visibility: "PUBLIC" }),
+      data: expect.objectContaining({ status: "ALLOCATED" }),
+    }));
+    expect(transaction.match.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        courtSource: "PARTNER_COURT",
+        courtSlotId: partnerSlotId,
+        regionCode: "SEOUL-001",
+        startsAt: futureStartsAt,
+        endsAt: futureEndsAt,
+        totalCourtFeeKrw: 40_000,
+      }),
+    }));
+    expect(transaction.courtSlotStatusHistory.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ actor: "SESSION_HOST", toStatus: "ALLOCATED" }),
+    }));
+  });
+
+  it("does not allocate a partner slot when the participant limit would be exceeded", async () => {
+    const partnerSlotId = "e3e70682-c209-4cac-a29f-6fbed82c07ce";
+    const partnerInput = matchCreateInputSchema.parse({
+      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cf",
+      courtSource: "PARTNER_COURT",
+      courtSlotId: partnerSlotId,
+      title: "제휴 코트에서 랠리해요",
+      recruitCount: 2,
+      playPurposes: ["RALLY_PRACTICE"],
+      partnerPreference: "SIMILAR_LEVEL",
+      contactOpenChatUrl: "https://open.kakao.com/o/example",
+    });
+    const transaction = {
+      courtSlot: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: partnerSlotId,
+          visibility: "PUBLIC",
+          status: "AVAILABLE",
+          startsAt: futureStartsAt,
+          endsAt: futureEndsAt,
+          priceKrw: 40_000,
+          maxParticipantCount: 2,
+          courtUnit: { court: { regionCode: "SEOUL-001", operatorApplication: { status: "PUBLISH_APPROVED" } } },
+        }),
+        updateMany: vi.fn(),
+      },
+      match: { create: vi.fn() },
+    };
+    const prisma = {
+      match: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof createMatch>[0];
+
+    await expect(createMatch(prisma, viewer, partnerInput)).rejects.toMatchObject({ code: "PARTNER_SLOT_CAPACITY_EXCEEDED", status: 409 });
+    expect(transaction.courtSlot.updateMany).not.toHaveBeenCalled();
+    expect(transaction.match.create).not.toHaveBeenCalled();
   });
 
   it("asks the database to exclude the viewer's matches and prior applications from discovery", async () => {

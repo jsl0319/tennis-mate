@@ -1463,17 +1463,33 @@ POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
 ```text
 GET   /api/v1/operator/courts
 POST  /api/v1/operator/courts
-PATCH /api/v1/operator/courts/{courtId}
-GET   /api/v1/operator/courts/{courtId}/slots
 POST  /api/v1/operator/courts/{courtId}/slots
-PATCH /api/v1/operator/slots/{slotId}
 POST  /api/v1/operator/slots/{slotId}/publish
 POST  /api/v1/operator/slots/{slotId}/block
 ```
 
-운영자 API는 자신의 Court·CourtSlot 공개 여부·공급 상태만 변경한다. Slot 등록은 현장 최대 인원을 필수로 받는다. 공개한 Slot의 상태 변경은 안전한 상태 문구와 `statusChangedAt`을 일반 회원에게 반환하고, 내부 사유 원문은 반환하지 않는다. MatchApplication 수락·거절, 일반 사용자 예약 요청, 예약 승인 API를 제공하지 않는다.
+운영자 API는 자신의 Court·CourtSlot 공개 여부·공급 상태만 변경한다. `DRAFT_ACCESS_GRANTED`와 `PUBLISH_APPROVED` 신청자는 Court와 비공개 Slot 초안을 만들 수 있지만, 공개와 공개 Slot 중지는 `PUBLISH_APPROVED`만 할 수 있다. Slot 등록은 현장 최대 인원을 필수로 받으며 첫 등록 시 `courtUnitName`으로 실제 코트 면을 지정하거나 만든다. CourtUnit 별도 관리와 수정 API는 다음 단위로 남긴다. 공개한 Slot의 상태 변경은 안전한 상태 문구와 `statusChangedAt`을 일반 회원에게 반환하고, 내부 사유 원문은 반환하지 않는다. MatchApplication 수락·거절, 일반 사용자 예약 요청, 예약 승인 API를 제공하지 않는다.
 
-`POST /api/v1/operator/courts`는 `PUBLISH_APPROVED` 신청에 연결된 한 시설만 생성할 수 있다. 다른 지점·주소를 새로 등록하려는 요청은 기존 Court를 수정하거나 복제하지 않고 새 운영자 신청 흐름으로 보낸다.
+`POST /api/v1/operator/courts`는 `DRAFT_ACCESS_GRANTED` 또는 `PUBLISH_APPROVED` 신청에 연결된 한 시설만 생성할 수 있다. 다른 지점·주소를 새로 등록하려는 요청은 기존 Court를 수정하거나 복제하지 않고 새 운영자 신청 흐름으로 보낸다.
+
+현재 활성 계약의 요청 본문은 다음과 같다. Court의 이름·주소·정규화 장소 키는 승인 신청의 장소 정보를 서버가 복사하므로 클라이언트가 보낼 수 없다.
+
+```json
+POST /api/v1/operator/courts
+{ "regionCode": "SEOUL-MAPO" }
+
+POST /api/v1/operator/courts/{courtId}/slots
+{
+  "courtUnitName": "2번 코트",
+  "startsAt": "2026-08-28T10:00:00.000Z",
+  "endsAt": "2026-08-28T12:00:00.000Z",
+  "priceKrw": 40000,
+  "maxParticipantCount": 4,
+  "usageNote": "실내 전용 테니스화를 준비해 주세요."
+}
+```
+
+Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `POST /publish`는 빈 본문으로 이를 `PUBLIC`·`AVAILABLE`로 원자 전환하고, `POST /block`은 아직 Match에 연결되지 않은 `AVAILABLE` Slot만 `BLOCKED`로 전환한다. 상태 경쟁은 `409 COURT_SLOT_STATE_CONFLICT`, 시간 겹침은 `409 COURT_SLOT_OVERLAP`, 공개 권한 부재는 `403 OPERATOR_PUBLISH_APPROVAL_REQUIRED`다.
 
 ### 22.3 Pilot 전에 확정할 계약
 

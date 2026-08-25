@@ -51,6 +51,7 @@ enum RegionType {
 enum CourtSource {
   EXTERNAL_RESERVED
   COURT_TBD
+  PARTNER_COURT
 }
 
 enum PartnerPreference {
@@ -80,6 +81,27 @@ enum CourtImageUploadStatus {
   ATTACHED
   CLEANUP_PENDING
   DELETED
+}
+
+enum CourtSlotVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum CourtSlotStatus {
+  DRAFT
+  AVAILABLE
+  ALLOCATED
+  ENDED
+  BLOCKED
+  CANCELLED
+}
+
+enum SlotStatusChangeActor {
+  OPERATOR
+  SESSION_HOST
+  SYSTEM
+  ADMIN
 }
 
 enum OperatorApplicationStatus {
@@ -137,6 +159,7 @@ model User {
   matchApplications    MatchApplication[]
   courtImageUploads    CourtImageUpload[]
   operatorApplications CourtOperatorApplication[] @relation("OperatorApplicationApplicant")
+  courtSlotStatusHistories CourtSlotStatusHistory[] @relation("CourtSlotStatusActor")
 
   @@map("users")
 }
@@ -186,6 +209,7 @@ model Region {
   children Region[]              @relation("RegionHierarchy")
   profiles TennisProfileRegion[]
   matches  Match[]
+  courts   Court[]
 
   @@unique([parentCode, name])
   @@index([parentCode, active])
@@ -239,6 +263,7 @@ model Match {
   externalCourtAddress String?           @map("external_court_address") @db.VarChar(255)
   externalCourtNumber  String?           @map("external_court_number") @db.VarChar(50)
   externalCourtImageUploadId String?     @unique @map("external_court_image_upload_id") @db.Uuid
+  courtSlotId            String?           @unique @map("court_slot_id") @db.Uuid
   recruitCount         Int               @map("recruit_count")
   partnerPreference    PartnerPreference @map("partner_preference")
   totalCourtFeeKrw     Int?              @map("total_court_fee_krw")
@@ -260,6 +285,7 @@ model Match {
   purposes     MatchPurpose[]
   applications MatchApplication[]
   externalCourtImageUpload CourtImageUpload? @relation("ExternalCourtImage", fields: [externalCourtImageUploadId], references: [id], onDelete: Restrict)
+  courtSlot    CourtSlot?          @relation(fields: [courtSlotId], references: [id], onDelete: Restrict)
 
   @@unique([hostUserId, clientRequestId])
   @@index([status, startsAt])
@@ -344,11 +370,87 @@ model CourtOperatorApplication {
 
   applicant            User                                     @relation("OperatorApplicationApplicant", fields: [applicantUserId], references: [id], onDelete: Restrict)
   verificationAttempts OperatorApplicationVerificationAttempt[]
+  court                Court?
 
   @@index([applicantUserId, createdAt(sort: Desc)])
   @@index([businessRegistrationNumberHash, status])
   @@index([normalizedVenueKey, status])
   @@map("court_operator_applications")
+}
+
+model Court {
+  id                    String   @id @default(uuid()) @db.Uuid
+  operatorApplicationId String   @unique @map("operator_application_id") @db.Uuid
+  regionCode            String   @map("region_code") @db.VarChar(30)
+  name                  String   @db.VarChar(100)
+  address               String   @db.VarChar(255)
+  normalizedVenueKey    String   @unique @map("normalized_venue_key") @db.VarChar(255)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  operatorApplication CourtOperatorApplication @relation(fields: [operatorApplicationId], references: [id], onDelete: Restrict)
+  region              Region                   @relation(fields: [regionCode], references: [code], onDelete: Restrict)
+  units               CourtUnit[]
+
+  @@index([regionCode, createdAt])
+  @@map("courts")
+}
+
+model CourtUnit {
+  id        String   @id @default(uuid()) @db.Uuid
+  courtId   String   @map("court_id") @db.Uuid
+  name      String   @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  court Court       @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  slots CourtSlot[]
+
+  @@unique([courtId, name])
+  @@index([courtId])
+  @@map("court_units")
+}
+
+model CourtSlot {
+  id                  String              @id @default(uuid()) @db.Uuid
+  courtUnitId         String              @map("court_unit_id") @db.Uuid
+  startsAt            DateTime            @map("starts_at") @db.Timestamptz(6)
+  endsAt              DateTime            @map("ends_at") @db.Timestamptz(6)
+  priceKrw            Int                 @map("price_krw")
+  maxParticipantCount Int                 @map("max_participant_count")
+  visibility          CourtSlotVisibility @default(PRIVATE)
+  status              CourtSlotStatus     @default(DRAFT)
+  publishedAt         DateTime?           @map("published_at") @db.Timestamptz(6)
+  statusChangedAt     DateTime            @default(now()) @map("status_changed_at") @db.Timestamptz(6)
+  usageNote           String?             @map("usage_note") @db.VarChar(500)
+  version             Int                 @default(1)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  courtUnit      CourtUnit               @relation(fields: [courtUnitId], references: [id], onDelete: Restrict)
+  match          Match?
+  statusHistory  CourtSlotStatusHistory[]
+
+  @@index([courtUnitId, startsAt])
+  @@index([visibility, status, startsAt])
+  @@map("court_slots")
+}
+
+model CourtSlotStatusHistory {
+  id          String                @id @default(uuid()) @db.Uuid
+  courtSlotId String                @map("court_slot_id") @db.Uuid
+  fromStatus  CourtSlotStatus?      @map("from_status")
+  toStatus    CourtSlotStatus       @map("to_status")
+  actor       SlotStatusChangeActor
+  actorUserId String?               @map("actor_user_id") @db.Uuid
+  reasonCode  String                @map("reason_code") @db.VarChar(60)
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  courtSlot CourtSlot @relation(fields: [courtSlotId], references: [id], onDelete: Cascade)
+  actorUser User?     @relation("CourtSlotStatusActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([courtSlotId, createdAt])
+  @@map("court_slot_status_histories")
 }
 
 model OperatorApplicationVerificationAttempt {
