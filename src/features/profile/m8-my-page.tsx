@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
 type Me = {
   nickname: string;
@@ -93,7 +94,7 @@ export function M8MyPage() {
     <section className="mx-auto max-w-[560px]">
       <p className="text-sm font-semibold text-[var(--tm-action-primary)]">마이</p>
       <h1 className="mt-1 text-2xl font-bold">내 테니스 이야기</h1>
-      {me === null ? error ? <LoadError error={error} onRetry={load} /> : <p className="mt-12 text-center text-sm text-[var(--tm-text-secondary)]">내 정보를 불러오는 중이에요…</p> : <>
+      {me === null ? error ? <LoadError error={error} onRetry={load} /> : <CourtRallyLoader className="mt-4" label="내 정보를 준비하고 있어요." /> : <>
         <ProfileCard me={me} />
         <ActivityCard />
         <AccountCard

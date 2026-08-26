@@ -35,3 +35,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+@keyframes court-rally {
+  0%,
+  100% {
+    left: 20px;
+  }
+
+  50% {
+    left: 72px;
+  }
+}

@@ -4,11 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { getSafeReturnTo } from "@/navigation/return-to";
 import { EntrySelection } from "@/features/profile/entry-selection";
 import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
 
-import { MatchCard, MatchCardSkeleton, type MatchCardData } from "./m3-match-card";
+import { MatchCard, type MatchCardData } from "./m3-match-card";
 
 type MeResponse = {
   nickname: string;
@@ -141,5 +142,5 @@ function EmptyMatchState() {
 }
 
 function HomeLoading() {
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-8"><section className="mx-auto max-w-[560px]"><div className="h-4 w-24 animate-pulse rounded bg-[var(--tm-bg-subtle)]" /><div className="mt-4 h-16 w-64 animate-pulse rounded bg-[var(--tm-bg-subtle)]" /><div className="mt-10"><div className="h-6 w-52 animate-pulse rounded bg-[var(--tm-bg-subtle)]" /><div className="mt-4 grid gap-4"><MatchCardSkeleton /><MatchCardSkeleton /></div></div></section></main>;
+  return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="매칭을 준비하고 있어요." /></main>;
 }

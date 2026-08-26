@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
 type SentApplication = {
   id: string;
@@ -89,7 +90,7 @@ export function M5SentApplications() {
       <ActivityTabs current="sent" />
       <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">신청 결과와 다음 행동을 한눈에 확인해요.</p>
       {error && items !== null ? <div aria-live="polite" className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</div> : null}
-      {error && items === null ? <LoadError error={error} onRetry={load} /> : items === null ? <p className="mt-12 text-center text-sm text-[var(--tm-text-secondary)]">신청 내역을 불러오는 중이에요…</p> : items.length === 0 ? <EmptySentApplications /> : <div className="mt-6 grid gap-4">{items.map((item) => <SentApplicationCard item={item} key={item.id} withdrawing={withdrawingId === item.id} onWithdraw={() => setWithdrawConfirmId(item.id)} />)}</div>}
+      {error && items === null ? <LoadError error={error} onRetry={load} /> : items === null ? <CourtRallyLoader className="mt-4" label="신청 내역을 준비하고 있어요." /> : items.length === 0 ? <EmptySentApplications /> : <div className="mt-6 grid gap-4">{items.map((item) => <SentApplicationCard item={item} key={item.id} withdrawing={withdrawingId === item.id} onWithdraw={() => setWithdrawConfirmId(item.id)} />)}</div>}
       {withdrawConfirmId ? <WithdrawalConfirm busy={withdrawingId === withdrawConfirmId} onCancel={() => setWithdrawConfirmId(null)} onConfirm={() => { const applicationId = withdrawConfirmId; setWithdrawConfirmId(null); void withdraw(applicationId); }} /> : null}
     </div>
     <BottomNavigation />

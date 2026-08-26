@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+
 type Screen = "loading" | "intro" | 1 | 2;
 
 type Application = { id: string };
@@ -87,7 +89,7 @@ export function OperatorApplicationFlow() {
     }
   };
 
-  if (screen === "loading") return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-11 text-sm text-[var(--tm-text-secondary)]"><div className="mx-auto max-w-[390px]">운영자 등록을 준비하고 있어요…</div></main>;
+  if (screen === "loading") return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[390px]" label="운영자 등록을 준비하고 있어요." /></main>;
   if (screen === "intro") return <Intro onStart={() => setScreen(1)} />;
   if (screen === 1) return <BusinessStep draft={draft} error={error} onBack={() => applicationId ? router.replace("/partner/application") : setScreen("intro")} onNext={next} set={set} />;
   return <VenueStep draft={draft} error={error} submitting={submitting} onBack={() => { setError(""); setScreen(1); }} onSubmit={() => void submit()} set={set} />;

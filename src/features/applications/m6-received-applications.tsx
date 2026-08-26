@@ -6,6 +6,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
 import { BackButton } from "@/components/navigation/back-button";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
 type HostedMatch = {
   id: string;
@@ -96,8 +97,8 @@ function PageShell({ children, withNavigation = false }: { children: React.React
   return <main className={`min-h-svh bg-[var(--tm-bg-page)] px-5 pt-6 text-[var(--tm-text-primary)] ${withNavigation ? "pb-28" : "pb-10"}`}><div className="mx-auto max-w-[560px]">{children}</div>{withNavigation ? <BottomNavigation /> : null}</main>;
 }
 
-function LoadingOrError({ error, load }: { error: string; load: () => Promise<void> }) {
-  return error ? <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p>{error}</p><button className="mt-4 rounded-2xl bg-[var(--tm-action-primary)] px-4 py-3 text-sm font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></section> : <p className="mt-12 text-center text-sm text-[var(--tm-text-secondary)]">신청 정보를 불러오는 중이에요…</p>;
+function LoadingOrError({ error, label, load }: { error: string; label: string; load: () => Promise<void> }) {
+  return error ? <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p>{error}</p><button className="mt-4 rounded-2xl bg-[var(--tm-action-primary)] px-4 py-3 text-sm font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></section> : <CourtRallyLoader className="mt-4" label={label} />;
 }
 
 export function M6ReceivedApplications() {
@@ -107,7 +108,7 @@ export function M6ReceivedApplications() {
     <h1 className="mt-1 text-2xl font-bold">받은 신청</h1>
     <ActivityTabs current="received" />
     <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">내가 만든 매칭에 들어온 신청을 한곳에서 확인해요.</p>
-    {data === null ? <LoadingOrError error={error} load={load} /> : data.items.length === 0 ? <EmptyHostedMatches /> : <div className="mt-6 space-y-4">{data.items.map((match) => <HostedMatchCard key={match.id} match={match} onChanged={load} />)}</div>}
+    {data === null ? <LoadingOrError error={error} label="신청 정보를 준비하고 있어요." load={load} /> : data.items.length === 0 ? <EmptyHostedMatches /> : <div className="mt-6 space-y-4">{data.items.map((match) => <HostedMatchCard key={match.id} match={match} onChanged={load} />)}</div>}
   </PageShell>;
 }
 
@@ -163,7 +164,7 @@ function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: "clos
 export function M6ReceivedMatch({ params }: { params: Promise<{ matchId: string }> }) {
   const { matchId } = use(params);
   const { data, error, load } = useJsonLoader<ReceivedResponse>(`/api/v1/matches/${encodeURIComponent(matchId)}/applications?status=PENDING`);
-  if (data === null) return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/activity/received" /><LoadingOrError error={error} load={load} /></PageShell>;
+  if (data === null) return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/activity/received" /><LoadingOrError error={error} label="신청자 정보를 준비하고 있어요." load={load} /></PageShell>;
   return <PageShell>
     <BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/activity/received" />
     <p className="mt-5 text-sm font-semibold text-[var(--tm-action-primary)]">받은 신청</p>
@@ -206,7 +207,7 @@ export function M6ApplicantReview({ params }: { params: Promise<{ matchId: strin
     } catch (caught) { setDecisionError(caught instanceof Error ? caught.message : "신청 상태를 변경하지 못했어요."); } finally { setSubmitting(false); }
   };
 
-  return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath={`/activity/received/${matchId}`} />{data === null ? <LoadingOrError error={error} load={load} /> : !application ? <section className="mt-10 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><h1 className="text-xl font-bold">이미 처리된 신청이에요</h1><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">최신 신청 목록을 확인해 주세요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" href={`/activity/received/${matchId}`}>신청 목록 보기</Link></section> : completed ? <DecisionSuccess matchId={matchId} result={completed} /> : <ApplicantReviewContent application={application} data={data} decisionError={decisionError} onDecision={setDecision} />}{decision ? <DecisionConfirm application={application} decision={decision} error={decisionError} submitting={submitting} remainingSpots={data?.match.remainingSpots ?? 0} onCancel={() => setDecision(null)} onConfirm={() => void decide()} /> : null}</PageShell>;
+  return <PageShell><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath={`/activity/received/${matchId}`} />{data === null ? <LoadingOrError error={error} label="신청 정보를 준비하고 있어요." load={load} /> : !application ? <section className="mt-10 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><h1 className="text-xl font-bold">이미 처리된 신청이에요</h1><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">최신 신청 목록을 확인해 주세요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" href={`/activity/received/${matchId}`}>신청 목록 보기</Link></section> : completed ? <DecisionSuccess matchId={matchId} result={completed} /> : <ApplicantReviewContent application={application} data={data} decisionError={decisionError} onDecision={setDecision} />}{decision ? <DecisionConfirm application={application} decision={decision} error={decisionError} submitting={submitting} remainingSpots={data?.match.remainingSpots ?? 0} onCancel={() => setDecision(null)} onConfirm={() => void decide()} /> : null}</PageShell>;
 }
 
 function ApplicantReviewContent({ application, data, decisionError, onDecision }: { application: ReceivedApplication; data: ReceivedResponse; decisionError: string; onDecision: (decision: "ACCEPT" | "REJECT") => void }) {

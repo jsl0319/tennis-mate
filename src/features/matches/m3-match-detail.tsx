@@ -5,6 +5,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { BackButton } from "@/components/navigation/back-button";
+import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { getSafeReturnTo } from "@/navigation/return-to";
 
 import { CourtMedia, type CourtImageView } from "./court-media";
@@ -112,7 +113,7 @@ export function M3MatchDetail({ params }: { params: Promise<{ matchId: string }>
     }
   };
 
-  if (!detail) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center">{error ? <div><p>{error}</p><button className="mt-4 rounded-xl bg-[var(--tm-action-primary)] px-4 py-3 text-white" onClick={() => void load()} type="button">다시 불러오기</button><Link className="ml-3 text-sm underline" href="/">홈으로</Link></div> : <p>매칭을 불러오는 중이에요…</p>}</main>;
+  if (!detail) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center">{error ? <div><p>{error}</p><button className="mt-4 rounded-xl bg-[var(--tm-action-primary)] px-4 py-3 text-white" onClick={() => void load()} type="button">다시 불러오기</button><Link className="ml-3 text-sm underline" href="/">홈으로</Link></div> : <CourtRallyLoader label="매칭 정보를 준비하고 있어요." />}</main>;
 
   if (submitted) return <ApplicationSuccess title={detail.title} />;
 

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { getSafeReturnTo, getStartAuthCallbackPath } from "@/navigation/return-to";
+import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
 type Screen = "loading" | "login" | "error" | "nickname" | 0 | 1 | 2 | 3 | 4 | "result";
 type Region = { code: string; name: string; shortName: string | null; parentCode: string | null; parentName?: string | null; type: "CITY" | "DISTRICT" };
@@ -244,7 +245,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
     });
   };
 
-  if (screen === "loading") return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] text-[var(--tm-text-primary)]">불러오는 중이에요…</main>;
+  if (screen === "loading") return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="테니스 메이트를 준비하고 있어요." /></main>;
 
   if (screen === "login") return <LoginScreen loading={loading} onSignIn={() => { setLoading(true); void signIn("kakao", { callbackUrl: skipTennisProfileOnboarding ? safeReturnTo : getStartAuthCallbackPath("PLAYER", safeReturnTo) }); }} />;
 

@@ -51,7 +51,3 @@ export function MatchCard({ match, returnTo = "/" }: { match: MatchCardData; ret
     </Link>
   );
 }
-
-export function MatchCardSkeleton() {
-  return <div className="h-[218px] animate-pulse rounded-3xl bg-[var(--tm-bg-subtle)]" />;
-}
