@@ -1,5 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
-import type { CourtSlotStatus, PrismaClient } from "@/generated/prisma/client";
+import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/prisma/client";
 
 import { DomainError } from "@/server/domain/profile-service";
 
@@ -45,6 +45,14 @@ const slotStatusLabels: Record<CourtSlotStatus, string> = {
   CANCELLED: "취소됨",
 };
 
+const sessionStatusLabels: Record<MatchStatus, string> = {
+  OPEN: "세션 모집 중",
+  CLOSED: "모집이 마감됐어요",
+  COMPLETED: "이용이 완료됐어요",
+  EXPIRED: "성사 없이 종료됐어요",
+  CANCELLED: "세션이 취소됐어요",
+};
+
 function optionalText(value: string | null | undefined) {
   return value?.trim() || null;
 }
@@ -73,7 +81,7 @@ function toCourtView(court: CourtWithRelations) {
 export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) {
   const canOpenSession = slot.status === "AVAILABLE" && slot.startsAt > now;
   const session = slot.match
-    ? { matchId: slot.match.id, status: slot.match.status }
+    ? { matchId: slot.match.id, status: slot.match.status, statusLabel: sessionStatusLabels[slot.match.status] }
     : null;
 
   return {
@@ -93,9 +101,10 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
       address: slot.courtUnit.court.address,
       courtNumber: slot.courtUnit.name,
       region: { code: slot.courtUnit.court.region.code, name: slot.courtUnit.court.region.name },
+      image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
     },
     session,
-    availableAction: canOpenSession ? "OPEN_SESSION" : session ? "VIEW_SESSION" : "READ_ONLY",
+    availableAction: canOpenSession ? "OPEN_SESSION" : slot.status === "ALLOCATED" && session ? "VIEW_SESSION" : "READ_ONLY",
     version: slot.version,
   };
 }
@@ -549,4 +558,15 @@ export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: b
     orderBy: [{ startsAt: "asc" }, { id: "asc" }],
   });
   return { items: slots.map((slot) => toCourtSlotView(slot, now)) };
+}
+
+/** A public Slot is a session-supply record, never a direct court reservation. */
+export async function getPublicCourtSlot(prisma: PrismaClient, slotId: string) {
+  const now = new Date();
+  const slot = await prisma.courtSlot.findFirst({
+    where: { id: slotId, visibility: "PUBLIC" },
+    include: courtSlotInclude,
+  });
+  if (!slot) throw new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 404, "이 제휴 코트 시간은 확인할 수 없어요.");
+  return toCourtSlotView(slot, now);
 }

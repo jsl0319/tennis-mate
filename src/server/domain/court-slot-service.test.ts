@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { courtSlotCreateInputSchema, courtSlotUpdateInputSchema, courtSupplyIncidentInputSchema } from "./court-slot";
-import { createCourt, createCourtSlot, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
+import { createCourt, createCourtSlot, getPublicCourtSlot, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
 
 const viewer = { id: "operator-user-id" };
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
@@ -128,6 +128,22 @@ describe("Court Partner time supply authorization and state transitions", () => 
       status: 409,
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("returns only a public slot with its safe court image fallback and supply action", async () => {
+    const publicSlot = { ...ownedSlot("PUBLISH_APPROVED"), visibility: "PUBLIC", status: "AVAILABLE" };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(publicSlot) },
+    } as unknown as Parameters<typeof getPublicCourtSlot>[0];
+
+    await expect(getPublicCourtSlot(prisma, "slot-id")).resolves.toMatchObject({
+      id: "slot-id",
+      availableAction: "OPEN_SESSION",
+      court: { image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" } },
+    });
+    expect(prisma.courtSlot.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "slot-id", visibility: "PUBLIC" },
+    }));
   });
 
   it("keeps the slot and match unchanged for a general information review request", async () => {

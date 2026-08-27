@@ -131,6 +131,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
     return {
       source: match.courtSource,
       sourceLabel: "모집자가 코트를 예약했어요",
+      participationNote: null,
       name: match.externalCourtName,
       address: match.externalCourtAddress,
       courtNumber: match.externalCourtNumber,
@@ -143,6 +144,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
     return {
       source: match.courtSource,
       sourceLabel: "Tennis Mate에서 준비한 코트예요",
+      participationNote: "참가 신청은 세션을 연 모집자에게 보내요.",
       name: court?.name ?? null,
       address: court?.address ?? null,
       courtNumber: match.courtSlot?.courtUnit.name ?? null,
@@ -153,6 +155,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
   return {
     source: match.courtSource,
     sourceLabel: "코트와 비용을 함께 정해요",
+    participationNote: null,
     name: null,
     address: null,
     courtNumber: null,
@@ -475,7 +478,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           },
         });
         if (!slot || slot.visibility !== "PUBLIC" || slot.status !== "AVAILABLE" || slot.startsAt <= now || slot.courtUnit.court.operatorApplication.status !== "PUBLISH_APPROVED") {
-          throw new DomainError("PARTNER_SLOT_ALREADY_ALLOCATED", 409, "이 코트 시간대는 더 이상 세션을 열 수 없어요.");
+          throw new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 409, "이 코트 시간대는 더 이상 세션을 열 수 없어요.");
         }
         if (input.recruitCount + 1 > slot.maxParticipantCount) {
           throw new DomainError("PARTNER_SLOT_CAPACITY_EXCEEDED", 409, "현장 최대 인원보다 많은 참가자를 모집할 수 없어요.");

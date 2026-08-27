@@ -109,6 +109,7 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
       <section className="mx-auto max-w-[560px] px-5 pt-6">
         <h2 className="text-xl font-bold">{listTitle}</h2>
         <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{listDescription}</p>
+        <Link className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 걱정 없이 함께 테니스해요</span><span aria-hidden>→</span></Link>
         {activeMatches.length > 0 ? (
           <div className="mt-4 grid gap-4">{activeMatches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
         ) : isRecommendedList && visibleOtherMatches.length > 0 ? (

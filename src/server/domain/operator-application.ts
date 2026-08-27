@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 import { z } from "zod";
 
@@ -57,7 +57,12 @@ export function createBusinessRegistrationNumberHash(value: string) {
 }
 
 export function normalizeVenueKey(venueName: string, venueAddress: string) {
-  return `${venueName}\u0000${venueAddress}`.normalize("NFKC").replaceAll(/\s+/g, "").toLocaleLowerCase("ko-KR");
+  const normalizePart = (value: string) => value.normalize("NFKC").replaceAll(/\s+/g, "").toLocaleLowerCase("ko-KR");
+  const normalizedVenueName = normalizePart(venueName);
+  const normalizedVenueAddress = normalizePart(venueAddress);
+  const canonicalValue = `${normalizedVenueName.length}:${normalizedVenueName}${normalizedVenueAddress.length}:${normalizedVenueAddress}`;
+
+  return createHash("sha256").update(canonicalValue).digest("hex");
 }
 
 export function getVerificationDecision(

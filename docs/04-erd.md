@@ -778,7 +778,7 @@ erDiagram
 
 ### 13.0 Pilot 현재 수직 단위 — 운영자 신청, 코트 시간 공급, 제휴 세션 연결
 
-Court Partner Pilot의 현재 구현은 `CourtOperatorApplication`·자동 확인 시도 이력에 더해, 비공개 `Court`·`CourtUnit`·`CourtSlot` 초안과 공개된 Slot의 `PARTNER_COURT` Match 연결까지 활성화한다. 결제·환불·정산, 운영자 사진, 증빙 파일, 내부 운영 검토 화면은 이 단위에 포함하지 않는다.
+Court Partner Pilot의 현재 구현은 `CourtOperatorApplication`·자동 확인 시도 이력에 더해, 비공개 `Court`·`CourtUnit`·`CourtSlot` 초안과 공개된 Slot의 `PARTNER_COURT` Match 연결까지 활성화한다. 일반 회원은 공개 Slot을 읽기 전용으로 보거나 `AVAILABLE` Slot을 선택해 세션을 열 수 있다. 결제·환불·정산, 운영자 사진, 증빙 파일, 내부 운영 검토 화면은 이 단위에 포함하지 않는다.
 
 이 단위가 해결하는 문제는 실제 코트 운영자가 등록을 시작한 뒤 심사 진행 상황과 다음 행동을 알 수 없고, 승인 전 코트 시간이 이용자에게 공개되는 위험이 있다는 점이다. 공개 권한을 `PUBLISH_APPROVED`로 분리해, 검증 전 입력 정보가 이용자 공개나 제휴 코트 세션 연결로 이어지지 않게 한다. `DRAFT_ACCESS_GRANTED` 또는 `PUBLISH_APPROVED` 신청자는 비공개 Court·Slot 초안만 만들 수 있고, 공개 전환은 후자만 할 수 있다. 더 단순한 대안인 신청 상태 문자열 하나만 저장하는 방식은 사업자 유효와 장소 운영 권한을 구분할 수 없어 사용하지 않는다.
 
@@ -877,7 +877,7 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 
 `Court.normalizedVenueKey`는 연결된 신청의 정규화 장소 키와 일치해야 한다. 활성 또는 중지 상태의 Court에 같은 키가 존재하면 자동 공개를 허용하지 않는 부분 유일 인덱스를 둔다. 권리 관계가 확인된 공동 운영·명의 변경만 내부 검토의 명시적 결정으로 예외 처리한다.
 
-`CourtImage`는 운영자 사진 업로드 수직 단위에서만 활성화한다. 그 전에는 기본 코트 일러스트를 사용한다. 활성화 시 운영자가 직접 제공한 사진만 저장하고, `privateObjectRef`, `altText`, `sortOrder`에 더해 대표 표시 여부를 둔다. 카드에는 대표 1장만 사용한다. 외부 예약 Match는 Court 엔터티와 연결하지 않고 `Match.externalCourtImageObjectRef`로 모집자 제공 사진을 1장만 참조한다. 두 경우 모두 이미지 원본은 비공개 객체 저장소에 두고 API가 제한된 URL만 반환하며, 웹·지도 사진을 자동 수집하지 않는다.
+`CourtImage`는 운영자 사진 업로드 수직 단위에서만 활성화한다. 그 전에는 공개 Slot·제휴 코트 Match 모두 동일한 기본 코트 일러스트를 `court.image.fallback = TENNIS_COURT_ILLUSTRATION`으로 표시한다. 활성화 시 운영자가 직접 제공한 사진만 저장하고, `privateObjectRef`, `altText`, `sortOrder`에 더해 대표 표시 여부를 둔다. 카드에는 대표 1장만 사용한다. 외부 예약 Match는 Court 엔터티와 연결하지 않고 `Match.externalCourtImageObjectRef`로 모집자 제공 사진을 1장만 참조한다. 두 경우 모두 이미지 원본은 비공개 객체 저장소에 두고 API가 제한된 URL만 반환하며, 웹·지도 사진을 자동 수집하지 않는다.
 
 ### 13.4 CourtSlot
 

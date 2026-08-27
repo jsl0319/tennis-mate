@@ -53,7 +53,12 @@ describe("operator application input and status policy", () => {
     expect(getVerificationDecision({ business: "VERIFIED", venue: "MATCHED" }, true).status).toBe("REVIEW_REQUIRED");
     expect(getVerificationDecision({ business: "VERIFIED", venue: "PENDING" }, false).status).toBe("DRAFT_ACCESS_GRANTED");
     expect(getVerificationDecision({ business: "MISMATCH", venue: "PENDING" }, false).status).toBe("REJECTED");
-    expect(normalizeVenueKey("마포 테니스파크", "서울 마포구")).toBe(normalizeVenueKey("마포테니스파크", "서울  마포구"));
+    const normalizedVenueKey = normalizeVenueKey("마포 테니스파크", "서울 마포구");
+
+    expect(normalizedVenueKey).toBe(normalizeVenueKey("마포테니스파크", "서울  마포구"));
+    expect(normalizedVenueKey).toMatch(/^[a-f0-9]{64}$/);
+    expect(normalizedVenueKey).not.toContain("\u0000");
+    expect(normalizeVenueKey("가", "나3:다")).not.toBe(normalizeVenueKey("가나", "다"));
   });
 });
 

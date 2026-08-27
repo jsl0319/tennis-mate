@@ -321,6 +321,48 @@ describe("match service operation safeguards", () => {
     expect(transaction.match.create).not.toHaveBeenCalled();
   });
 
+  it("rejects a competing partner session after another request conditionally allocates the same slot", async () => {
+    const partnerSlotId = "e3e70682-c209-4cac-a29f-6fbed82c07ce";
+    const partnerInput = matchCreateInputSchema.parse({
+      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cf",
+      courtSource: "PARTNER_COURT",
+      courtSlotId: partnerSlotId,
+      title: "제휴 코트에서 랠리해요",
+      recruitCount: 2,
+      playPurposes: ["RALLY_PRACTICE"],
+      partnerPreference: "SIMILAR_LEVEL",
+      contactOpenChatUrl: "https://open.kakao.com/o/example",
+    });
+    const transaction = {
+      courtSlot: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: partnerSlotId,
+          visibility: "PUBLIC",
+          status: "AVAILABLE",
+          startsAt: futureStartsAt,
+          endsAt: futureEndsAt,
+          priceKrw: 40_000,
+          maxParticipantCount: 3,
+          courtUnit: { court: { regionCode: "SEOUL-001", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } } },
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null) },
+      courtSlotStatusHistory: { create: vi.fn() },
+      match: { create: vi.fn() },
+    };
+    const prisma = {
+      match: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof createMatch>[0];
+
+    await expect(createMatch(prisma, viewer, partnerInput)).rejects.toMatchObject({
+      code: "PARTNER_SLOT_ALREADY_ALLOCATED",
+      status: 409,
+    });
+    expect(transaction.match.create).not.toHaveBeenCalled();
+  });
+
   it("asks the database to exclude the viewer's matches and prior applications from discovery", async () => {
     const findMany = vi.fn().mockResolvedValue([makeMatch({ id: "other-match-id", hostUserId: "other-user-id", host: { id: "other-user-id", nickname: "다른모집자", tennisProfile: viewer.profile } })]);
     const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];

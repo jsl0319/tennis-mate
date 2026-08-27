@@ -1422,11 +1422,14 @@ GET  /api/v1/matches?courtSource=PARTNER_COURT
 GET  /api/v1/matches/{matchId}
 POST /api/v1/matches/{matchId}/applications
 GET  /api/v1/partner-session-slots
+GET  /api/v1/partner-session-slots/{slotId}
 GET  /api/v1/partner-session-slots/available
 POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
 ```
 
 `GET /partner-session-slots`는 인증된 일반 회원에게 `PUBLIC` Slot의 읽기 전용 상태를 반환한다. 상태별 행동은 `AVAILABLE`의 세션 개설, `ALLOCATED`의 연결 세션 상세 이동, 그 외 상태의 읽기 전용뿐이다. 이 API는 코트 예약 탐색 API가 아니며 운영자 연락처·예약 승인 CTA·결제 정보를 제공하지 않는다.
+
+`GET /partner-session-slots/{slotId}`는 목록 카드에서 진입하는 상세용으로, 온보딩을 마친 일반 회원에게 해당 `PUBLIC` Slot 하나의 동일한 안전한 표시 필드를 반환한다. `PRIVATE` Slot 또는 형식이 잘못된 식별자는 존재 여부를 구분하지 않고 `404 PARTNER_SLOT_NOT_AVAILABLE` 또는 입력 오류로 처리한다. 상태별 행동·권한은 목록과 같으며, 운영자 연락처·내부 메모·예약 승인·결제 정보는 반환하지 않는다.
 
 예시 `PublicCourtSlotView`:
 
@@ -1441,9 +1444,15 @@ POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
   "court": {
     "name": "마포 테니스파크",
     "courtNumber": "2번 코트",
-    "address": "서울특별시 마포구 ..."
+    "address": "서울특별시 마포구 ...",
+    "image": {
+      "url": null,
+      "sourceLabel": null,
+      "fallback": "TENNIS_COURT_ILLUSTRATION"
+    }
   },
   "totalCourtFeeKrw": 40000,
+  "maxParticipantCount": 4,
   "usageNote": "실내 전용 테니스화를 준비해 주세요.",
   "session": {
     "matchId": "0198...",
@@ -1455,6 +1464,8 @@ POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
 ```
 
 `GET /partner-session-slots/available`은 온보딩 완료 일반 회원이 세션을 열 때만 사용한다. `visibility = PUBLIC`, `status = AVAILABLE`, 시작 전인 Slot의 코트·시간·비용·현장 최대 인원·이용 안내만 반환하며, 응답의 행동 문구는 `이 시간으로 세션 열기`다. 참가자에게 보이는 코트 예약 탐색 API가 아니다.
+
+운영자 사진 기능이 활성화되기 전에는 `PublicCourtSlotView.court.image.url`과 `sourceLabel`이 모두 `null`이고 클라이언트는 `fallback = TENNIS_COURT_ILLUSTRATION`을 표시한다. 사진 없음은 공급 상태, 예약 가능 여부 또는 Tennis Mate의 예약 보증을 의미하지 않는다.
 
 `POST /api/v1/matches`의 Pilot 확장은 다음을 받는다.
 
