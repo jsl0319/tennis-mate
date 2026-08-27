@@ -104,6 +104,31 @@ enum SlotStatusChangeActor {
   ADMIN
 }
 
+enum CourtSupplyIncidentCode {
+  SCHEDULE_UNAVAILABLE
+  FACILITY_CLOSED
+  SAFETY_RISK
+  NATURAL_DISASTER
+  INFORMATION_REVIEW
+}
+
+enum CourtSupplyIncidentImpact {
+  NONE
+  CANCEL_MATCH
+}
+
+enum CourtSupplyIncidentStatus {
+  REQUESTED
+  WITHDRAWN
+  REVIEWED
+  REJECTED
+}
+
+enum OperatorSupplyRestrictionSource {
+  AUTOMATED
+  ADMIN
+}
+
 enum OperatorApplicationStatus {
   DRAFT
   VERIFYING
@@ -160,6 +185,8 @@ model User {
   courtImageUploads    CourtImageUpload[]
   operatorApplications CourtOperatorApplication[] @relation("OperatorApplicationApplicant")
   courtSlotStatusHistories CourtSlotStatusHistory[] @relation("CourtSlotStatusActor")
+  supplyNoticeRecipients MatchSupplyNoticeRecipient[] @relation("MatchSupplyNoticeRecipientUser")
+  clearedSupplyRestrictions OperatorSupplyRestriction[] @relation("OperatorSupplyRestrictionClearedBy")
 
   @@map("users")
 }
@@ -286,6 +313,8 @@ model Match {
   applications MatchApplication[]
   externalCourtImageUpload CourtImageUpload? @relation("ExternalCourtImage", fields: [externalCourtImageUploadId], references: [id], onDelete: Restrict)
   courtSlot    CourtSlot?          @relation(fields: [courtSlotId], references: [id], onDelete: Restrict)
+  supplyIncidents CourtSupplyIncident[]
+  supplyNoticeRecipients MatchSupplyNoticeRecipient[]
 
   @@unique([hostUserId, clientRequestId])
   @@index([status, startsAt])
@@ -371,6 +400,7 @@ model CourtOperatorApplication {
   applicant            User                                     @relation("OperatorApplicationApplicant", fields: [applicantUserId], references: [id], onDelete: Restrict)
   verificationAttempts OperatorApplicationVerificationAttempt[]
   court                Court?
+  supplyRestrictions   OperatorSupplyRestriction[]
 
   @@index([applicantUserId, createdAt(sort: Desc)])
   @@index([businessRegistrationNumberHash, status])
@@ -430,6 +460,7 @@ model CourtSlot {
   courtUnit      CourtUnit               @relation(fields: [courtUnitId], references: [id], onDelete: Restrict)
   match          Match?
   statusHistory  CourtSlotStatusHistory[]
+  supplyIncidents CourtSupplyIncident[]
 
   @@index([courtUnitId, startsAt])
   @@index([visibility, status, startsAt])
@@ -451,6 +482,66 @@ model CourtSlotStatusHistory {
 
   @@index([courtSlotId, createdAt])
   @@map("court_slot_status_histories")
+}
+
+model CourtSupplyIncident {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  courtSlotId           String                    @map("court_slot_id") @db.Uuid
+  matchId               String                    @map("match_id") @db.Uuid
+  code                  CourtSupplyIncidentCode
+  impact                CourtSupplyIncidentImpact
+  status                CourtSupplyIncidentStatus @default(REQUESTED)
+  operatorAttributable  Boolean                   @default(false) @map("operator_attributable")
+  publicNoticeCode      String                    @map("public_notice_code") @db.VarChar(60)
+  reportedAt            DateTime                  @default(now()) @map("reported_at") @db.Timestamptz(6)
+  withdrawnAt           DateTime?                 @map("withdrawn_at") @db.Timestamptz(6)
+  reviewedAt            DateTime?                 @map("reviewed_at") @db.Timestamptz(6)
+  createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  courtSlot CourtSlot                    @relation(fields: [courtSlotId], references: [id], onDelete: Restrict)
+  match     Match                        @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  recipients MatchSupplyNoticeRecipient[]
+
+  @@index([courtSlotId, createdAt])
+  @@index([matchId, status])
+  @@map("court_supply_incidents")
+}
+
+model MatchSupplyNoticeRecipient {
+  id              String              @id @default(uuid()) @db.Uuid
+  incidentId      String              @map("incident_id") @db.Uuid
+  matchId         String              @map("match_id") @db.Uuid
+  recipientUserId String              @map("recipient_user_id") @db.Uuid
+  noticeCode      String              @map("notice_code") @db.VarChar(60)
+  deliveredAt     DateTime            @default(now()) @map("delivered_at") @db.Timestamptz(6)
+
+  incident      CourtSupplyIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  match         Match               @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  recipientUser User                @relation("MatchSupplyNoticeRecipientUser", fields: [recipientUserId], references: [id], onDelete: Restrict)
+
+  @@unique([incidentId, recipientUserId])
+  @@index([recipientUserId, deliveredAt(sort: Desc)])
+  @@index([matchId, deliveredAt(sort: Desc)])
+  @@map("match_supply_notice_recipients")
+}
+
+model OperatorSupplyRestriction {
+  id                    String                           @id @default(uuid()) @db.Uuid
+  operatorApplicationId String                           @map("operator_application_id") @db.Uuid
+  source                OperatorSupplyRestrictionSource @default(AUTOMATED)
+  reasonCode            String                           @map("reason_code") @db.VarChar(60)
+  triggeredAt           DateTime                         @default(now()) @map("triggered_at") @db.Timestamptz(6)
+  clearedAt             DateTime?                        @map("cleared_at") @db.Timestamptz(6)
+  clearedByUserId       String?                          @map("cleared_by_user_id") @db.Uuid
+  createdAt             DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  operatorApplication CourtOperatorApplication @relation(fields: [operatorApplicationId], references: [id], onDelete: Restrict)
+  clearedByUser       User?                    @relation("OperatorSupplyRestrictionClearedBy", fields: [clearedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([operatorApplicationId, clearedAt])
+  @@map("operator_supply_restrictions")
 }
 
 model OperatorApplicationVerificationAttempt {

@@ -95,6 +95,7 @@ describe("match service operation safeguards", () => {
         findUnique,
         create: vi.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "test" })),
       },
+      matchSupplyNoticeRecipient: { findFirst: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (callback: (transaction: unknown) => unknown) => callback(prisma)),
     } as unknown as Parameters<typeof createMatch>[0];
 
@@ -190,6 +191,7 @@ describe("match service operation safeguards", () => {
     const prisma = {
       region: { findFirst: vi.fn().mockResolvedValue({ code: "SEOUL-001" }) },
       match: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(createdMatch) },
+      matchSupplyNoticeRecipient: { findFirst: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
     } as unknown as Parameters<typeof createMatch>[0];
 
@@ -225,7 +227,7 @@ describe("match service operation safeguards", () => {
       maxParticipantCount: 3,
       courtUnit: {
         name: "2번 코트",
-        court: { regionCode: "SEOUL-001", operatorApplication: { status: "PUBLISH_APPROVED" } },
+        court: { regionCode: "SEOUL-001", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } },
       },
     };
     const createdMatch = makeMatch({
@@ -245,6 +247,7 @@ describe("match service operation safeguards", () => {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       courtSlotStatusHistory: { create: vi.fn().mockResolvedValue({ id: "history-id" }) },
+      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null) },
       match: {
         create: vi.fn().mockResolvedValue({ id: createdMatch.id }),
         findUnique: vi.fn().mockResolvedValue({ id: createdMatch.id, status: "OPEN", startsAt: futureStartsAt, applications: [] }),
@@ -256,6 +259,7 @@ describe("match service operation safeguards", () => {
       .mockResolvedValueOnce(createdMatch);
     const prisma = {
       match: { findUnique },
+      matchSupplyNoticeRecipient: { findFirst: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
     } as unknown as Parameters<typeof createMatch>[0];
 

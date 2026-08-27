@@ -31,3 +31,21 @@ export type CourtSlotCreateInput = z.infer<typeof courtSlotCreateInputSchema>;
 
 export const courtSlotIdSchema = z.string().uuid("코트 시간 정보를 다시 선택해 주세요.");
 
+export const courtSlotUpdateInputSchema = courtSlotCreateInputSchema.extend({
+  expectedVersion: z.number().int().positive("시간 정보를 다시 불러와 주세요."),
+});
+
+export type CourtSlotUpdateInput = z.infer<typeof courtSlotUpdateInputSchema>;
+
+export const courtSlotListQuerySchema = z.object({
+  status: z.enum(["DRAFT", "AVAILABLE", "ALLOCATED", "ENDED", "BLOCKED", "CANCELLED"]).optional(),
+});
+
+export type CourtSlotListQuery = z.infer<typeof courtSlotListQuerySchema>;
+
+export const courtSupplyIncidentInputSchema = z.object({
+  code: z.enum(["SCHEDULE_UNAVAILABLE", "FACILITY_CLOSED", "SAFETY_RISK", "NATURAL_DISASTER", "INFORMATION_REVIEW"]),
+  expectedVersion: z.number().int().positive("시간 정보를 다시 불러와 주세요."),
+});
+
+export type CourtSupplyIncidentInput = z.infer<typeof courtSupplyIncidentInputSchema>;

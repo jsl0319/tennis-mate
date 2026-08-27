@@ -3,14 +3,20 @@ import type { CourtSlotStatus, PrismaClient } from "@/generated/prisma/client";
 
 import { DomainError } from "@/server/domain/profile-service";
 
-import type { CourtCreateInput, CourtSlotCreateInput } from "./court-slot";
+import type {
+  CourtCreateInput,
+  CourtSlotCreateInput,
+  CourtSlotListQuery,
+  CourtSlotUpdateInput,
+  CourtSupplyIncidentInput,
+} from "./court-slot";
 
 const draftAccessStatuses = ["DRAFT_ACCESS_GRANTED", "PUBLISH_APPROVED"] as const;
 
 const courtInclude = {
   region: true,
   units: { orderBy: { name: "asc" } },
-  operatorApplication: { select: { applicantUserId: true, status: true } },
+  operatorApplication: { select: { id: true, applicantUserId: true, status: true } },
 } satisfies Prisma.CourtInclude;
 
 const courtSlotInclude = {
@@ -19,12 +25,12 @@ const courtSlotInclude = {
       court: {
         include: {
           region: true,
-          operatorApplication: { select: { applicantUserId: true, status: true } },
+          operatorApplication: { select: { id: true, applicantUserId: true, status: true } },
         },
       },
     },
   },
-  match: { select: { id: true, status: true } },
+  match: { select: { id: true, hostUserId: true, status: true } },
 } satisfies Prisma.CourtSlotInclude;
 
 type CourtWithRelations = Prisma.CourtGetPayload<{ include: typeof courtInclude }>;
@@ -142,6 +148,16 @@ function assertPublishAccess(slot: CourtSlotWithRelations) {
   }
 }
 
+async function assertNoActiveSupplyRestriction(prisma: PrismaClient, operatorApplicationId: string) {
+  const restriction = await prisma.operatorSupplyRestriction.findFirst({
+    where: { operatorApplicationId, clearedAt: null },
+    select: { id: true },
+  });
+  if (restriction) {
+    throw new DomainError("OPERATOR_SUPPLY_RESTRICTED", 403, "운영상 확인이 끝날 때까지 새 시간 공개를 잠시 멈췄어요.");
+  }
+}
+
 function isOverlapConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.message.includes("court_slots_unit_time_no_overlap");
 }
@@ -241,6 +257,89 @@ export async function createCourtSlot(prisma: PrismaClient, viewer: { id: string
   }
 }
 
+export async function getMyCourtSlots(prisma: PrismaClient, viewer: { id: string }, query: CourtSlotListQuery = {}) {
+  const [slots, restriction] = await Promise.all([
+    prisma.courtSlot.findMany({
+      where: {
+        courtUnit: { court: { operatorApplication: { applicantUserId: viewer.id } } },
+        ...(query.status ? { status: query.status } : {}),
+      },
+      include: courtSlotInclude,
+      orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+    }),
+    prisma.operatorSupplyRestriction.findFirst({
+      where: { operatorApplication: { applicantUserId: viewer.id }, clearedAt: null },
+      select: { triggeredAt: true, reasonCode: true },
+      orderBy: { triggeredAt: "desc" },
+    }),
+  ]);
+  const now = new Date();
+  return {
+    items: slots.map((slot) => toCourtSlotView(slot, now)),
+    supplyRestriction: restriction
+      ? { active: true, triggeredAt: restriction.triggeredAt.toISOString(), reasonCode: restriction.reasonCode }
+      : { active: false },
+  };
+}
+
+export async function updateCourtSlot(
+  prisma: PrismaClient,
+  viewer: { id: string },
+  slotId: string,
+  input: CourtSlotUpdateInput,
+) {
+  const slot = await getOwnedCourtSlot(prisma, viewer, slotId);
+  if (slot.status !== "DRAFT" || slot.visibility !== "PRIVATE") {
+    throw new DomainError("COURT_SLOT_PUBLIC_IMMUTABLE", 409, "공개했거나 연결된 시간은 바로 수정할 수 없어요. 새 초안으로 정정해 주세요.");
+  }
+  if (slot.version !== input.expectedVersion) {
+    throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "다른 변경사항이 있어 시간대를 다시 확인해 주세요.");
+  }
+
+  const startsAt = new Date(input.startsAt);
+  const endsAt = new Date(input.endsAt);
+  try {
+    return await prisma.$transaction(async (transaction) => {
+      const courtId = slot.courtUnit.court.id;
+      const existingUnit = await transaction.courtUnit.findUnique({
+        where: { courtId_name: { courtId, name: input.courtUnitName } },
+      });
+      const courtUnit = existingUnit ?? await transaction.courtUnit.create({
+        data: { courtId, name: input.courtUnitName },
+      });
+      const overlap = await transaction.courtSlot.findFirst({
+        where: {
+          id: { not: slot.id },
+          courtUnitId: courtUnit.id,
+          status: { in: ["DRAFT", "AVAILABLE", "ALLOCATED"] },
+          startsAt: { lt: endsAt },
+          endsAt: { gt: startsAt },
+        },
+        select: { id: true },
+      });
+      if (overlap) throw new DomainError("COURT_SLOT_OVERLAP", 409, "같은 코트 면에 겹치는 시간대가 있어요.");
+
+      const updated = await transaction.courtSlot.updateMany({
+        where: { id: slot.id, status: "DRAFT", visibility: "PRIVATE", version: input.expectedVersion },
+        data: {
+          courtUnitId: courtUnit.id,
+          startsAt,
+          endsAt,
+          priceKrw: input.priceKrw,
+          maxParticipantCount: input.maxParticipantCount,
+          usageNote: optionalText(input.usageNote),
+          version: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "다른 변경사항이 있어 시간대를 다시 확인해 주세요.");
+      return transaction.courtSlot.findUniqueOrThrow({ where: { id: slot.id }, include: courtSlotInclude });
+    });
+  } catch (error) {
+    if (isOverlapConstraintError(error)) throw new DomainError("COURT_SLOT_OVERLAP", 409, "같은 코트 면에 겹치는 시간대가 있어요.");
+    throw error;
+  }
+}
+
 async function transitionSlot(
   prisma: PrismaClient,
   viewer: { id: string },
@@ -249,6 +348,9 @@ async function transitionSlot(
 ) {
   const slot = await getOwnedCourtSlot(prisma, viewer, slotId);
   assertPublishAccess(slot);
+  if (nextStatus === "AVAILABLE") {
+    await assertNoActiveSupplyRestriction(prisma, slot.courtUnit.court.operatorApplication.id);
+  }
 
   if (nextStatus === "AVAILABLE") {
     if (slot.status !== "DRAFT" || slot.visibility !== "PRIVATE") {
@@ -301,6 +403,139 @@ export function publishCourtSlot(prisma: PrismaClient, viewer: { id: string }, s
 
 export function blockCourtSlot(prisma: PrismaClient, viewer: { id: string }, slotId: string) {
   return transitionSlot(prisma, viewer, slotId, "BLOCKED");
+}
+
+function isOperatorAttributableIncident(code: CourtSupplyIncidentInput["code"]) {
+  return code === "SCHEDULE_UNAVAILABLE";
+}
+
+function isEmergencySupplyIncident(code: CourtSupplyIncidentInput["code"]) {
+  return code !== "INFORMATION_REVIEW";
+}
+
+async function createAutomatedRestrictionIfNeeded(
+  transaction: Prisma.TransactionClient,
+  operatorApplicationId: string,
+  startsAt: Date,
+  now: Date,
+) {
+  const [recentWithdrawals, activeRestriction] = await Promise.all([
+    transaction.courtSupplyIncident.count({
+      where: {
+        status: "WITHDRAWN",
+        operatorAttributable: true,
+        withdrawnAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) },
+        courtSlot: { courtUnit: { court: { operatorApplicationId } } },
+      },
+    }),
+    transaction.operatorSupplyRestriction.findFirst({
+      where: { operatorApplicationId, clearedAt: null },
+      select: { id: true },
+    }),
+  ]);
+  const startsUntil = startsAt.getTime() - now.getTime();
+  const startsWithinDay = startsUntil >= 0 && startsUntil <= 24 * 60 * 60 * 1000;
+  if (!activeRestriction && (recentWithdrawals >= 2 || startsWithinDay)) {
+    await transaction.operatorSupplyRestriction.create({
+      data: {
+        operatorApplicationId,
+        source: "AUTOMATED",
+        reasonCode: startsWithinDay ? "ATTRIBUTABLE_WITHDRAWAL_WITHIN_24H" : "ATTRIBUTABLE_WITHDRAWALS_30D",
+        triggeredAt: now,
+      },
+    });
+  }
+}
+
+export async function reportCourtSupplyIncident(
+  prisma: PrismaClient,
+  viewer: { id: string },
+  slotId: string,
+  input: CourtSupplyIncidentInput,
+) {
+  const slot = await getOwnedCourtSlot(prisma, viewer, slotId);
+  if (slot.status !== "ALLOCATED" || !slot.match || slot.version !== input.expectedVersion) {
+    throw new DomainError("COURT_SUPPLY_INCIDENT_NOT_ALLOWED", 409, "연결된 세션에서만 운영상 문제를 접수할 수 있어요.");
+  }
+
+  const now = new Date();
+  const emergency = isEmergencySupplyIncident(input.code);
+  const operatorAttributable = isOperatorAttributableIncident(input.code);
+  return prisma.$transaction(async (transaction) => {
+    if (!emergency) {
+      const incident = await transaction.courtSupplyIncident.create({
+        data: {
+          courtSlotId: slot.id,
+          matchId: slot.match!.id,
+          code: input.code,
+          impact: "NONE",
+          status: "REQUESTED",
+          operatorAttributable: false,
+          publicNoticeCode: "INFORMATION_REVIEW_REQUESTED",
+          reportedAt: now,
+        },
+      });
+      return { id: incident.id, status: "REQUESTED" as const, impact: "NONE" as const, message: "운영 검토에 접수했어요. 시간과 연결된 세션은 그대로 유지돼요." };
+    }
+
+    const cancelledSlot = await transaction.courtSlot.updateMany({
+      where: { id: slot.id, status: "ALLOCATED", version: input.expectedVersion },
+      data: { status: "CANCELLED", statusChangedAt: now, version: { increment: 1 } },
+    });
+    if (cancelledSlot.count !== 1) throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "다른 변경사항이 있어 시간대를 다시 확인해 주세요.");
+
+    const cancelledMatch = await transaction.match.updateMany({
+      where: { id: slot.match!.id, status: { in: ["OPEN", "CLOSED"] } },
+      data: { status: "CANCELLED", cancelledAt: now, cancellationReason: "COURT_SUPPLY_WITHDRAWN", version: { increment: 1 } },
+    });
+    if (cancelledMatch.count !== 1) throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "연결된 세션 상태를 다시 확인해 주세요.");
+
+    await transaction.matchApplication.updateMany({
+      where: { matchId: slot.match!.id, status: { in: ["PENDING", "ACCEPTED"] } },
+      data: { status: "CANCELLED", cancelledAt: now },
+    });
+    const incident = await transaction.courtSupplyIncident.create({
+      data: {
+        courtSlotId: slot.id,
+        matchId: slot.match!.id,
+        code: input.code,
+        impact: "CANCEL_MATCH",
+        status: "WITHDRAWN",
+        operatorAttributable,
+        publicNoticeCode: "COURT_SUPPLY_WITHDRAWN",
+        reportedAt: now,
+        withdrawnAt: now,
+      },
+    });
+    await transaction.courtSlotStatusHistory.create({
+      data: {
+        courtSlotId: slot.id,
+        fromStatus: "ALLOCATED",
+        toStatus: "CANCELLED",
+        actor: "OPERATOR",
+        actorUserId: viewer.id,
+        reasonCode: "SUPPLY_WITHDRAWN",
+      },
+    });
+    const affectedApplications = await transaction.matchApplication.findMany({
+      where: { matchId: slot.match!.id, status: "CANCELLED", cancelledAt: now },
+      select: { applicantUserId: true },
+    });
+    const recipients = Array.from(new Set([slot.match!.hostUserId, ...affectedApplications.map(({ applicantUserId }) => applicantUserId)]));
+    await transaction.matchSupplyNoticeRecipient.createMany({
+      data: recipients.map((recipientUserId) => ({
+        incidentId: incident.id,
+        matchId: slot.match!.id,
+        recipientUserId,
+        noticeCode: "COURT_SUPPLY_WITHDRAWN",
+        deliveredAt: now,
+      })),
+    });
+    if (operatorAttributable) {
+      await createAutomatedRestrictionIfNeeded(transaction, slot.courtUnit.court.operatorApplication.id, slot.startsAt, now);
+    }
+    return { id: incident.id, status: "WITHDRAWN" as const, impact: "CANCEL_MATCH" as const, message: "연결된 세션을 취소하고 모집자와 신청자에게 앱 안에서 안내했어요." };
+  });
 }
 
 export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: boolean) {

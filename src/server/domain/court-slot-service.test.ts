@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { courtSlotCreateInputSchema } from "./court-slot";
-import { createCourt, createCourtSlot, publishCourtSlot } from "./court-slot-service";
+import { courtSlotCreateInputSchema, courtSlotUpdateInputSchema, courtSupplyIncidentInputSchema } from "./court-slot";
+import { createCourt, createCourtSlot, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
 
 const viewer = { id: "operator-user-id" };
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
@@ -64,6 +64,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
     expect(() => courtSlotCreateInputSchema.parse({ ...slotInput, endsAt: slotInput.startsAt })).toThrow("종료 시간");
     expect(() => courtSlotCreateInputSchema.parse({ ...slotInput, startsAt: "2020-01-02T01:00:00.000Z" })).toThrow("시작 시간");
     expect(() => courtSlotCreateInputSchema.parse({ ...slotInput, maxParticipantCount: 1 })).toThrow("2명");
+    expect(() => courtSlotUpdateInputSchema.parse({ ...slotInput, expectedVersion: 0 })).toThrow("다시 불러와");
+    expect(() => courtSupplyIncidentInputSchema.parse({ code: "INFORMATION_REVIEW", expectedVersion: 0 })).toThrow("다시 불러와");
   });
 
   it("allows a draft-approved operator to create only a private slot draft with an audit record", async () => {
@@ -112,5 +114,91 @@ describe("Court Partner time supply authorization and state transitions", () => 
       code: "OPERATOR_DRAFT_ACCESS_REQUIRED",
       status: 403,
     });
+  });
+
+  it("does not allow a public time slot to be edited in place", async () => {
+    const publicSlot = { ...ownedSlot("PUBLISH_APPROVED"), visibility: "PUBLIC", status: "AVAILABLE" };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(publicSlot) },
+      $transaction: vi.fn(),
+    } as unknown as Parameters<typeof updateCourtSlot>[0];
+
+    await expect(updateCourtSlot(prisma, viewer, "slot-id", { ...slotInput, expectedVersion: 1 })).rejects.toMatchObject({
+      code: "COURT_SLOT_PUBLIC_IMMUTABLE",
+      status: 409,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the slot and match unchanged for a general information review request", async () => {
+    const allocatedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "ALLOCATED",
+      version: 4,
+      match: { id: "match-id", hostUserId: "host-user-id", status: "OPEN" },
+    };
+    const transaction = {
+      courtSupplyIncident: { create: vi.fn().mockResolvedValue({ id: "incident-id" }) },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(allocatedSlot) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof reportCourtSupplyIncident>[0];
+
+    const result = await reportCourtSupplyIncident(prisma, viewer, "slot-id", { code: "INFORMATION_REVIEW", expectedVersion: 4 });
+
+    expect(result).toMatchObject({ status: "REQUESTED", impact: "NONE" });
+    expect(transaction.courtSupplyIncident.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "REQUESTED", impact: "NONE", publicNoticeCode: "INFORMATION_REVIEW_REQUESTED" }),
+    }));
+  });
+
+  it("withdraws an unavailable allocated supply atomically and records only affected in-app recipients", async () => {
+    const allocatedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "ALLOCATED",
+      version: 4,
+      match: { id: "match-id", hostUserId: "host-user-id", status: "OPEN" },
+      courtUnit: {
+        name: "2번 코트",
+        court: {
+          ...ownedCourt("PUBLISH_APPROVED"),
+          operatorApplication: { id: "application-id", applicantUserId: viewer.id, status: "PUBLISH_APPROVED" },
+        },
+      },
+    };
+    const transaction = {
+      courtSlot: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      match: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      matchApplication: {
+        updateMany: vi.fn().mockResolvedValue({ count: 2 }),
+        findMany: vi.fn().mockResolvedValue([{ applicantUserId: "pending-user-id" }, { applicantUserId: "accepted-user-id" }]),
+      },
+      courtSupplyIncident: {
+        create: vi.fn().mockResolvedValue({ id: "incident-id" }),
+        count: vi.fn().mockResolvedValue(2),
+      },
+      courtSlotStatusHistory: { create: vi.fn().mockResolvedValue({ id: "history-id" }) },
+      matchSupplyNoticeRecipient: { createMany: vi.fn().mockResolvedValue({ count: 3 }) },
+      operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "restriction-id" }) },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(allocatedSlot) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof reportCourtSupplyIncident>[0];
+
+    const result = await reportCourtSupplyIncident(prisma, viewer, "slot-id", { code: "SCHEDULE_UNAVAILABLE", expectedVersion: 4 });
+
+    expect(result).toMatchObject({ status: "WITHDRAWN", impact: "CANCEL_MATCH" });
+    expect(transaction.courtSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELLED" }) }));
+    expect(transaction.match.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELLED", cancellationReason: "COURT_SUPPLY_WITHDRAWN" }) }));
+    expect(transaction.matchSupplyNoticeRecipient.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.arrayContaining([expect.objectContaining({ recipientUserId: "host-user-id" }), expect.objectContaining({ recipientUserId: "pending-user-id" }), expect.objectContaining({ recipientUserId: "accepted-user-id" })]),
+    }));
+    expect(transaction.operatorSupplyRestriction.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ operatorApplicationId: "application-id", source: "AUTOMATED" }),
+    }));
   });
 });

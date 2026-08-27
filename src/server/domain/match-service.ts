@@ -234,6 +234,23 @@ function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
   };
 }
 
+type SupplyNotice = {
+  code: "COURT_SUPPLY_WITHDRAWN";
+  message: string;
+  occurredAt: string;
+  delivery: "IN_APP";
+};
+
+function toSupplyNoticeView(notice: { noticeCode: string; deliveredAt: Date; incident: { publicNoticeCode: string; withdrawnAt: Date | null } }): SupplyNotice | null {
+  if (notice.noticeCode !== "COURT_SUPPLY_WITHDRAWN" || notice.incident.publicNoticeCode !== "COURT_SUPPLY_WITHDRAWN") return null;
+  return {
+    code: "COURT_SUPPLY_WITHDRAWN",
+    message: "코트 운영 사정으로 이 제휴 코트 세션이 취소됐어요.",
+    occurredAt: (notice.incident.withdrawnAt ?? notice.deliveredAt).toISOString(),
+    delivery: "IN_APP",
+  };
+}
+
 function toCursor(match: MatchWithRelations) {
   return Buffer.from(JSON.stringify({ startsAt: match.startsAt.toISOString(), id: match.id })).toString("base64url");
 }
@@ -355,6 +372,13 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
   const card = toMatchCardView(match, viewer);
   const recommendationReasons = relation === "HOST" ? [] : card.recommendationReasons;
   const canSeeContact = relation === "HOST" || application?.status === "ACCEPTED";
+  const notice = relation === "NONE"
+    ? null
+    : await prisma.matchSupplyNoticeRecipient.findFirst({
+        where: { matchId: match.id, recipientUserId: viewer.id },
+        include: { incident: { select: { publicNoticeCode: true, withdrawnAt: true } } },
+        orderBy: { deliveredAt: "desc" },
+      });
 
   return {
     ...card,
@@ -379,6 +403,7 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
     contact: canSeeContact
       ? { type: "KAKAO_OPEN_CHAT", url: match.contactOpenChatUrl, label: "카카오 오픈채팅으로 연락하기" }
       : null,
+    supplyNotice: notice ? toSupplyNoticeView(notice) : null,
     version: match.version,
     createdAt: match.createdAt.toISOString(),
     acceptedCount,
@@ -444,7 +469,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           include: {
             courtUnit: {
               include: {
-                court: { include: { operatorApplication: { select: { status: true } } } },
+                court: { include: { operatorApplication: { select: { id: true, status: true } } } },
               },
             },
           },
@@ -454,6 +479,13 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
         }
         if (input.recruitCount + 1 > slot.maxParticipantCount) {
           throw new DomainError("PARTNER_SLOT_CAPACITY_EXCEEDED", 409, "현장 최대 인원보다 많은 참가자를 모집할 수 없어요.");
+        }
+        const restriction = await transaction.operatorSupplyRestriction.findFirst({
+          where: { operatorApplicationId: slot.courtUnit.court.operatorApplication.id, clearedAt: null },
+          select: { id: true },
+        });
+        if (restriction) {
+          throw new DomainError("OPERATOR_SUPPLY_RESTRICTED", 403, "운영상 확인이 끝날 때까지 이 코트 시간으로 새 세션을 열 수 없어요.");
         }
 
         const allocated = await transaction.courtSlot.updateMany({
@@ -550,7 +582,7 @@ const applicationInclude = {
 
 type ApplicationWithRelations = Prisma.MatchApplicationGetPayload<{ include: typeof applicationInclude }>;
 
-function toApplicationView(application: ApplicationWithRelations) {
+function toApplicationView(application: ApplicationWithRelations, supplyNotice: SupplyNotice | null = null) {
   return {
     id: application.id,
     status: application.status,
@@ -581,6 +613,7 @@ function toApplicationView(application: ApplicationWithRelations) {
     contact: application.status === "ACCEPTED"
       ? { type: "KAKAO_OPEN_CHAT", url: application.match.contactOpenChatUrl, label: "카카오 오픈채팅으로 연락하기" }
       : null,
+    supplyNotice,
   };
 }
 
@@ -634,7 +667,19 @@ export async function getSentApplications(prisma: PrismaClient, viewer: Viewer) 
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: applicationInclude,
   });
-  return { items: applications.map(toApplicationView) };
+  const notices = applications.length === 0
+    ? []
+    : await prisma.matchSupplyNoticeRecipient.findMany({
+        where: { recipientUserId: viewer.id, matchId: { in: applications.map((application) => application.matchId) } },
+        include: { incident: { select: { publicNoticeCode: true, withdrawnAt: true } } },
+        orderBy: { deliveredAt: "desc" },
+      });
+  const noticesByMatchId = new Map<string, SupplyNotice>();
+  for (const notice of notices) {
+    const view = toSupplyNoticeView(notice);
+    if (view && !noticesByMatchId.has(notice.matchId)) noticesByMatchId.set(notice.matchId, view);
+  }
+  return { items: applications.map((application) => toApplicationView(application, noticesByMatchId.get(application.matchId) ?? null)) };
 }
 
 export async function getReceivedApplications(prisma: PrismaClient, viewer: Viewer, matchId: string, statuses: Array<"PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN" | "CANCELLED"> = ["PENDING"]) {
@@ -664,7 +709,7 @@ export async function getReceivedApplications(prisma: PrismaClient, viewer: View
       remainingSpots: Math.max(match.recruitCount - acceptedCount, 0),
       version: match.version,
     },
-    items: applications.map(toApplicationView),
+    items: applications.map((application) => toApplicationView(application)),
   };
 }
 
