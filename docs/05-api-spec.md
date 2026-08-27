@@ -233,9 +233,12 @@ Core MVP 생성 API는 `EXTERNAL_RESERVED`와 `COURT_TBD`만 허용한다. `PART
 ```text
 CourtSlotVisibility = PRIVATE | PUBLIC
 CourtSlotStatus = DRAFT | AVAILABLE | ALLOCATED | ENDED | BLOCKED | CANCELLED
+CourtSupplyIncidentCode = SCHEDULE_UNAVAILABLE | FACILITY_CLOSED | SAFETY_RISK | NATURAL_DISASTER | INFORMATION_REVIEW
+CourtSupplyIncidentImpact = NONE | CANCEL_MATCH
+CourtSupplyIncidentStatus = REQUESTED | WITHDRAWN | REVIEWED | REJECTED
 ```
 
-`visibility`는 시간대가 일반 회원에게 보이는지를, `status`는 세션 개설·상세 이동·읽기 전용 여부를 정한다. Pilot에서 새 Slot은 `DRAFT`·`PRIVATE`로 시작하고, 한 번 공개한 Slot은 상태가 바뀌어도 `PUBLIC`을 유지한다. `PUBLIC`은 예약 가능·운영자 승인 대기 상태가 아니다.
+`visibility`는 시간대가 일반 회원에게 보이는지를, `status`는 세션 개설·상세 이동·읽기 전용 여부를 정한다. Pilot에서 새 Slot은 `DRAFT`·`PRIVATE`로 시작하고, 한 번 공개한 Slot은 상태가 바뀌어도 `PUBLIC`을 유지한다. `PUBLIC`은 예약 가능·운영자 승인 대기 상태가 아니다. 공개 Slot은 사용자 표시 필드를 수정·재공개할 수 없고, 오류는 `BLOCKED` 후 새 `DRAFT`로 정정한다.
 
 ## 6. 공통 응답 모델
 
@@ -1184,6 +1187,18 @@ POST /api/v1/applications/{applicationId}/withdraw
 | `APPLICATION_OWNER_REQUIRED` | 신청자 본인 권한 필요 |
 | `APPLICATION_STATE_CONFLICT` | 현재 상태에서 전환 불가 |
 
+### 14.4 Court Partner Pilot
+
+| 코드 | 의미 |
+| --- | --- |
+| `COURT_SLOT_NOT_FOUND` | 없거나 운영자 소유가 아닌 Slot |
+| `COURT_SLOT_STATE_CONFLICT` | 현재 Slot 상태에서 행동 불가 |
+| `COURT_SLOT_PUBLIC_IMMUTABLE` | 공개했거나 연결된 Slot은 직접 수정 불가 |
+| `COURT_SLOT_OVERLAP` | 같은 CourtUnit의 활성 시간과 겹침 |
+| `OPERATOR_PUBLISH_APPROVAL_REQUIRED` | 공개 승인 권한 필요 |
+| `OPERATOR_SUPPLY_RESTRICTED` | 반복 철회 검토가 끝날 때까지 새 공개·세션 연결 불가 |
+| `COURT_SUPPLY_INCIDENT_NOT_ALLOWED` | 연결 Slot이 아니거나 허용되지 않은 철회 사유 |
+
 ## 15. 서버 파생 값과 단일 진실 공급원
 
 | 응답 값 | 계산 기준 | DB에 별도 저장 |
@@ -1458,14 +1473,30 @@ POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
 
 서버는 Slot row를 잠그고 `visibility = PUBLIC`, `AVAILABLE`, 시작 전인지와 활성 Match 부재를 확인한 뒤 Match 생성과 `ALLOCATED` 전환을 하나의 트랜잭션으로 처리한다. `recruitCount + 1`이 Slot의 현장 최대 인원을 넘으면 `409 PARTNER_SLOT_CAPACITY_EXCEEDED`다. 클라이언트가 코트명·주소·시각·전체 비용·현장 최대 인원을 보내거나 바꾸는 것을 허용하지 않는다. 상태 충돌은 `409 PARTNER_SLOT_ALREADY_ALLOCATED`이며, MatchApplication을 만들지 않는다.
 
+실제 공급 불가로 취소된 Partner Court Match의 상세와 활동 응답은 영향 대상인 모집자·`PENDING`·`ACCEPTED` 신청자에게만 아래 안전한 안내를 포함한다. 외부 발송·운영자 연락처·원문 사유는 이 응답에 포함하지 않는다.
+
+```json
+{
+  "supplyNotice": {
+    "code": "COURT_SUPPLY_WITHDRAWN",
+    "message": "코트 운영 사정으로 이 제휴 코트 세션이 취소됐어요.",
+    "occurredAt": "2026-08-28T08:30:00.000Z",
+    "delivery": "IN_APP"
+  }
+}
+```
+
 ### 22.2 운영자 측 후보 API
 
 ```text
 GET   /api/v1/operator/courts
 POST  /api/v1/operator/courts
+GET   /api/v1/operator/slots
 POST  /api/v1/operator/courts/{courtId}/slots
+PATCH /api/v1/operator/slots/{slotId}
 POST  /api/v1/operator/slots/{slotId}/publish
 POST  /api/v1/operator/slots/{slotId}/block
+POST  /api/v1/operator/slots/{slotId}/supply-incidents
 ```
 
 운영자 API는 자신의 Court·CourtSlot 공개 여부·공급 상태만 변경한다. `DRAFT_ACCESS_GRANTED`와 `PUBLISH_APPROVED` 신청자는 Court와 비공개 Slot 초안을 만들 수 있지만, 공개와 공개 Slot 중지는 `PUBLISH_APPROVED`만 할 수 있다. Slot 등록은 현장 최대 인원을 필수로 받으며 첫 등록 시 `courtUnitName`으로 실제 코트 면을 지정하거나 만든다. CourtUnit 별도 관리와 수정 API는 다음 단위로 남긴다. 공개한 Slot의 상태 변경은 안전한 상태 문구와 `statusChangedAt`을 일반 회원에게 반환하고, 내부 사유 원문은 반환하지 않는다. MatchApplication 수락·거절, 일반 사용자 예약 요청, 예약 승인 API를 제공하지 않는다.
@@ -1489,7 +1520,15 @@ POST /api/v1/operator/courts/{courtId}/slots
 }
 ```
 
-Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `POST /publish`는 빈 본문으로 이를 `PUBLIC`·`AVAILABLE`로 원자 전환하고, `POST /block`은 아직 Match에 연결되지 않은 `AVAILABLE` Slot만 `BLOCKED`로 전환한다. 상태 경쟁은 `409 COURT_SLOT_STATE_CONFLICT`, 시간 겹침은 `409 COURT_SLOT_OVERLAP`, 공개 권한 부재는 `403 OPERATOR_PUBLISH_APPROVAL_REQUIRED`다.
+Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /api/v1/operator/slots`는 본인 Slot의 날짜·상태 필터 목록과 연결 세션의 안전한 요약만 반환한다. `PATCH /api/v1/operator/slots/{slotId}`는 `DRAFT`의 전체 필드와 `expectedVersion`만 받고, `AVAILABLE` 이후에는 `409 COURT_SLOT_PUBLIC_IMMUTABLE`을 반환한다. `POST /publish`는 빈 본문으로 이를 `PUBLIC`·`AVAILABLE`로 원자 전환하고, `POST /block`은 아직 Match에 연결되지 않은 `AVAILABLE` Slot만 `BLOCKED`로 전환한다. `BLOCKED`에는 재공개 엔드포인트를 제공하지 않는다.
+
+`POST /api/v1/operator/slots/{slotId}/supply-incidents`는 `ALLOCATED` Slot에서만 운영상 문제를 접수한다.
+
+```json
+{ "code": "SCHEDULE_UNAVAILABLE", "expectedVersion": 4 }
+```
+
+`INFORMATION_REVIEW`는 검토 요청만 만들고 Slot·Match를 바꾸지 않는다. `SCHEDULE_UNAVAILABLE`, `FACILITY_CLOSED`, `SAFETY_RISK`, `NATURAL_DISASTER`는 확인 단계를 거친 실제 공급 불가로만 받으며, 서버는 Incident·`ALLOCATED → CANCELLED`·연결 `Match.CANCELLED`·모집자/PENDING/ACCEPTED 대상 인앱 안내를 하나의 트랜잭션으로 만든다. 이 API는 대체 시간 지정, 시간·가격 변경, 운영자 연락처 공개, 실시간 채팅을 제공하지 않는다. 운영자 귀책 철회가 정책 임계치에 도달하면 새 Slot 공개와 `AVAILABLE → ALLOCATED`는 `403 OPERATOR_SUPPLY_RESTRICTED`다. 상태 경쟁은 `409 COURT_SLOT_STATE_CONFLICT`, 시간 겹침은 `409 COURT_SLOT_OVERLAP`, 공개 권한 부재는 `403 OPERATOR_PUBLISH_APPROVAL_REQUIRED`다.
 
 ### 22.3 Pilot 전에 확정할 계약
 
@@ -1498,12 +1537,11 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `POST 
 - 사업자·증빙 원문 보관 기간과 삭제 절차, 재확인 알림 채널
 - 검증 공급자별 장애·할당량 초과 시 재시도와 수동 검토 전환 기준
 - 시작 전 세션 모집자 취소 시 `ALLOCATED` Slot을 다시 열 조건
-- 운영자가 `ALLOCATED` Slot을 중지·취소할 수 있는 시점과 연결 Match 안내 정책
-- 한 Slot의 활성 Partner Court Match 수 — Pilot 권장안은 한 건
-- Slot 공개 상태를 계속 유지하는 기간, 종료·취소 상태의 목록 정렬과 표시 정책
 - 코트 면별 현장 최대 인원과 시간 전환·정리 버퍼의 등록 기준
 - 운영자가 현장에서 확인할 세션 대표자 정보와 개인정보 최소 공개 범위
 - 코트 정보와 운영자 연락처 공개 범위
+- 인앱 안내 이외 푸시·문자·카카오 알림의 동의, 발송 계약, 실패 재시도와 긴급 운영 절차
+- 운영자 사진의 보관 기간·삭제·신고 절차와 업로드 활성화 시점
 
 ## 23. Court Commerce API 확장 방향
 
@@ -1549,11 +1587,14 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `POST 
 1. `PUBLISH_APPROVED`가 아닌 운영자의 Court·Slot 공개 시도
 2. 온보딩 미완료 사용자의 제휴 코트 세션 Slot 조회·개설 시도
 3. 같은 `AVAILABLE` Slot으로 동시에 두 Partner Court Match 생성 요청
-4. `ALLOCATED` Slot의 시간·가격·코트 수정 시도
+4. `AVAILABLE`·`ALLOCATED` Slot의 시간·가격·코트·정원·이용 안내 수정과 `BLOCKED` 재공개 시도
 5. 운영자가 MatchApplication 수락·거절 API를 호출하는 경우
 6. 참가자가 CourtSlot 상태 변경 API를 호출하는 경우
 7. `PARTNER_COURT` Match에 클라이언트가 코트명·주소·시간·비용을 함께 보내는 경우
 8. 이미 배정된 Slot의 재시도와 `clientRequestId` 멱등 응답
+9. `INFORMATION_REVIEW` 접수가 Slot·Match 상태를 바꾸지 않는 경우
+10. 실제 공급 불가 접수가 Incident·Slot 취소·Match 취소·대상 인앱 안내를 하나의 트랜잭션으로 만드는 경우
+11. 최근 30일 2회 또는 시작 24시간 이내 1회 운영자 귀책 철회 후 새 공개·세션 연결을 거절하는 경우
 
 ### 24.5 응답과 개인정보
 
@@ -1565,6 +1606,7 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `POST 
 6. Partner Court Match가 `Tennis Mate에서 준비한 코트예요`와 모집자 참가 신청 안내를 반환하는지 확인
 7. PENDING·REJECTED 사용자가 오픈채팅 링크를 받지 않는지 확인
 8. 모집자와 ACCEPTED 신청자만 오픈채팅 링크를 받는지 확인
+9. 공급 철회 인앱 안내가 모집자·PENDING·ACCEPTED에게만 반환되고 운영자 원문 사유·연락처가 없는지 확인
 
 ## 25. 확정 정책과 남은 확장 계약
 

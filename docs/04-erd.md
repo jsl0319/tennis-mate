@@ -617,6 +617,10 @@ erDiagram
     COURT ||--o{ COURT_IMAGE : displays
     COURT_UNIT ||--o{ COURT_SLOT : opens
     COURT_SLOT ||--o{ COURT_SLOT_STATUS_HISTORY : records
+    COURT_SLOT ||--o{ COURT_SUPPLY_INCIDENT : receives
+    MATCH ||--o{ COURT_SUPPLY_INCIDENT : affects
+    COURT_SUPPLY_INCIDENT ||--o{ MATCH_SUPPLY_NOTICE_RECIPIENT : notifies
+    COURT_OPERATOR_APPLICATION ||--o{ OPERATOR_SUPPLY_RESTRICTION : restricts
     COURT_SLOT ||--o{ MATCH : allocated_to_over_time
 
     COURT_OPERATOR_APPLICATION {
@@ -735,6 +739,39 @@ erDiagram
         varchar reason_code
         timestamptz created_at
     }
+
+    COURT_SUPPLY_INCIDENT {
+        uuid id PK
+        uuid court_slot_id FK
+        uuid match_id FK
+        uuid reporter_user_id FK
+        court_supply_incident_code code
+        court_supply_incident_impact impact
+        court_supply_incident_status status
+        boolean operator_attributable
+        varchar public_notice_code
+        timestamptz reported_at
+        timestamptz resolved_at
+    }
+
+    MATCH_SUPPLY_NOTICE_RECIPIENT {
+        uuid id PK
+        uuid incident_id FK
+        uuid recipient_user_id FK
+        supply_notice_audience audience
+        timestamptz delivered_at
+        timestamptz read_at
+    }
+
+    OPERATOR_SUPPLY_RESTRICTION {
+        uuid id PK
+        uuid operator_application_id FK
+        operator_supply_restriction_source source
+        varchar reason_code
+        timestamptz started_at
+        timestamptz cleared_at
+        uuid cleared_by_user_id FK
+    }
 ```
 
 ## 13. Court Partner 엔터티 상세
@@ -840,7 +877,7 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 
 `Court.normalizedVenueKey`는 연결된 신청의 정규화 장소 키와 일치해야 한다. 활성 또는 중지 상태의 Court에 같은 키가 존재하면 자동 공개를 허용하지 않는 부분 유일 인덱스를 둔다. 권리 관계가 확인된 공동 운영·명의 변경만 내부 검토의 명시적 결정으로 예외 처리한다.
 
-`CourtImage`는 운영자가 직접 제공한 사진만 저장한다. `privateObjectRef`, `altText`, `sortOrder`에 더해 대표 표시 여부를 두며, 카드에는 대표 1장만 사용한다. 외부 예약 Match는 Court 엔터티와 연결하지 않고 `Match.externalCourtImageObjectRef`로 모집자 제공 사진을 1장만 참조한다. 두 경우 모두 이미지 원본은 비공개 객체 저장소에 두고 API가 제한된 URL만 반환하며, 웹·지도 사진을 자동 수집하지 않는다.
+`CourtImage`는 운영자 사진 업로드 수직 단위에서만 활성화한다. 그 전에는 기본 코트 일러스트를 사용한다. 활성화 시 운영자가 직접 제공한 사진만 저장하고, `privateObjectRef`, `altText`, `sortOrder`에 더해 대표 표시 여부를 둔다. 카드에는 대표 1장만 사용한다. 외부 예약 Match는 Court 엔터티와 연결하지 않고 `Match.externalCourtImageObjectRef`로 모집자 제공 사진을 1장만 참조한다. 두 경우 모두 이미지 원본은 비공개 객체 저장소에 두고 API가 제한된 URL만 반환하며, 웹·지도 사진을 자동 수집하지 않는다.
 
 ### 13.4 CourtSlot
 
@@ -881,7 +918,7 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 
 #### CourtSlotStatusHistory
 
-공개 Slot의 상태 변경을 운영상 분쟁과 이용자 안내에 사용할 최소 감사 이력이다. `actor`는 `OPERATOR`, `SESSION_HOST`, `SYSTEM`, `ADMIN` 중 하나이며, `actorUserId`는 시스템 작업이면 NULL일 수 있다. `reasonCode`는 `OPERATOR_CANCELLED`, `HOST_CANCELLED`, `TIME_ELAPSED`, `REOPENED`처럼 안전한 코드만 저장하며 자유 입력 사유와 개인정보는 저장하지 않는다.
+공개 Slot의 상태 변경을 운영상 분쟁과 이용자 안내에 사용할 최소 감사 이력이다. `actor`는 `OPERATOR`, `SESSION_HOST`, `SYSTEM`, `ADMIN` 중 하나이며, `actorUserId`는 시스템 작업이면 NULL일 수 있다. `reasonCode`는 `OPERATOR_BLOCKED`, `SUPPLY_WITHDRAWN`, `TIME_ELAPSED`, `HOST_CANCELLED`처럼 안전한 코드만 저장하며 자유 입력 사유와 개인정보는 저장하지 않는다. `REOPENED`는 Pilot에서 사용하지 않는다.
 
 ### 13.5 Match 연결 확장
 
@@ -899,7 +936,23 @@ Court Partner 도입 시 `Match`에 다음 컬럼을 추가한다.
 - 연결 가능한 CourtSlot은 `AVAILABLE` 상태여야 하며 생성 트랜잭션 안에서 `ALLOCATED`가 됨
 - `PARTNER_COURT` Match의 `recruitCount + 1 <= CourtSlot.maxParticipantCount`를 생성 트랜잭션 안에서 검증
 
-제휴 코트의 명칭·주소·코트 면·시간·전체 비용은 연결된 CourtSlot과 Court에서 조회한다. Match 생성 이후 운영자·모집자 모두 시간과 비용을 직접 수정할 수 없다. 사용자 응답은 이 정보를 MatchDetailView에 조합해 반환하며, 예상 1인 비용은 기존 모집 인원 규칙으로 계산한다. 연결된 Match가 취소돼 Slot을 다시 열더라도, 기존 Match는 해당 Slot을 계속 참조하고 Slot 상태 이력으로 재개 경위를 남긴다.
+제휴 코트의 명칭·주소·코트 면·시간·전체 비용은 연결된 CourtSlot과 Court에서 조회한다. Match 생성 이후 운영자·모집자 모두 시간과 비용을 직접 수정할 수 없다. 사용자 응답은 이 정보를 MatchDetailView에 조합해 반환하며, 예상 1인 비용은 기존 모집 인원 규칙으로 계산한다. 연결된 Match가 취소돼도 기존 Match는 해당 Slot을 계속 참조한다. Pilot에서는 그 Slot을 자동 또는 수동으로 다시 `AVAILABLE`로 열지 않으며, 재공급은 새 `DRAFT`로만 시작한다.
+
+### 13.6 CourtSupplyIncident·MatchSupplyNoticeRecipient·OperatorSupplyRestriction
+
+`CourtSupplyIncident`는 `ALLOCATED` Slot에서 운영자가 실제 공급 불가나 운영상 문제를 접수한 기록이다. 일반 오류 요청은 `REQUESTED` 상태로 남기며 Slot·Match를 바꾸지 않는다. `SCHEDULE_UNAVAILABLE`, `FACILITY_CLOSED`, `SAFETY_RISK`, `NATURAL_DISASTER`만 `CANCEL_MATCH` 영향을 선택할 수 있다. 이 영향은 `SUPPLY_WITHDRAWN` 상태 이력, `CourtSlot.CANCELLED`, 연결 `Match.CANCELLED`, 대상 안내 생성까지 하나의 트랜잭션으로 처리한다.
+
+| 필드 | 규칙 |
+| --- | --- |
+| `code` | 안전한 사유 enum. 원문 사유는 참가자 응답·분석 이벤트에 저장하지 않음 |
+| `impact` | `NONE` 또는 `CANCEL_MATCH`. 시간·가격 변경 영향은 없음 |
+| `operatorAttributable` | `SCHEDULE_UNAVAILABLE` 등 운영자 귀책을 서버 규칙으로 판정. 재난·시설 안전 조치는 별도 집계 |
+| `publicNoticeCode` | 안전한 템플릿 코드. 참여자에게는 템플릿 문구만 반환 |
+| `status` | `REQUESTED`, `WITHDRAWN`, `REVIEWED`, `REJECTED` |
+
+`MatchSupplyNoticeRecipient`는 연결 Match의 모집자, `PENDING`, `ACCEPTED` 신청자에게 인앱 안내를 보여 주기 위한 최소 수신 이력이다. 연락처·운영자 원문 사유·내부 메모를 저장하거나 반환하지 않는다. `deliveredAt`은 인앱 안내 생성 시각이며, 푸시·문자·카카오 발송 성공을 뜻하지 않는다.
+
+`OperatorSupplyRestriction`은 신청 심사 상태와 분리된 새 공개 제한 감사 이력이다. 운영자 귀책 `WITHDRAWN`이 최근 30일 2회이거나 시작 24시간 이내 1회이면 `AUTOMATED` 제한을 만든다. 제한 중에는 새 Slot 공개와 `AVAILABLE → ALLOCATED`를 거절하지만, 다른 연결 세션을 자동 취소하지 않는다. 관리자만 검토 후 `clearedAt`, `clearedByUserId`를 기록해 제한을 해제한다.
 
 ## 14. Court Partner 동시성 제약
 
@@ -914,7 +967,7 @@ EXCLUDE USING gist (
   court_unit_id WITH =,
   tstzrange(starts_at, ends_at, '[)') WITH &&
 )
-WHERE (status IN ('DRAFT', 'AVAILABLE', 'ALLOCATED', 'BLOCKED', 'CANCELLED'));
+WHERE (status IN ('DRAFT', 'AVAILABLE', 'ALLOCATED'));
 ```
 
 Prisma schema로 직접 표현되지 않으면 SQL migration에 작성한다.
@@ -930,7 +983,7 @@ WHERE court_source = 'PARTNER_COURT'
   AND status IN ('OPEN', 'CLOSED');
 ```
 
-`COMPLETED`, `EXPIRED`, `CANCELLED` Match가 있더라도 공개 Slot은 상태와 이력을 유지한다. 과거 Match와 현재 세션은 분리하고, Slot을 다시 `AVAILABLE`로 전환하는 조건은 상태 이력에 기록한다. 이 문서는 자동 재개 조건을 확정하지 않으며, 승인 전에는 시스템이 임의로 재개하지 않는다.
+`COMPLETED`, `EXPIRED`, `CANCELLED` Match가 있더라도 공개 Slot은 상태와 이력을 유지한다. Pilot에서는 과거 Match가 생긴 Slot을 다시 `AVAILABLE`로 전환하지 않는다. 같은 시간 공급이 필요하면 새 Slot을 만들고, 과거 Slot은 상태·이력 조회용 기록으로 남긴다.
 
 ### 14.3 세션 개설 트랜잭션
 
@@ -953,13 +1006,11 @@ stateDiagram-v2
     AVAILABLE --> ALLOCATED: 일반 모집자의 세션 개설
     AVAILABLE --> BLOCKED: 운영 중지
     ALLOCATED --> ENDED: 이용 종료
-    ALLOCATED --> CANCELLED: 운영 취소
-    BLOCKED --> AVAILABLE: 재공개
-    CANCELLED --> AVAILABLE: 운영자 재개
+    ALLOCATED --> CANCELLED: 실제 공급 불가 긴급 철회
     DRAFT --> CANCELLED: 삭제 대신 취소
 ```
 
-`visibility`는 상태 전이와 독립적이며, 한 번 `PUBLIC`이 된 Slot은 이후 상태 전이에서도 `PUBLIC`을 유지한다. 한 번도 공개하지 않은 초안을 취소하면 `PRIVATE`를 유지할 수 있다. 세션 모집자가 시작 전 Match를 취소할 때 `ALLOCATED → AVAILABLE`로 되돌릴지 여부는 미확정이다. 구현 전 정책 승인이 필요하며, 승인 전에는 자동 재개하지 않는다. 운영자가 연결된 Slot 공급을 철회하면 `ALLOCATED → CANCELLED`와 연결 Match의 취소·안내를 같은 작업으로 처리해야 하며, 단순 `BLOCKED` 전환으로 대체하지 않는다.
+`visibility`는 상태 전이와 독립적이며, 한 번 `PUBLIC`이 된 Slot은 이후 상태 전이에서도 `PUBLIC`을 유지한다. 한 번도 공개하지 않은 초안을 취소하면 `PRIVATE`를 유지할 수 있다. `AVAILABLE`의 오류는 `BLOCKED` 후 새 초안으로만 정정한다. `BLOCKED`·`CANCELLED`의 재공개와 재개는 Pilot에서 제공하지 않는다. 세션 모집자가 시작 전 Match를 취소했을 때의 `ALLOCATED` 처리도 자동 전환하지 않으며, 별도 정책이 확정되기 전에는 현재 상태·이력만 유지한다. 운영자가 연결된 Slot 공급을 철회하면 `ALLOCATED → CANCELLED`와 연결 Match 취소·대상 인앱 안내·사후 검토를 같은 작업으로 처리해야 하며, 단순 `BLOCKED` 전환으로 대체하지 않는다.
 
 ## 16. Court Commerce ERD
 
@@ -1052,9 +1103,12 @@ WHERE id = :id AND version = :expectedVersion
 2. 같은 Slot으로 동시에 들어온 두 Partner Court Match 생성 요청
 3. `AVAILABLE → ALLOCATED`와 Match 생성이 함께 실패 없이 완료되는지
 4. `recruitCount + 1`이 `maxParticipantCount`를 넘는 Match 생성 거절
-5. `ALLOCATED` Slot의 시간·가격 수정 거절
-6. 운영자가 `ALLOCATED` Slot을 취소할 때 연결 Match 안내와 상태 이력 기록
-7. 시작 시간이 지나 Match 종료와 Slot `ENDED` 전환, 공개 상태 유지
+5. `AVAILABLE`·`ALLOCATED` Slot의 사용자 표시 필드 수정과 재공개 거절
+6. `BLOCKED` Slot과 같은 CourtUnit·시간으로 새 `DRAFT`를 만들 수 있는지
+7. 운영자가 `ALLOCATED` Slot을 긴급 철회할 때 연결 Match 취소·대상 인앱 안내·상태 이력이 하나의 트랜잭션으로 기록되는지
+8. 일반 오류 접수가 Slot·Match 상태를 바꾸지 않는지
+9. 최근 30일 2회 또는 시작 24시간 이내 1회의 운영자 귀책 철회가 새 공개 제한을 만들고, 기존 연결 세션은 유지하는지
+10. 시작 시간이 지나 Match 종료와 Slot `ENDED` 전환, 공개 상태 유지
 
 ## 21. 남은 후속 결정과 데이터 영향
 
@@ -1067,7 +1121,8 @@ WHERE id = :id AND version = :expectedVersion
 | 외부 코트 정보 오류 | 모집자 책임·운영 문의 | 신고·정정 이력 추가 가능 |
 | Slot 활성 세션 수 | 한 건 권장 | 다중 세션 허용 시 자원 단위·정원 모델 재설계 필요 |
 | Slot-Match 연결 | 활성 Match 한 건, 과거 Match 참조 보존 | 다중 동시 모집 허용 시 연결 테이블과 용량 배분 필요 |
-| 세션 취소 연쇄 처리 | 정책 미정 | Slot 자동 재공개 또는 운영자 검토 상태 필요 |
+| 운영자 긴급 공급 철회 | `ALLOCATED → CANCELLED`, Match 취소·인앱 안내·감사 이력 | CourtSupplyIncident·수신 이력·공개 제한 감사 이력 |
+| 세션 모집자 취소 후 Slot 처리 | 자동 재공개하지 않음 | 정책 확정 시 별도 상태 전이 또는 새 Slot 생성 규칙 필요 |
 | 공개 Slot 상태 보존 | 한 번 공개하면 상태와 이력을 계속 공개 | 상태 이력, `visibility`, 공개 응답 DTO 필요 |
 | 현장 최대 인원 | Slot별 `maxParticipantCount` 필수 | Partner Match 생성 시 정원 검증 필요 |
 | 운영자 직원 계정 | Pilot 소유자 한 명 | 필요 시 CourtOperatorMember 추가 |
@@ -1086,12 +1141,13 @@ WHERE id = :id AND version = :expectedVersion
 ### Court Partner Pilot
 
 1. CourtOperatorApplication·VerificationAttempt·Review·CourtOperator와 공개 권한 분리
-2. Court·CourtUnit·Amenity·Image
+2. Court·CourtUnit·Amenity와 사진 없는 기본 일러스트
 3. CourtSlot 공개 여부·상태 이력·현장 최대 인원, 시간 중복 제약 및 `PUBLISH_APPROVED` 공개 게이트
 4. `Match.courtSlotId` 확장과 정원 검증, `AVAILABLE → ALLOCATED` 트랜잭션
 5. Partner Court Match 탐색·기존 참가 신청 재사용
-6. 운영자 재확인·중지와 연결 세션 안내 정책 적용
-7. 세션 취소와 Slot 재공개 정책 적용 — 사용자 승인 후
+6. 공개 Slot 불변·공개 중지·새 초안 정정 규칙과 운영자 재확인 적용
+7. CourtSupplyIncident·대상 인앱 안내·반복 철회 공개 제한 적용
+8. 세션 모집자 취소 후 Slot 처리 — 사용자 승인 후
 
 ## 23. 다음 단계
 
