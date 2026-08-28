@@ -16,6 +16,7 @@ const draftAccessStatuses = ["DRAFT_ACCESS_GRANTED", "PUBLISH_APPROVED"] as cons
 const courtInclude = {
   region: true,
   units: { orderBy: { name: "asc" } },
+  images: { where: { status: "ATTACHED", isRepresentative: true }, select: { id: true }, take: 1 },
   operatorApplication: { select: { id: true, applicantUserId: true, status: true } },
 } satisfies Prisma.CourtInclude;
 
@@ -25,6 +26,7 @@ const courtSlotInclude = {
       court: {
         include: {
           region: true,
+          images: { where: { status: "ATTACHED", isRepresentative: true }, select: { id: true }, take: 1 },
           operatorApplication: { select: { id: true, applicantUserId: true, status: true } },
         },
       },
@@ -83,6 +85,8 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
   const session = slot.match
     ? { matchId: slot.match.id, status: slot.match.status, statusLabel: sessionStatusLabels[slot.match.status] }
     : null;
+  const court = slot.courtUnit.court;
+  const representativeImage = court.images?.[0];
 
   return {
     id: slot.id,
@@ -96,12 +100,14 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
     maxParticipantCount: slot.maxParticipantCount,
     usageNote: slot.usageNote,
     court: {
-      id: slot.courtUnit.court.id,
-      name: slot.courtUnit.court.name,
-      address: slot.courtUnit.court.address,
+      id: court.id,
+      name: court.name,
+      address: court.address,
       courtNumber: slot.courtUnit.name,
-      region: { code: slot.courtUnit.court.region.code, name: slot.courtUnit.court.region.name },
-      image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
+      region: { code: court.region.code, name: court.region.name },
+      image: representativeImage
+        ? { url: `/api/v1/partner-courts/${court.id}/image`, sourceLabel: "운영자 제공 사진", fallback: "TENNIS_COURT_ILLUSTRATION" as const }
+        : { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
     },
     session,
     availableAction: canOpenSession ? "OPEN_SESSION" : slot.status === "ALLOCATED" && session ? "VIEW_SESSION" : "READ_ONLY",

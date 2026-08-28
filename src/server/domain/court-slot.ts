@@ -31,6 +31,24 @@ export type CourtSlotCreateInput = z.infer<typeof courtSlotCreateInputSchema>;
 
 export const courtSlotIdSchema = z.string().uuid("코트 시간 정보를 다시 선택해 주세요.");
 
+export const courtIdSchema = z.string().uuid("코트 정보를 다시 선택해 주세요.");
+
+export const courtImageIdSchema = z.string().uuid("코트 사진을 다시 선택해 주세요.");
+
+export const operatorCourtImageSaveInputSchema = z.object({
+  imageIds: z.array(courtImageIdSchema).min(1, "대표 사진을 한 장 이상 저장해 주세요.").max(3, "코트 사진은 최대 3장까지 저장할 수 있어요."),
+  representativeImageId: courtImageIdSchema,
+}).superRefine((input, context) => {
+  if (new Set(input.imageIds).size !== input.imageIds.length) {
+    context.addIssue({ code: "custom", path: ["imageIds"], message: "같은 코트 사진을 한 번만 선택해 주세요." });
+  }
+  if (!input.imageIds.includes(input.representativeImageId)) {
+    context.addIssue({ code: "custom", path: ["representativeImageId"], message: "대표 사진은 저장할 사진 중에서 선택해 주세요." });
+  }
+});
+
+export type OperatorCourtImageSaveInput = z.infer<typeof operatorCourtImageSaveInputSchema>;
+
 export const courtSlotUpdateInputSchema = courtSlotCreateInputSchema.extend({
   expectedVersion: z.number().int().positive("시간 정보를 다시 불러와 주세요."),
 });

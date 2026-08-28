@@ -1494,7 +1494,23 @@ POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
 
 `GET /partner-session-slots/available`은 온보딩 완료 일반 회원이 세션을 열 때만 사용한다. `visibility = PUBLIC`, `status = AVAILABLE`, 시작 전인 Slot의 코트·시간·비용·현장 최대 인원·이용 안내만 반환하며, 응답의 행동 문구는 `이 시간으로 세션 열기`다. 참가자에게 보이는 코트 예약 탐색 API가 아니다.
 
-운영자 사진 기능이 활성화되기 전에는 `PublicCourtSlotView.court.image.url`과 `sourceLabel`이 모두 `null`이고 클라이언트는 `fallback = TENNIS_COURT_ILLUSTRATION`을 표시한다. 사진 없음은 공급 상태, 예약 가능 여부 또는 Tennis Mate의 예약 보증을 의미하지 않는다.
+저장된 대표 사진이 있으면 `PublicCourtSlotView.court.image.url`은 `/api/v1/partner-courts/{courtId}/image`, `sourceLabel`은 `운영자 제공 사진`이다. 이 URL은 비공개 객체 URL이 아니라 인증·온보딩을 확인하는 같은 출처의 읽기 API이며, 사진이 없으면 두 값은 `null`이고 클라이언트는 `fallback = TENNIS_COURT_ILLUSTRATION`을 표시한다. 사진 없음과 사진 자체는 공급 상태, 예약 가능 여부 또는 Tennis Mate의 예약 보증을 의미하지 않는다.
+
+### 22.0.1 운영자 대표 코트 사진 API
+
+```text
+GET    /api/v1/operator/courts/{courtId}/images
+POST   /api/v1/operator/courts/{courtId}/images             multipart/form-data: file
+PUT    /api/v1/operator/courts/{courtId}/images             { imageIds, representativeImageId }
+GET    /api/v1/operator/courts/{courtId}/images/{imageId}   protected stream
+DELETE /api/v1/operator/courts/{courtId}/images/{imageId}
+GET    /api/v1/partner-courts/{courtId}/image                protected representative stream
+GET    /api/cron/cleanup-operator-court-images
+```
+
+운영자 관리 API는 `PUBLISH_APPROVED`이며 해당 Court를 소유한 사용자에게만 허용한다. `POST`는 JPEG·PNG·WebP 한 파일, 10 MiB 이하, 서버 시그니처 검사를 통과한 비공개 `PENDING` 업로드의 불투명 ID만 반환한다. `PUT`은 같은 소유자·Court의 `PENDING` 또는 `ATTACHED` 사진만 최대 3장 원자적으로 저장하며 대표는 저장 목록에 반드시 포함된다. 목록에서 제외하거나 `DELETE`한 사진은 즉시 `REPLACED`로 전환해 공개·운영자 목록에서 제거한다. 원본 객체 URL·저장 경로·파일명은 어떤 응답에도 포함하지 않는다.
+
+`GET /partner-courts/{courtId}/image`는 온보딩을 마친 이용자에게 공개 Slot·Partner Court Match에 쓰이는 `ATTACHED` 대표 사진만 `Cache-Control: private`로 스트림한다. 운영자 전용 개별 사진 읽기도 소유권을 확인한 뒤 같은 방식으로 스트림한다. `PENDING`·`REPLACED`·삭제된 사진, 비승인 운영자 Court, 권한 없는 요청은 존재 여부를 구분하지 않는 오류로 처리한다. 정리 작업은 24시간 지난 `PENDING`, 즉시 삭제 대상 `REPLACED`, 향후 비활성화·승인 취소에서 30일 보관 기한이 지난 `ATTACHED` 사진을 원자적으로 점유한 뒤 비공개 객체와 메타데이터를 삭제한다.
 
 `POST /api/v1/matches`의 Pilot 확장은 다음을 받는다.
 
@@ -1580,7 +1596,7 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /
 - 운영자가 현장에서 확인할 세션 대표자 정보와 개인정보 최소 공개 범위
 - 코트 정보와 운영자 연락처 공개 범위
 - 인앱 안내 이외 푸시·문자·카카오 알림의 동의, 발송 계약, 실패 재시도와 긴급 운영 절차
-- 운영자 사진의 보관 기간·삭제·신고 절차와 업로드 활성화 시점
+- 운영자 사진의 신고·권리 침해 처리 절차
 
 ## 23. Court Commerce API 확장 방향
 

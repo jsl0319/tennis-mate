@@ -88,6 +88,14 @@ enum CourtImageUploadStatus {
   DELETED
 }
 
+enum CourtImageStatus {
+  PENDING
+  ATTACHED
+  REPLACED
+  CLEANUP_PENDING
+  DELETED
+}
+
 enum CourtSlotVisibility {
   PRIVATE
   PUBLIC
@@ -212,6 +220,7 @@ model User {
   hostedMatches        Match[]                    @relation("MatchHost")
   matchApplications    MatchApplication[]
   courtImageUploads    CourtImageUpload[]
+  courtImages          CourtImage[]
   operatorApplications CourtOperatorApplication[] @relation("OperatorApplicationApplicant")
   operatorApplicationEvidenceUploads OperatorApplicationEvidenceUpload[] @relation("OperatorApplicationEvidenceUploadOwner")
   operatorApplicationReviews OperatorApplicationReview[] @relation("OperatorApplicationReviewer")
@@ -493,9 +502,36 @@ model Court {
   operatorApplication CourtOperatorApplication @relation(fields: [operatorApplicationId], references: [id], onDelete: Restrict)
   region              Region                   @relation(fields: [regionCode], references: [code], onDelete: Restrict)
   units               CourtUnit[]
+  images              CourtImage[]
 
   @@index([regionCode, createdAt])
   @@map("courts")
+}
+
+model CourtImage {
+  id               String           @id @default(uuid()) @db.Uuid
+  courtId          String           @map("court_id") @db.Uuid
+  ownerUserId      String           @map("owner_user_id") @db.Uuid
+  privateObjectRef String           @unique @map("private_object_ref") @db.VarChar(500)
+  contentType      String           @map("content_type") @db.VarChar(100)
+  byteSize         Int              @map("byte_size")
+  status           CourtImageStatus @default(PENDING)
+  sortOrder        Int              @default(0) @map("sort_order")
+  isRepresentative Boolean          @default(false) @map("is_representative")
+  attachedAt       DateTime?        @map("attached_at") @db.Timestamptz(6)
+  expiresAt        DateTime?        @map("expires_at") @db.Timestamptz(6)
+  cleanupClaimedAt DateTime?        @map("cleanup_claimed_at") @db.Timestamptz(6)
+  deletedAt        DateTime?        @map("deleted_at") @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  court Court @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  owner User  @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+
+  @@index([courtId, status, sortOrder])
+  @@index([ownerUserId, status, createdAt])
+  @@index([status, expiresAt])
+  @@map("court_images")
 }
 
 model CourtUnit {

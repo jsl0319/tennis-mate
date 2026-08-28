@@ -733,10 +733,19 @@ erDiagram
     COURT_IMAGE {
         uuid id PK
         uuid court_id FK
+        uuid owner_user_id FK
         varchar private_object_ref
-        varchar alt_text
+        varchar content_type
+        int byte_size
+        court_image_status status
         int sort_order
         boolean is_representative
+        timestamptz attached_at
+        timestamptz expires_at
+        timestamptz cleanup_claimed_at
+        timestamptz deleted_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     COURT_SLOT {
@@ -804,7 +813,7 @@ erDiagram
 
 ### 13.0 Pilot 현재 수직 단위 — 운영자 신청, 코트 시간 공급, 제휴 세션 연결
 
-Court Partner Pilot의 현재 구현은 `CourtOperatorApplication`·자동 확인 시도 이력·내부 심사 감사 이력·필수 사업자등록증 비공개 업로드에 더해, 비공개 `Court`·`CourtUnit`·`CourtSlot` 초안과 공개된 Slot의 `PARTNER_COURT` Match 연결까지 활성화한다. 일반 회원은 공개 Slot을 읽기 전용으로 보거나 `AVAILABLE` Slot을 선택해 세션을 열 수 있다. 결제·환불·정산, 운영자 사진, 조건부 운영 권한 보완 증빙과 실제 외부 확인 제공자 호출은 이 단위에 포함하지 않는다.
+Court Partner Pilot의 현재 구현은 `CourtOperatorApplication`·자동 확인 시도 이력·내부 심사 감사 이력·필수 사업자등록증 비공개 업로드에 더해, 비공개 `Court`·`CourtUnit`·`CourtSlot` 초안과 공개된 Slot의 `PARTNER_COURT` Match 연결, 공개 승인 운영자의 대표 코트 사진까지 활성화한다. 일반 회원은 공개 Slot을 읽기 전용으로 보거나 `AVAILABLE` Slot을 선택해 세션을 열 수 있다. 결제·환불·정산, Court 비활성화 상태, 조건부 운영 권한 보완 증빙과 실제 외부 확인 제공자 호출은 이 단위에 포함하지 않는다.
 
 이 단위가 해결하는 문제는 실제 코트 운영자가 등록을 시작한 뒤 심사 진행 상황과 다음 행동을 알 수 없고, 승인 전 코트 시간이 이용자에게 공개되는 위험이 있다는 점이다. 공개 권한을 `PUBLISH_APPROVED`로 분리해, 검증 전 입력 정보가 이용자 공개나 제휴 코트 세션 연결로 이어지지 않게 한다. `DRAFT_ACCESS_GRANTED` 또는 `PUBLISH_APPROVED` 신청자는 비공개 Court·Slot 초안만 만들 수 있고, 공개 전환은 후자만 할 수 있다. 더 단순한 대안인 신청 상태 문자열 하나만 저장하는 방식은 사업자 유효와 장소 운영 권한을 구분할 수 없어 사용하지 않는다.
 
@@ -816,6 +825,7 @@ Court Partner Pilot의 현재 구현은 `CourtOperatorApplication`·자동 확�
 - 신청 상태·사업자 확인 상태·장소 확인 상태 enum
 - 신청자별 현재 진행 중인 신청을 빠르게 찾는 인덱스와 사업자·장소 중복 검토용 HMAC 키 인덱스
 - `Court`, `CourtUnit`, `CourtSlot`, `CourtSlotStatusHistory`, `Match.courtSlotId`
+- `CourtImage`, 대표 1장 부분 유일 인덱스, 미연결·교체·만료 사진 정리 상태
 - `PARTNER_COURT` source, Slot 공개/공급 상태 enum, 동일 CourtUnit 활성 Slot 시간 겹침 방지 제약
 
 `verificationInputRef`는 사업자등록번호·개업일·대표자명 원문을 담지 않는 비공개 저장소 참조다. 실제 비공개 저장소와 암호화 키가 배포 환경에 준비되기 전에는 원문을 DB, 로그, 분석 이벤트에 저장하지 않는다. 따라서 첫 구현의 기본 `ManualVerificationProvider`는 외부 사업자·주소·장소 확인을 호출하지 않고 안전한 `UNAVAILABLE` 결과만 돌려준다. 테스트에서만 주입하는 fake provider가 상태 전이를 검증한다.
@@ -924,7 +934,25 @@ Pilot에서는 한 User가 한 운영자 계정의 소유자가 되는 단순한
 
 `Court.normalizedVenueKey`는 연결된 신청의 정규화 장소 키와 일치해야 한다. 활성 또는 중지 상태의 Court에 같은 키가 존재하면 자동 공개를 허용하지 않는 부분 유일 인덱스를 둔다. 권리 관계가 확인된 공동 운영·명의 변경만 내부 검토의 명시적 결정으로 예외 처리한다.
 
-`CourtImage`는 운영자 사진 업로드 수직 단위에서만 활성화한다. 그 전에는 공개 Slot·제휴 코트 Match 모두 동일한 기본 코트 일러스트를 `court.image.fallback = TENNIS_COURT_ILLUSTRATION`으로 표시한다. 활성화 시 운영자가 직접 제공한 사진만 저장하고, `privateObjectRef`, `altText`, `sortOrder`에 더해 대표 표시 여부를 둔다. 카드에는 대표 1장만 사용한다. 외부 예약 Match는 Court 엔터티와 연결하지 않고 `Match.externalCourtImageObjectRef`로 모집자 제공 사진을 1장만 참조한다. 두 경우 모두 이미지 원본은 비공개 객체 저장소에 두고 API가 제한된 URL만 반환하며, 웹·지도 사진을 자동 수집하지 않는다.
+`CourtImage`는 승인된 운영자의 시설 사진 업로드를 위한 별도 엔터티다. 외부 예약 사진의 `CourtImageUpload`과 소유권·연결 대상·보관 수명을 공유하지 않는다. 운영자가 직접 제공하거나 사용 권한이 있는 사진만 저장하고, 사진 원본은 비공개 객체 저장소에 둔다. 카드와 상세에는 `ATTACHED` 대표 1장만 보호된 API URL과 `운영자 제공 사진` 출처로 표시한다. 사진이 없으면 `court.image.fallback = TENNIS_COURT_ILLUSTRATION`을 쓴다.
+
+| 컬럼 | 타입 | 필수 | 규칙 |
+| --- | --- | ---: | --- |
+| `id` | UUID | O | PK |
+| `courtId` | UUID | O | `Court` FK |
+| `ownerUserId` | UUID | O | 해당 Court를 소유한 운영자 |
+| `privateObjectRef` | varchar(500) | O | 비공개 객체 참조. DTO·로그에 반환하지 않음 |
+| `contentType` | varchar(100) | O | JPEG, PNG, WebP만 허용 |
+| `byteSize` | int | O | 10 MiB 이하 |
+| `status` | CourtImageStatus | O | `PENDING`, `ATTACHED`, `REPLACED`, `CLEANUP_PENDING`, `DELETED` |
+| `sortOrder` | int | O | 연결된 사진의 고정 표시 순서, 0부터 |
+| `isRepresentative` | boolean | O | `ATTACHED` 사진 중 최대 1장 |
+| `attachedAt` | timestamptz | X | 사진 저장 완료 시각 |
+| `expiresAt` | timestamptz | X | 향후 Court 비활성화·승인 취소 후 30일 정리 시각 |
+| `cleanupClaimedAt` | timestamptz | X | 정리 작업 점유 시각 |
+| `deletedAt` | timestamptz | X | 객체 삭제 완료 시각 |
+
+사진 선택은 먼저 `PENDING`을 만들고, 저장 시 소유자·Court·상태를 서버 트랜잭션에서 다시 확인해 최대 3장을 `ATTACHED`로 전환한다. 저장 목록에서 빠진 기존 사진과 사용자가 제거한 사진은 `REPLACED`로 전환해 즉시 공개에서 제외한다. 미연결 `PENDING`은 24시간 뒤, `REPLACED`는 다음 정리 작업에서 객체와 메타데이터를 삭제한다. Court 비활성화·운영자 승인 취소 상태가 아직 구현돼 있지 않으므로 이번 단위에서는 해당 전환을 추가하지 않되, 이후 전환은 모든 `ATTACHED` 사진의 `expiresAt`을 30일 뒤로 설정해야 한다.
 
 ### 13.4 CourtSlot
 
@@ -1158,6 +1186,8 @@ WHERE id = :id AND version = :expectedVersion
 9. 최근 30일 2회 또는 시작 24시간 이내 1회의 운영자 귀책 철회가 새 공개 제한을 만들고, 기존 연결 세션은 유지하는지
 10. 시작 시간이 지나 Match 종료와 Slot `ENDED` 전환, 공개 상태 유지
 11. 세션 모집자 취소 뒤 Slot이 자동 재공개되지 않고, 운영자가 취소된 Match 연결을 확인한 경우에만 `ALLOCATED → BLOCKED` 후 같은 시간의 새 `DRAFT`를 만들 수 있는지
+12. 공개 승인 운영자만 자신의 Court 사진을 JPEG·PNG·WebP 10 MiB 이하로 올리고, 원자 저장에서 최대 3장·대표 1장이 유지되는지
+13. 미연결 사진 24시간·제거/교체 사진 즉시·향후 비활성화 만료 사진이 비공개 객체 삭제 전에 원자적으로 점유되는지
 
 ## 21. 남은 후속 결정과 데이터 영향
 
@@ -1191,7 +1221,7 @@ WHERE id = :id AND version = :expectedVersion
 ### Court Partner Pilot
 
 1. CourtOperatorApplication·VerificationAttempt·내부 심사자 역할·Review 감사 이력과 공개 권한 분리
-2. Court·CourtUnit·Amenity와 사진 없는 기본 일러스트
+2. Court·CourtUnit·Amenity와 기본 일러스트, 공개 승인 운영자의 최대 3장 대표 코트 사진
 3. CourtSlot 공개 여부·상태 이력·현장 최대 인원, 시간 중복 제약 및 `PUBLISH_APPROVED` 공개 게이트
 4. `Match.courtSlotId` 확장과 정원 검증, `AVAILABLE → ALLOCATED` 트랜잭션
 5. Partner Court Match 탐색·기존 참가 신청 재사용

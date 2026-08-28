@@ -2,7 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { matchCreateInputSchema } from "./match";
-import { createMatch, getMatches, reconcileStartedMatches, rejectApplication } from "./match-service";
+import { createMatch, getMatchDetail, getMatches, reconcileStartedMatches, rejectApplication } from "./match-service";
 
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
 const futureEndsAt = new Date("2030-01-02T03:00:00.000Z");
@@ -377,6 +377,41 @@ describe("match service operation safeguards", () => {
         ],
       }),
     }));
+  });
+
+  it("shows a partner court facility photo through the protected route in match detail", async () => {
+    const match = makeMatch({
+      courtSource: "PARTNER_COURT",
+      courtSlotId: "slot-id",
+      totalCourtFeeKrw: 40_000,
+      courtSlot: {
+        id: "slot-id",
+        courtUnit: {
+          name: "2번 코트",
+          court: { id: "court-id", name: "마포 테니스파크", address: "서울 마포구", images: [{ id: "representative-image-id" }] },
+        },
+      },
+    });
+    const transaction = {
+      match: { findUnique: vi.fn().mockResolvedValue({ id: "match-id", status: "OPEN", startsAt: futureStartsAt, applications: [] }) },
+      matchApplication: { updateMany: vi.fn() },
+    };
+    const prisma = {
+      match: { findUnique: vi.fn().mockResolvedValue(match) },
+      matchSupplyNoticeRecipient: { findFirst: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof getMatchDetail>[0];
+
+    await expect(getMatchDetail(prisma, viewer, "match-id")).resolves.toMatchObject({
+      court: {
+        source: "PARTNER_COURT",
+        sourceLabel: "Tennis Mate에서 준비한 코트예요",
+        image: {
+          url: "/api/v1/partner-courts/court-id/image",
+          sourceLabel: "운영자 제공 사진",
+        },
+      },
+    });
   });
 
   it("reports the started matches transitioned by the shared reconciliation function", async () => {

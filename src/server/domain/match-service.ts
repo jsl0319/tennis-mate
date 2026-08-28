@@ -42,7 +42,15 @@ const matchInclude = {
   externalCourtImageUpload: { select: { id: true } },
   courtSlot: {
     include: {
-      courtUnit: { include: { court: true } },
+      courtUnit: {
+        include: {
+          court: {
+            include: {
+              images: { where: { status: "ATTACHED", isRepresentative: true }, select: { id: true }, take: 1 },
+            },
+          },
+        },
+      },
     },
   },
 } satisfies Prisma.MatchInclude;
@@ -141,6 +149,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
 
   if (match.courtSource === "PARTNER_COURT") {
     const court = match.courtSlot?.courtUnit.court;
+    const representativeImage = court?.images?.[0];
     return {
       source: match.courtSource,
       sourceLabel: "Tennis Mate에서 준비한 코트예요",
@@ -148,7 +157,9 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
       name: court?.name ?? null,
       address: court?.address ?? null,
       courtNumber: match.courtSlot?.courtUnit.name ?? null,
-      image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
+      image: representativeImage && court
+        ? { url: `/api/v1/partner-courts/${court.id}/image`, sourceLabel: "운영자 제공 사진", fallback: "TENNIS_COURT_ILLUSTRATION" as const }
+        : { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" as const },
     };
   }
 

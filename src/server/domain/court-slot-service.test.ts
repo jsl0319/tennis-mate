@@ -146,6 +146,31 @@ describe("Court Partner time supply authorization and state transitions", () => 
     }));
   });
 
+  it("returns only the saved representative facility photo through the protected public route", async () => {
+    const publicSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "AVAILABLE",
+      courtUnit: {
+        ...ownedSlot("PUBLISH_APPROVED").courtUnit,
+        court: { ...ownedSlot("PUBLISH_APPROVED").courtUnit.court, images: [{ id: "representative-image-id" }] },
+      },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(publicSlot) },
+    } as unknown as Parameters<typeof getPublicCourtSlot>[0];
+
+    await expect(getPublicCourtSlot(prisma, "slot-id")).resolves.toMatchObject({
+      court: {
+        image: {
+          url: "/api/v1/partner-courts/court-id/image",
+          sourceLabel: "운영자 제공 사진",
+          fallback: "TENNIS_COURT_ILLUSTRATION",
+        },
+      },
+    });
+  });
+
   it("lets only the operator confirm a host-cancelled allocated slot as blocked without changing the cancelled match", async () => {
     const allocatedSlot = {
       ...ownedSlot("PUBLISH_APPROVED"),
