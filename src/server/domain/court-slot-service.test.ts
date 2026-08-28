@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { courtSlotCreateInputSchema, courtSlotUpdateInputSchema, courtSupplyIncidentInputSchema } from "./court-slot";
-import { createCourt, createCourtSlot, getPublicCourtSlot, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
+import { blockCourtSlot, createCourt, createCourtSlot, getPublicCourtSlot, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
 
 const viewer = { id: "operator-user-id" };
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
@@ -144,6 +144,82 @@ describe("Court Partner time supply authorization and state transitions", () => 
     expect(prisma.courtSlot.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "slot-id", visibility: "PUBLIC" },
     }));
+  });
+
+  it("lets only the operator confirm a host-cancelled allocated slot as blocked without changing the cancelled match", async () => {
+    const allocatedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "ALLOCATED",
+      version: 4,
+      match: { id: "match-id", hostUserId: "host-user-id", status: "CANCELLED" },
+    };
+    const blockedSlot = { ...allocatedSlot, status: "BLOCKED", version: 5, statusChangedAt: new Date("2026-01-03T00:00:00.000Z") };
+    const transaction = {
+      courtSlot: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(blockedSlot),
+      },
+      courtSlotStatusHistory: { create: vi.fn().mockResolvedValue({ id: "history-id" }) },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(allocatedSlot) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof blockCourtSlot>[0];
+
+    const result = await blockCourtSlot(prisma, viewer, "slot-id");
+
+    expect(result).toMatchObject({ status: "BLOCKED", availableAction: "READ_ONLY" });
+    expect(transaction.courtSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: "ALLOCATED", version: 4 }),
+      data: expect.objectContaining({ status: "BLOCKED" }),
+    }));
+    expect(transaction.courtSlotStatusHistory.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ fromStatus: "ALLOCATED", toStatus: "BLOCKED", reasonCode: "SESSION_HOST_CANCELLED_CONFIRMED" }),
+    }));
+  });
+
+  it("does not let an operator block an allocated slot while its session is still active", async () => {
+    const allocatedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "ALLOCATED",
+      match: { id: "match-id", hostUserId: "host-user-id", status: "OPEN" },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(allocatedSlot) },
+      $transaction: vi.fn(),
+    } as unknown as Parameters<typeof blockCourtSlot>[0];
+
+    await expect(blockCourtSlot(prisma, viewer, "slot-id")).rejects.toMatchObject({
+      code: "COURT_SLOT_STATE_CONFLICT",
+      status: 409,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a competing confirmation after another operator action already blocked the cancelled session slot", async () => {
+    const allocatedSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      visibility: "PUBLIC",
+      status: "ALLOCATED",
+      version: 4,
+      match: { id: "match-id", hostUserId: "host-user-id", status: "CANCELLED" },
+    };
+    const transaction = {
+      courtSlot: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      courtSlotStatusHistory: { create: vi.fn() },
+    };
+    const prisma = {
+      courtSlot: { findFirst: vi.fn().mockResolvedValue(allocatedSlot) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof blockCourtSlot>[0];
+
+    await expect(blockCourtSlot(prisma, viewer, "slot-id")).rejects.toMatchObject({
+      code: "COURT_SLOT_STATE_CONFLICT",
+      status: 409,
+    });
+    expect(transaction.courtSlotStatusHistory.create).not.toHaveBeenCalled();
   });
 
   it("keeps the slot and match unchanged for a general information review request", async () => {

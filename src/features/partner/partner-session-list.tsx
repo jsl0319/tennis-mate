@@ -53,10 +53,11 @@ export function PartnerSessionList() {
 }
 
 function PublicSlotCard({ slot }: { slot: PublicCourtSlot }) {
+  const isCancelledSession = slot.session?.status === "CANCELLED";
   const stateText = slot.availableAction === "OPEN_SESSION"
     ? "세션을 열 수 있어요"
     : slot.availableAction === "VIEW_SESSION"
-      ? "세션 모집 중"
+      ? isCancelledSession ? "세션이 취소됐어요" : "세션 모집 중"
       : "새 세션 연결이 중지됐어요";
 
   return <article className="overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white shadow-sm">
@@ -69,7 +70,7 @@ function PublicSlotCard({ slot }: { slot: PublicCourtSlot }) {
       {slot.availableAction === "READ_ONLY" ? <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">상태 갱신 · {formatStatusChangedAt(slot.statusChangedAt)}</p> : <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">자세히 보기 →</p>}
     </Link>
     {slot.availableAction === "OPEN_SESSION" ? <div className="border-t border-[var(--tm-border-subtle)] p-3"><Link className="flex min-h-12 items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" href={`/partner-sessions/open?slotId=${encodeURIComponent(slot.id)}`}>이 시간으로 세션 열기</Link></div> : null}
-    {slot.availableAction === "VIEW_SESSION" && slot.session ? <div className="border-t border-[var(--tm-border-subtle)] p-3"><Link className="flex min-h-12 items-center justify-center rounded-2xl bg-[var(--tm-bg-subtle)] px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href={`/matches/${slot.session.matchId}`}>세션 자세히 보기</Link></div> : null}
+    {slot.availableAction === "VIEW_SESSION" && slot.session ? <div className="border-t border-[var(--tm-border-subtle)] p-3"><Link className="flex min-h-12 items-center justify-center rounded-2xl bg-[var(--tm-bg-subtle)] px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href={`/matches/${slot.session.matchId}`}>{isCancelledSession ? "세션 취소 안내 보기" : "세션 자세히 보기"}</Link></div> : null}
   </article>;
 }
 

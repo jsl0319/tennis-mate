@@ -983,7 +983,7 @@ Court Partner 도입 시 `Match`에 다음 컬럼을 추가한다.
 - 연결 가능한 CourtSlot은 `AVAILABLE` 상태여야 하며 생성 트랜잭션 안에서 `ALLOCATED`가 됨
 - `PARTNER_COURT` Match의 `recruitCount + 1 <= CourtSlot.maxParticipantCount`를 생성 트랜잭션 안에서 검증
 
-제휴 코트의 명칭·주소·코트 면·시간·전체 비용은 연결된 CourtSlot과 Court에서 조회한다. Match 생성 이후 운영자·모집자 모두 시간과 비용을 직접 수정할 수 없다. 사용자 응답은 이 정보를 MatchDetailView에 조합해 반환하며, 예상 1인 비용은 기존 모집 인원 규칙으로 계산한다. 연결된 Match가 취소돼도 기존 Match는 해당 Slot을 계속 참조한다. Pilot에서는 그 Slot을 자동 또는 수동으로 다시 `AVAILABLE`로 열지 않으며, 재공급은 새 `DRAFT`로만 시작한다.
+제휴 코트의 명칭·주소·코트 면·시간·전체 비용은 연결된 CourtSlot과 Court에서 조회한다. Match 생성 이후 운영자·모집자 모두 시간과 비용을 직접 수정할 수 없다. 사용자 응답은 이 정보를 MatchDetailView에 조합해 반환하며, 예상 1인 비용은 기존 모집 인원 규칙으로 계산한다. 연결된 Match가 모집자 취소로 `CANCELLED`여도 기존 Match는 해당 Slot을 계속 참조하고 Slot은 자동으로 바뀌지 않는다. 운영자가 실제 공급 가능 여부를 확인한 뒤 이 취소된 Match가 연결된 `ALLOCATED` Slot만 `BLOCKED`로 중지할 수 있으며, 재공급은 그 뒤의 새 `DRAFT`로만 시작한다. 이 중지는 `CourtSupplyIncident`나 운영자 귀책 철회를 만들지 않는다.
 
 ### 13.6 CourtSupplyIncident·MatchSupplyNoticeRecipient·OperatorSupplyRestriction
 
@@ -1053,11 +1053,12 @@ stateDiagram-v2
     AVAILABLE --> ALLOCATED: 일반 모집자의 세션 개설
     AVAILABLE --> BLOCKED: 운영 중지
     ALLOCATED --> ENDED: 이용 종료
+    ALLOCATED --> BLOCKED: 모집자 취소 후 운영자 확인
     ALLOCATED --> CANCELLED: 실제 공급 불가 긴급 철회
     DRAFT --> CANCELLED: 삭제 대신 취소
 ```
 
-`visibility`는 상태 전이와 독립적이며, 한 번 `PUBLIC`이 된 Slot은 이후 상태 전이에서도 `PUBLIC`을 유지한다. 한 번도 공개하지 않은 초안을 취소하면 `PRIVATE`를 유지할 수 있다. `AVAILABLE`의 오류는 `BLOCKED` 후 새 초안으로만 정정한다. `BLOCKED`·`CANCELLED`의 재공개와 재개는 Pilot에서 제공하지 않는다. 세션 모집자가 시작 전 Match를 취소했을 때의 `ALLOCATED` 처리도 자동 전환하지 않으며, 별도 정책이 확정되기 전에는 현재 상태·이력만 유지한다. 운영자가 연결된 Slot 공급을 철회하면 `ALLOCATED → CANCELLED`와 연결 Match 취소·대상 인앱 안내·사후 검토를 같은 작업으로 처리해야 하며, 단순 `BLOCKED` 전환으로 대체하지 않는다.
+`visibility`는 상태 전이와 독립적이며, 한 번 `PUBLIC`이 된 Slot은 이후 상태 전이에서도 `PUBLIC`을 유지한다. 한 번도 공개하지 않은 초안을 취소하면 `PRIVATE`를 유지할 수 있다. `AVAILABLE`의 오류는 `BLOCKED` 후 새 초안으로만 정정한다. `BLOCKED`·`CANCELLED`의 재공개와 재개는 Pilot에서 제공하지 않는다. 세션 모집자가 시작 전 Match를 취소하면 `ALLOCATED` Slot은 자동 전환하지 않는다. 운영자가 실제 공급 가능 여부를 확인한 뒤 연결 Match가 `CANCELLED`인 경우에만 `ALLOCATED → BLOCKED`로 중지하고 새 초안을 만들 수 있다. 이 전이는 Match·Application·Incident·공개 제한을 바꾸지 않는다. 운영자가 연결된 Slot 공급을 철회하면 `ALLOCATED → CANCELLED`와 연결 Match 취소·대상 인앱 안내·사후 검토를 같은 작업으로 처리해야 하며, 이 긴급 철회를 단순 `BLOCKED` 전환으로 대체하지 않는다.
 
 ## 16. Court Commerce ERD
 
@@ -1156,6 +1157,7 @@ WHERE id = :id AND version = :expectedVersion
 8. 일반 오류 접수가 Slot·Match 상태를 바꾸지 않는지
 9. 최근 30일 2회 또는 시작 24시간 이내 1회의 운영자 귀책 철회가 새 공개 제한을 만들고, 기존 연결 세션은 유지하는지
 10. 시작 시간이 지나 Match 종료와 Slot `ENDED` 전환, 공개 상태 유지
+11. 세션 모집자 취소 뒤 Slot이 자동 재공개되지 않고, 운영자가 취소된 Match 연결을 확인한 경우에만 `ALLOCATED → BLOCKED` 후 같은 시간의 새 `DRAFT`를 만들 수 있는지
 
 ## 21. 남은 후속 결정과 데이터 영향
 
@@ -1169,7 +1171,7 @@ WHERE id = :id AND version = :expectedVersion
 | Slot 활성 세션 수 | 한 건 권장 | 다중 세션 허용 시 자원 단위·정원 모델 재설계 필요 |
 | Slot-Match 연결 | 활성 Match 한 건, 과거 Match 참조 보존 | 다중 동시 모집 허용 시 연결 테이블과 용량 배분 필요 |
 | 운영자 긴급 공급 철회 | `ALLOCATED → CANCELLED`, Match 취소·인앱 안내·감사 이력 | CourtSupplyIncident·수신 이력·공개 제한 감사 이력 |
-| 세션 모집자 취소 후 Slot 처리 | 자동 재공개하지 않음 | 정책 확정 시 별도 상태 전이 또는 새 Slot 생성 규칙 필요 |
+| 세션 모집자 취소 후 Slot 처리 | 자동 재공개하지 않음. 운영자 확인 뒤 `ALLOCATED → BLOCKED`, 이후 새 `DRAFT`만 허용 | 기존 Match·신청 이력 보존, 상태 이력 |
 | 공개 Slot 상태 보존 | 한 번 공개하면 상태와 이력을 계속 공개 | 상태 이력, `visibility`, 공개 응답 DTO 필요 |
 | 현장 최대 인원 | Slot별 `maxParticipantCount` 필수 | Partner Match 생성 시 정원 검증 필요 |
 | 내부 심사자 부여 | `User.role = INTERNAL_REVIEWER`, 서비스 외 보호된 DB 절차로만 초기 부여 | 역할 관리 UI·다단계 권한은 실제 팀 운영 시 재설계 |
@@ -1195,7 +1197,7 @@ WHERE id = :id AND version = :expectedVersion
 5. Partner Court Match 탐색·기존 참가 신청 재사용
 6. 공개 Slot 불변·공개 중지·새 초안 정정 규칙과 운영자 재확인 적용
 7. CourtSupplyIncident·대상 인앱 안내·반복 철회 공개 제한 적용
-8. 세션 모집자 취소 후 Slot 처리 — 사용자 승인 후
+8. 세션 모집자 취소 후 자동 재공개 금지, 운영자 확인 `BLOCKED`와 새 `DRAFT` 경로 적용
 
 ## 23. 다음 단계
 

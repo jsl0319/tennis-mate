@@ -238,7 +238,7 @@ CourtSupplyIncidentImpact = NONE | CANCEL_MATCH
 CourtSupplyIncidentStatus = REQUESTED | WITHDRAWN | REVIEWED | REJECTED
 ```
 
-`visibility`는 시간대가 일반 회원에게 보이는지를, `status`는 세션 개설·상세 이동·읽기 전용 여부를 정한다. Pilot에서 새 Slot은 `DRAFT`·`PRIVATE`로 시작하고, 한 번 공개한 Slot은 상태가 바뀌어도 `PUBLIC`을 유지한다. `PUBLIC`은 예약 가능·운영자 승인 대기 상태가 아니다. 공개 Slot은 사용자 표시 필드를 수정·재공개할 수 없고, 오류는 `BLOCKED` 후 새 `DRAFT`로 정정한다.
+`visibility`는 시간대가 일반 회원에게 보이는지를, `status`는 세션 개설·상세 이동·읽기 전용 여부를 정한다. Pilot에서 새 Slot은 `DRAFT`·`PRIVATE`로 시작하고, 한 번 공개한 Slot은 상태가 바뀌어도 `PUBLIC`을 유지한다. `PUBLIC`은 예약 가능·운영자 승인 대기 상태가 아니다. 공개 Slot은 사용자 표시 필드를 수정·재공개할 수 없고, 오류는 `BLOCKED` 후 새 `DRAFT`로 정정한다. 세션 모집자의 시작 전 취소는 연결 Slot을 자동 재공개하지 않으며, 운영자가 실제 공급 가능 여부를 확인한 뒤 연결 Match가 `CANCELLED`인 `ALLOCATED` Slot만 `BLOCKED`로 중지할 수 있다.
 
 ## 6. 공통 응답 모델
 
@@ -1231,6 +1231,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 ### 16.2 취소와 자동 상태 전환
 
 - Match 취소와 연결 Application 취소는 같은 트랜잭션에서 처리한다.
+- `PARTNER_COURT` Match를 모집자가 취소해도 연결 `ALLOCATED` Slot은 자동으로 바꾸거나 다시 열지 않는다. 운영자만 취소된 연결을 확인한 뒤 별도 `POST /block`으로 `BLOCKED` 처리하고 새 `DRAFT`를 만들 수 있다.
 - 시작 시각이 지난 `OPEN` Match는 수락자가 있으면 `CLOSED`, 없으면 `EXPIRED`로 전환한다.
 - `EXPIRED` 전환 시 `PENDING` Application을 `CANCELLED`로 바꾼다.
 - 정원 충족, 조기 마감 또는 수락자가 있는 Match의 시작 시각 도달 시 남은 `PENDING` Application을 `CANCELLED`로 바꾼다.
@@ -1559,7 +1560,7 @@ POST /api/v1/operator/courts/{courtId}/slots
 }
 ```
 
-Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /api/v1/operator/slots`는 본인 Slot의 날짜·상태 필터 목록과 연결 세션의 안전한 요약만 반환한다. `PATCH /api/v1/operator/slots/{slotId}`는 `DRAFT`의 전체 필드와 `expectedVersion`만 받고, `AVAILABLE` 이후에는 `409 COURT_SLOT_PUBLIC_IMMUTABLE`을 반환한다. `POST /publish`는 빈 본문으로 이를 `PUBLIC`·`AVAILABLE`로 원자 전환하고, `POST /block`은 아직 Match에 연결되지 않은 `AVAILABLE` Slot만 `BLOCKED`로 전환한다. `BLOCKED`에는 재공개 엔드포인트를 제공하지 않는다.
+Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /api/v1/operator/slots`는 본인 Slot의 날짜·상태 필터 목록과 연결 세션의 안전한 요약만 반환한다. `PATCH /api/v1/operator/slots/{slotId}`는 `DRAFT`의 전체 필드와 `expectedVersion`만 받고, `AVAILABLE` 이후에는 `409 COURT_SLOT_PUBLIC_IMMUTABLE`을 반환한다. `POST /publish`는 빈 본문으로 이를 `PUBLIC`·`AVAILABLE`로 원자 전환한다. `POST /block`은 아직 Match에 연결되지 않은 `AVAILABLE` Slot 또는 연결 Match가 모집자 취소로 `CANCELLED`인 `ALLOCATED` Slot만 `BLOCKED`로 전환한다. 후자의 전이는 운영자 본인의 명시적 확인이 필요하고 Match·Application·Incident·운영자 제한을 바꾸지 않는다. `BLOCKED`에는 재공개 엔드포인트를 제공하지 않는다.
 
 `POST /api/v1/operator/slots/{slotId}/supply-incidents`는 `ALLOCATED` Slot에서만 운영상 문제를 접수한다.
 
@@ -1575,7 +1576,6 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /
 - 내부 운영 검토자 권한, 심사 SLA와 이의·보완 처리 기준
 - 사업자·증빙 원문 보관 기간과 삭제 절차, 재확인 알림 채널
 - 검증 공급자별 장애·할당량 초과 시 재시도와 수동 검토 전환 기준
-- 시작 전 세션 모집자 취소 시 `ALLOCATED` Slot을 다시 열 조건
 - 코트 면별 현장 최대 인원과 시간 전환·정리 버퍼의 등록 기준
 - 운영자가 현장에서 확인할 세션 대표자 정보와 개인정보 최소 공개 범위
 - 코트 정보와 운영자 연락처 공개 범위
@@ -1634,6 +1634,7 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /
 9. `INFORMATION_REVIEW` 접수가 Slot·Match 상태를 바꾸지 않는 경우
 10. 실제 공급 불가 접수가 Incident·Slot 취소·Match 취소·대상 인앱 안내를 하나의 트랜잭션으로 만드는 경우
 11. 최근 30일 2회 또는 시작 24시간 이내 1회 운영자 귀책 철회 후 새 공개·세션 연결을 거절하는 경우
+12. 세션 모집자 취소 뒤 `ALLOCATED` Slot 자동 재공개를 거절하고, 운영자만 취소된 Match 연결을 확인한 뒤 `BLOCKED`로 중지하는 경우
 
 ### 24.5 응답과 개인정보
 

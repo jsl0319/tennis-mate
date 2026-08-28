@@ -368,9 +368,14 @@ async function transitionSlot(
     if (slot.startsAt <= new Date()) {
       throw new DomainError("COURT_SLOT_ALREADY_STARTED", 409, "이미 시작된 시간대는 공개할 수 없어요.");
     }
-  } else if (slot.status !== "AVAILABLE") {
-    throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "세션 열기 가능 상태의 시간대만 중지할 수 있어요.");
+  } else {
+    const canBlockCancelledSession = slot.status === "ALLOCATED" && slot.match?.status === "CANCELLED";
+    if (slot.status !== "AVAILABLE" && !canBlockCancelledSession) {
+      throw new DomainError("COURT_SLOT_STATE_CONFLICT", 409, "세션 열기 가능 상태 또는 취소된 세션 연결 시간대만 중지할 수 있어요.");
+    }
   }
+
+  const isCancelledSessionConfirmation = nextStatus === "BLOCKED" && slot.status === "ALLOCATED" && slot.match?.status === "CANCELLED";
 
   const now = new Date();
   const result = await prisma.$transaction(async (transaction) => {
@@ -398,7 +403,11 @@ async function transitionSlot(
         toStatus: nextStatus,
         actor: "OPERATOR",
         actorUserId: viewer.id,
-        reasonCode: nextStatus === "AVAILABLE" ? "SLOT_PUBLISHED" : "SLOT_BLOCKED_BY_OPERATOR",
+        reasonCode: nextStatus === "AVAILABLE"
+          ? "SLOT_PUBLISHED"
+          : isCancelledSessionConfirmation
+            ? "SESSION_HOST_CANCELLED_CONFIRMED"
+            : "SLOT_BLOCKED_BY_OPERATOR",
       },
     });
     return transaction.courtSlot.findUniqueOrThrow({ where: { id: slot.id }, include: courtSlotInclude });
