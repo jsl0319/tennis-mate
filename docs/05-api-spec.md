@@ -1428,7 +1428,7 @@ GET  /api/internal/operator-applications/{applicationId}/business-registration-c
 POST /api/internal/operator-applications/{applicationId}/review
 ```
 
-`GET /api/internal/operator-applications`는 기본값 `status=REVIEW_REQUIRED`의 cursor 목록을 반환한다. 목록 항목에는 `id`, `businessName`, `venue.name`, `venue.address`, 사업자·장소 확인 상태와 `submittedAt`만 포함한다. 사업자등록번호·개업일·대표자명·운영자 연락처·증빙 참조·외부 제공자 응답은 반환하지 않는다.
+`GET /api/internal/operator-applications`는 기본값 `status=REVIEW_REQUIRED`의 cursor 목록을 반환한다. `REVIEW_REQUIRED`, `PUBLISH_APPROVED`, `SUSPENDED`만 조회할 수 있다. 목록 항목에는 `id`, `status`, `businessName`, `venue.name`, `venue.address`, 사업자·장소 확인 상태, `submittedAt`, 안전한 Court 상태만 포함한다. 사업자등록번호·개업일·대표자명·운영자 연락처·증빙 참조·외부 제공자 응답은 반환하지 않는다.
 
 `GET /api/internal/operator-applications/{applicationId}/business-registration-certificate`는 `INTERNAL_REVIEWER`만 호출한다. 연결된 `ATTACHED` 사업자등록증을 같은 출처에서 `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`로 중계한다. URL·파일명·객체 참조를 JSON으로 반환하지 않으며, 일반 회원·증빙 없는 신청에는 안전한 `404`를 반환한다.
 
@@ -1440,7 +1440,14 @@ POST /api/internal/operator-applications/{applicationId}/review
 
 `decision`은 `APPROVE_PUBLISH`, `REQUEST_CHANGES`, `REJECT` 중 하나이고, `reasonCode`는 `MANUAL_VERIFIED`, `INFORMATION_INCOMPLETE`, `BUSINESS_UNVERIFIED`, `VENUE_UNVERIFIED`, `OPERATING_AUTHORITY_UNCONFIRMED`, `DUPLICATE_VENUE` 중 하나다. 승인에는 `MANUAL_VERIFIED`만 허용한다. 서버는 현재 `ATTACHED` 사업자등록증, `REVIEW_REQUIRED` 상태와 심사자·신청자 분리를 확인하고, 승인 시 같은 정규화 장소의 다른 `PUBLISH_APPROVED` 신청이 없는지 같은 트랜잭션에서 확인한다. 성공 시 신청자용 `OperatorApplicationView`를 반환한다.
 
-각 판정은 심사자 ID·결정·사유 코드·시각만 변경 불가 감사 이력으로 남긴다. 첫 Pilot은 자유 메모와 증빙 원문을 저장하지 않는다. 자신의 신청은 `403 INTERNAL_REVIEWER_SELF_REVIEW_FORBIDDEN`, 이미 판정된 신청은 `409 OPERATOR_APPLICATION_STATE_CONFLICT`, 다른 승인 신청과 장소가 겹치면 `409 VENUE_ALREADY_ACTIVE`다. 운영 중지 API와 역할 관리 UI는 운영 재확인 정책·팀 권한이 확정될 때 별도 단위로 추가한다.
+각 판정은 심사자 ID·결정·사유 코드·시각만 변경 불가 감사 이력으로 남긴다. 첫 Pilot은 자유 메모와 증빙 원문을 저장하지 않는다. 자신의 신청은 `403 INTERNAL_REVIEWER_SELF_REVIEW_FORBIDDEN`, 이미 판정된 신청은 `409 OPERATOR_APPLICATION_STATE_CONFLICT`, 다른 승인 신청과 장소가 겹치면 `409 VENUE_ALREADY_ACTIVE`다.
+
+```text
+POST /api/internal/operator-applications/{applicationId}/suspend
+POST /api/internal/courts/{courtId}/deactivate
+```
+
+두 API는 `INTERNAL_REVIEWER`만 호출하며, 본문은 `BUSINESS_UNVERIFIED`, `VENUE_UNVERIFIED`, `OPERATING_AUTHORITY_UNCONFIRMED`, `SAFETY_REVIEW`, `VENUE_CLOSED` 중 하나인 `reasonCode`만 받는다. 첫 API는 현재 `PUBLISH_APPROVED` 신청만 `SUSPENDED`로 전환하고 감사 이력에 `SUSPEND_PUBLISH`와 선택형 안전 사유를 남긴다. 둘째 API는 현재 `ACTIVE` Court만 `INACTIVE`로 전환하고 Court 상태 이력에 심사자·전후 상태·선택형 안전 사유·시각을 남긴다. 두 조치 모두 새 Slot 공개·새 Partner Court Match 연결·대표 사진의 보호된 공개를 즉시 막고 `ATTACHED` 사진의 `expiresAt`을 30일 뒤로 설정한다. 기존 Match·MatchApplication·Slot 상태는 바꾸지 않는다. 실제 공급 불가는 기존 supply-incident API로만 취소한다. 자신이 신청한 운영자 또는 이미 중지·비활성화된 대상은 각각 `403 INTERNAL_REVIEWER_SELF_REVIEW_FORBIDDEN`, `409 OPERATOR_APPLICATION_STATE_CONFLICT` 또는 `409 COURT_STATE_CONFLICT`다.
 
 ### 22.1 일반 회원·세션 모집자 API
 
@@ -1510,7 +1517,7 @@ GET    /api/cron/cleanup-operator-court-images
 
 운영자 관리 API는 `PUBLISH_APPROVED`이며 해당 Court를 소유한 사용자에게만 허용한다. `POST`는 JPEG·PNG·WebP 한 파일, 10 MiB 이하, 서버 시그니처 검사를 통과한 비공개 `PENDING` 업로드의 불투명 ID만 반환한다. `PUT`은 같은 소유자·Court의 `PENDING` 또는 `ATTACHED` 사진만 최대 3장 원자적으로 저장하며 대표는 저장 목록에 반드시 포함된다. 목록에서 제외하거나 `DELETE`한 사진은 즉시 `REPLACED`로 전환해 공개·운영자 목록에서 제거한다. 원본 객체 URL·저장 경로·파일명은 어떤 응답에도 포함하지 않는다.
 
-`GET /partner-courts/{courtId}/image`는 온보딩을 마친 이용자에게 공개 Slot·Partner Court Match에 쓰이는 `ATTACHED` 대표 사진만 `Cache-Control: private`로 스트림한다. 운영자 전용 개별 사진 읽기도 소유권을 확인한 뒤 같은 방식으로 스트림한다. `PENDING`·`REPLACED`·삭제된 사진, 비승인 운영자 Court, 권한 없는 요청은 존재 여부를 구분하지 않는 오류로 처리한다. 정리 작업은 24시간 지난 `PENDING`, 즉시 삭제 대상 `REPLACED`, 향후 비활성화·승인 취소에서 30일 보관 기한이 지난 `ATTACHED` 사진을 원자적으로 점유한 뒤 비공개 객체와 메타데이터를 삭제한다.
+`GET /partner-courts/{courtId}/image`는 온보딩을 마친 이용자에게 공개 Slot·Partner Court Match에 쓰이는 `ATTACHED` 대표 사진만 `Cache-Control: private`로 스트림한다. 운영자 전용 개별 사진 읽기도 소유권을 확인한 뒤 같은 방식으로 스트림한다. `PENDING`·`REPLACED`·삭제된 사진, 비승인 또는 `SUSPENDED` 운영자 Court, `INACTIVE` Court, 권한 없는 요청은 존재 여부를 구분하지 않는 오류로 처리한다. 정리 작업은 24시간 지난 `PENDING`, 즉시 삭제 대상 `REPLACED`, 비활성화·승인 중지에서 30일 보관 기한이 지난 `ATTACHED` 사진을 원자적으로 점유한 뒤 비공개 객체와 메타데이터를 삭제한다.
 
 `POST /api/v1/matches`의 Pilot 확장은 다음을 받는다.
 

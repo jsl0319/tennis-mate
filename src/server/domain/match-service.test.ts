@@ -227,7 +227,7 @@ describe("match service operation safeguards", () => {
       maxParticipantCount: 3,
       courtUnit: {
         name: "2번 코트",
-        court: { regionCode: "SEOUL-001", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } },
+        court: { regionCode: "SEOUL-001", status: "ACTIVE", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } },
       },
     };
     const createdMatch = makeMatch({
@@ -238,7 +238,7 @@ describe("match service operation safeguards", () => {
       totalCourtFeeKrw: courtSlot.priceKrw,
       courtSlot: {
         id: courtSlot.id,
-        courtUnit: { name: courtSlot.courtUnit.name, court: { name: "마포 테니스파크", address: "서울 마포구", regionCode: "SEOUL-001" } },
+        courtUnit: { name: courtSlot.courtUnit.name, court: { name: "마포 테니스파크", address: "서울 마포구", regionCode: "SEOUL-001", status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
       },
     });
     const transaction = {
@@ -305,7 +305,7 @@ describe("match service operation safeguards", () => {
           endsAt: futureEndsAt,
           priceKrw: 40_000,
           maxParticipantCount: 2,
-          courtUnit: { court: { regionCode: "SEOUL-001", operatorApplication: { status: "PUBLISH_APPROVED" } } },
+          courtUnit: { court: { regionCode: "SEOUL-001", status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
         }),
         updateMany: vi.fn(),
       },
@@ -317,6 +317,43 @@ describe("match service operation safeguards", () => {
     } as unknown as Parameters<typeof createMatch>[0];
 
     await expect(createMatch(prisma, viewer, partnerInput)).rejects.toMatchObject({ code: "PARTNER_SLOT_CAPACITY_EXCEEDED", status: 409 });
+    expect(transaction.courtSlot.updateMany).not.toHaveBeenCalled();
+    expect(transaction.match.create).not.toHaveBeenCalled();
+  });
+
+  it("does not allocate a partner session from an inactive court", async () => {
+    const partnerInput = matchCreateInputSchema.parse({
+      clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07aa",
+      courtSource: "PARTNER_COURT",
+      courtSlotId: "e3e70682-c209-4cac-a29f-6fbed82c07ab",
+      title: "제휴 코트에서 랠리해요",
+      recruitCount: 1,
+      playPurposes: ["RALLY_PRACTICE"],
+      partnerPreference: "SIMILAR_LEVEL",
+      contactOpenChatUrl: "https://open.kakao.com/o/example",
+    });
+    const transaction = {
+      courtSlot: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "e3e70682-c209-4cac-a29f-6fbed82c07ab",
+          visibility: "PUBLIC",
+          status: "AVAILABLE",
+          startsAt: futureStartsAt,
+          endsAt: futureEndsAt,
+          priceKrw: 40_000,
+          maxParticipantCount: 3,
+          courtUnit: { court: { regionCode: "SEOUL-001", status: "INACTIVE", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } } },
+        }),
+        updateMany: vi.fn(),
+      },
+      match: { create: vi.fn() },
+    };
+    const prisma = {
+      match: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof createMatch>[0];
+
+    await expect(createMatch(prisma, viewer, partnerInput)).rejects.toMatchObject({ code: "PARTNER_SLOT_NOT_AVAILABLE", status: 409 });
     expect(transaction.courtSlot.updateMany).not.toHaveBeenCalled();
     expect(transaction.match.create).not.toHaveBeenCalled();
   });
@@ -343,7 +380,7 @@ describe("match service operation safeguards", () => {
           endsAt: futureEndsAt,
           priceKrw: 40_000,
           maxParticipantCount: 3,
-          courtUnit: { court: { regionCode: "SEOUL-001", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } } },
+          courtUnit: { court: { regionCode: "SEOUL-001", status: "ACTIVE", operatorApplication: { id: "operator-application-id", status: "PUBLISH_APPROVED" } } },
         }),
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
@@ -388,7 +425,7 @@ describe("match service operation safeguards", () => {
         id: "slot-id",
         courtUnit: {
           name: "2번 코트",
-          court: { id: "court-id", name: "마포 테니스파크", address: "서울 마포구", images: [{ id: "representative-image-id" }] },
+          court: { id: "court-id", name: "마포 테니스파크", address: "서울 마포구", status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" }, images: [{ id: "representative-image-id" }] },
         },
       },
     });

@@ -20,7 +20,7 @@ function jpegFile(bytes = new Uint8Array([0xff, 0xd8, 0xff, 0x00])) {
 }
 
 function publishedCourt() {
-  return { id: "court-id", operatorApplication: { status: "PUBLISH_APPROVED" } };
+  return { id: "court-id", status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } };
 }
 
 describe("operator court image service", () => {
@@ -62,7 +62,7 @@ describe("operator court image service", () => {
   });
 
   it("does not allow an operator without publish approval to upload a facility photo", async () => {
-    const prisma = { court: { findFirst: vi.fn().mockResolvedValue({ id: "court-id", operatorApplication: { status: "DRAFT_ACCESS_GRANTED" } }) } };
+    const prisma = { court: { findFirst: vi.fn().mockResolvedValue({ id: "court-id", status: "ACTIVE", operatorApplication: { status: "DRAFT_ACCESS_GRANTED" } }) } };
 
     await expect(createOperatorCourtImageUpload(prisma as never, { id: "operator-id" }, "court-id", jpegFile())).rejects.toMatchObject({
       code: "OPERATOR_PUBLISH_APPROVAL_REQUIRED",
@@ -110,7 +110,7 @@ describe("operator court image service", () => {
     )).resolves.toEqual({ items: [{ id: "pending-image", url: "/api/v1/operator/courts/court-id/images/pending-image", isRepresentative: true, sortOrder: 0 }] });
 
     expect(transaction.court.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "court-id", operatorApplication: { applicantUserId: "operator-id", status: "PUBLISH_APPROVED" } },
+      where: { id: "court-id", status: "ACTIVE", operatorApplication: { applicantUserId: "operator-id", status: "PUBLISH_APPROVED" } },
     }));
     expect(transaction.courtImage.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "pending-image" },

@@ -47,6 +47,7 @@ const matchInclude = {
           court: {
             include: {
               images: { where: { status: "ATTACHED", isRepresentative: true }, select: { id: true }, take: 1 },
+              operatorApplication: { select: { status: true } },
             },
           },
         },
@@ -149,7 +150,9 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
 
   if (match.courtSource === "PARTNER_COURT") {
     const court = match.courtSlot?.courtUnit.court;
-    const representativeImage = court?.images?.[0];
+    const representativeImage = court?.status === "ACTIVE" && court.operatorApplication.status === "PUBLISH_APPROVED"
+      ? court.images?.[0]
+      : null;
     return {
       source: match.courtSource,
       sourceLabel: "Tennis Mate에서 준비한 코트예요",
@@ -488,7 +491,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
             },
           },
         });
-        if (!slot || slot.visibility !== "PUBLIC" || slot.status !== "AVAILABLE" || slot.startsAt <= now || slot.courtUnit.court.operatorApplication.status !== "PUBLISH_APPROVED") {
+        if (!slot || slot.visibility !== "PUBLIC" || slot.status !== "AVAILABLE" || slot.startsAt <= now || slot.courtUnit.court.status !== "ACTIVE" || slot.courtUnit.court.operatorApplication.status !== "PUBLISH_APPROVED") {
           throw new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 409, "이 코트 시간대는 더 이상 세션을 열 수 없어요.");
         }
         if (input.recruitCount + 1 > slot.maxParticipantCount) {

@@ -626,6 +626,7 @@ erDiagram
     COURT ||--o{ COURT_UNIT : contains
     COURT ||--o{ COURT_AMENITY : offers
     COURT ||--o{ COURT_IMAGE : displays
+    COURT ||--o{ COURT_STATUS_CHANGE : records
     COURT_UNIT ||--o{ COURT_SLOT : opens
     COURT_SLOT ||--o{ COURT_SLOT_STATUS_HISTORY : records
     COURT_SLOT ||--o{ COURT_SUPPLY_INCIDENT : receives
@@ -711,8 +712,19 @@ erDiagram
         decimal latitude
         decimal longitude
         court_status status
+        timestamptz deactivated_at
         timestamptz created_at
         timestamptz updated_at
+    }
+
+    COURT_STATUS_CHANGE {
+        uuid id PK
+        uuid court_id FK
+        uuid reviewer_user_id FK
+        court_status from_status
+        court_status to_status
+        operator_application_review_reason_code reason_code
+        timestamptz created_at
     }
 
     COURT_UNIT {

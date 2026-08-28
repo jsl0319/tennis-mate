@@ -30,6 +30,7 @@ type OperatorApplicationWithAttempts = Prisma.CourtOperatorApplicationGetPayload
 type InternalReviewApplication = Prisma.CourtOperatorApplicationGetPayload<{
   select: {
     id: true;
+    status: true;
     businessName: true;
     businessVerificationStatus: true;
     venueVerificationStatus: true;
@@ -37,6 +38,7 @@ type InternalReviewApplication = Prisma.CourtOperatorApplicationGetPayload<{
     venueAddress: true;
     submittedAt: true;
     businessRegistrationCertificate: { select: { status: true } };
+    court: { select: { id: true; name: true; address: true; status: true } };
   };
 }>;
 
@@ -93,12 +95,16 @@ export function toOperatorApplicationView(application: OperatorApplicationWithAt
 function toInternalReviewApplicationView(application: InternalReviewApplication) {
   return {
     id: application.id,
+    status: application.status,
     businessName: application.businessName,
     businessVerificationStatus: application.businessVerificationStatus,
     venueVerificationStatus: application.venueVerificationStatus,
     venue: { name: application.venueName, address: application.venueAddress },
     submittedAt: application.submittedAt?.toISOString() ?? null,
     businessRegistrationCertificateAvailable: application.businessRegistrationCertificate?.status === "ATTACHED",
+    court: application.court
+      ? { id: application.court.id, name: application.court.name, address: application.court.address, status: application.court.status }
+      : null,
   };
 }
 
@@ -150,6 +156,7 @@ export async function listOperatorApplicationsForReview(
     },
     select: {
       id: true,
+      status: true,
       businessName: true,
       businessVerificationStatus: true,
       venueVerificationStatus: true,
@@ -157,6 +164,7 @@ export async function listOperatorApplicationsForReview(
       venueAddress: true,
       submittedAt: true,
       businessRegistrationCertificate: { select: { status: true } },
+      court: { select: { id: true, name: true, address: true, status: true } },
     },
     orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
     take: query.limit + 1,

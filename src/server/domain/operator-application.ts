@@ -33,6 +33,16 @@ const operatorApplicationReviewReasonCodeSchema = z.enum([
   "VENUE_UNVERIFIED",
   "OPERATING_AUTHORITY_UNCONFIRMED",
   "DUPLICATE_VENUE",
+  "SAFETY_REVIEW",
+  "VENUE_CLOSED",
+]);
+
+const operatorPublishControlReasonCodeSchema = z.enum([
+  "BUSINESS_UNVERIFIED",
+  "VENUE_UNVERIFIED",
+  "OPERATING_AUTHORITY_UNCONFIRMED",
+  "SAFETY_REVIEW",
+  "VENUE_CLOSED",
 ]);
 
 export const operatorApplicationReviewInputSchema = z.object({
@@ -58,8 +68,20 @@ export const operatorApplicationReviewInputSchema = z.object({
 
 export type OperatorApplicationReviewInput = z.infer<typeof operatorApplicationReviewInputSchema>;
 
+export const operatorApplicationSuspendInputSchema = z.object({
+  reasonCode: operatorPublishControlReasonCodeSchema,
+});
+
+export type OperatorApplicationSuspendInput = z.infer<typeof operatorApplicationSuspendInputSchema>;
+
+export const courtDeactivateInputSchema = z.object({
+  reasonCode: operatorPublishControlReasonCodeSchema,
+});
+
+export type CourtDeactivateInput = z.infer<typeof courtDeactivateInputSchema>;
+
 export const operatorApplicationReviewListQuerySchema = z.object({
-  status: z.literal("REVIEW_REQUIRED").default("REVIEW_REQUIRED"),
+  status: z.enum(["REVIEW_REQUIRED", "PUBLISH_APPROVED", "SUSPENDED"]).default("REVIEW_REQUIRED"),
   cursor: z.string().trim().min(1).max(200).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });

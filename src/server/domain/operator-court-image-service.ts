@@ -1,6 +1,6 @@
 import { del, get, put } from "@vercel/blob";
 
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { OperatorCourtImageSaveInput } from "@/server/domain/court-slot";
 import { DomainError } from "@/server/domain/profile-service";
 
@@ -8,6 +8,7 @@ export const operatorCourtImageContentTypes = ["image/jpeg", "image/png", "image
 export const maxOperatorCourtImageBytes = 10 * 1024 * 1024;
 export const maxOperatorCourtImages = 3;
 export const pendingOperatorCourtImageLifetimeMs = 24 * 60 * 60 * 1000;
+export const inactiveOperatorCourtImageRetentionMs = 30 * 24 * 60 * 60 * 1000;
 
 type OperatorCourtImageContentType = (typeof operatorCourtImageContentTypes)[number];
 type CleanupCandidate = {
@@ -39,13 +40,28 @@ function extensionFor(contentType: OperatorCourtImageContentType) {
 async function getOwnedPublishedCourt(prisma: PrismaClient, viewer: { id: string }, courtId: string) {
   const court = await prisma.court.findFirst({
     where: { id: courtId, operatorApplication: { applicantUserId: viewer.id } },
-    select: { id: true, operatorApplication: { select: { status: true } } },
+    select: { id: true, status: true, operatorApplication: { select: { status: true } } },
   });
   if (!court) throw new DomainError("COURT_NOT_FOUND", 404, "코트장을 찾을 수 없어요.");
-  if (court.operatorApplication.status !== "PUBLISH_APPROVED") {
+  if (court.status !== "ACTIVE" || court.operatorApplication.status !== "PUBLISH_APPROVED") {
     throw new DomainError("OPERATOR_PUBLISH_APPROVAL_REQUIRED", 403, "대표 코트 사진은 공개 승인 후 관리할 수 있어요.");
   }
   return court;
+}
+
+export function getInactiveOperatorCourtImageExpiresAt(now = new Date()) {
+  return new Date(now.getTime() + inactiveOperatorCourtImageRetentionMs);
+}
+
+export async function scheduleOperatorCourtImagesForExpiry(
+  transaction: Prisma.TransactionClient,
+  courtId: string,
+  now = new Date(),
+) {
+  return transaction.courtImage.updateMany({
+    where: { courtId, status: "ATTACHED", expiresAt: null },
+    data: { expiresAt: getInactiveOperatorCourtImageExpiresAt(now) },
+  });
 }
 
 function operatorImageUrl(courtId: string, imageId: string) {
@@ -127,7 +143,7 @@ export async function saveOperatorCourtImages(
   await getOwnedPublishedCourt(prisma, viewer, courtId);
   const result = await prisma.$transaction(async (transaction) => {
     const lockedCourt = await transaction.court.updateMany({
-      where: { id: courtId, operatorApplication: { applicantUserId: viewer.id, status: "PUBLISH_APPROVED" } },
+      where: { id: courtId, status: "ACTIVE", operatorApplication: { applicantUserId: viewer.id, status: "PUBLISH_APPROVED" } },
       data: { updatedAt: now },
     });
     if (lockedCourt.count !== 1) {
@@ -202,7 +218,7 @@ export async function getOperatorCourtImageObjectRef(prisma: PrismaClient, viewe
       courtId,
       ownerUserId: viewer.id,
       status: "ATTACHED",
-      court: { operatorApplication: { applicantUserId: viewer.id, status: "PUBLISH_APPROVED" } },
+      court: { status: "ACTIVE", operatorApplication: { applicantUserId: viewer.id, status: "PUBLISH_APPROVED" } },
     },
     select: { privateObjectRef: true },
   });
@@ -217,6 +233,7 @@ export async function getPublicCourtImageObjectRef(prisma: PrismaClient, courtId
       status: "ATTACHED",
       isRepresentative: true,
       court: {
+        status: "ACTIVE",
         operatorApplication: { status: "PUBLISH_APPROVED" },
         units: { some: { slots: { some: { visibility: "PUBLIC" } } } },
       },

@@ -32,8 +32,8 @@ describe("GET /api/internal/operator-applications", () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 
-  it("validates the fixed pending-review status query", async () => {
-    const response = await GET(new Request("http://localhost/api/internal/operator-applications?status=PUBLISH_APPROVED"));
+  it("validates the internal-review status query", async () => {
+    const response = await GET(new Request("http://localhost/api/internal/operator-applications?status=REJECTED"));
 
     expect(response.status).toBe(422);
     expect(getRateLimitedCurrentUser).not.toHaveBeenCalled();

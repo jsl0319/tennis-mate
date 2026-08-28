@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { courtSlotCreateInputSchema, courtSlotUpdateInputSchema, courtSupplyIncidentInputSchema } from "./court-slot";
-import { blockCourtSlot, createCourt, createCourtSlot, getPublicCourtSlot, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
+import { blockCourtSlot, createCourt, createCourtSlot, getPublicCourtSlot, getPublicCourtSlots, publishCourtSlot, reportCourtSupplyIncident, updateCourtSlot } from "./court-slot-service";
 
 const viewer = { id: "operator-user-id" };
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
@@ -24,6 +24,8 @@ function ownedCourt(status: "DRAFT_ACCESS_GRANTED" | "PUBLISH_APPROVED" = "DRAFT
     name: "마포 테니스파크",
     address: "서울특별시 마포구 월드컵로 00",
     normalizedVenueKey: "venue-key",
+    status: "ACTIVE",
+    deactivatedAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     region: { code: "SEOUL-001", name: "마포구" },
@@ -142,8 +144,36 @@ describe("Court Partner time supply authorization and state transitions", () => 
       court: { image: { url: null, sourceLabel: null, fallback: "TENNIS_COURT_ILLUSTRATION" } },
     });
     expect(prisma.courtSlot.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "slot-id", visibility: "PUBLIC" },
+      where: expect.objectContaining({ id: "slot-id", visibility: "PUBLIC" }),
     }));
+  });
+
+  it("filters public slots to active courts owned by currently approved operators", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = { courtSlot: { findMany } } as unknown as Parameters<typeof getPublicCourtSlots>[0];
+
+    await expect(getPublicCourtSlots(prisma, true)).resolves.toEqual({ items: [] });
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        visibility: "PUBLIC",
+        courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
+      }),
+    }));
+  });
+
+  it("does not publish an inactive court even when the operator application remains approved", async () => {
+    const inactiveSlot = {
+      ...ownedSlot("PUBLISH_APPROVED"),
+      courtUnit: {
+        ...ownedSlot("PUBLISH_APPROVED").courtUnit,
+        court: { ...ownedSlot("PUBLISH_APPROVED").courtUnit.court, status: "INACTIVE" },
+      },
+    };
+    const prisma = { courtSlot: { findFirst: vi.fn().mockResolvedValue(inactiveSlot) }, $transaction: vi.fn() } as unknown as Parameters<typeof publishCourtSlot>[0];
+
+    await expect(publishCourtSlot(prisma, viewer, "slot-id")).rejects.toMatchObject({ code: "COURT_INACTIVE", status: 403 });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("returns only the saved representative facility photo through the protected public route", async () => {

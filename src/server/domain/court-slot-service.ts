@@ -67,12 +67,21 @@ function canPublish(status: string) {
   return status === "PUBLISH_APPROVED";
 }
 
+function isCourtActive(status: string) {
+  return status === "ACTIVE";
+}
+
+function isPubliclySuppliedCourt(court: CourtSlotWithRelations["courtUnit"]["court"]) {
+  return isCourtActive(court.status) && canPublish(court.operatorApplication.status);
+}
+
 function toCourtView(court: CourtWithRelations) {
   return {
     id: court.id,
     name: court.name,
     address: court.address,
     region: { code: court.region.code, name: court.region.name },
+    status: court.status,
     operatorApplicationStatus: court.operatorApplication.status,
     units: court.units.map((unit) => ({ id: unit.id, name: unit.name })),
     createdAt: court.createdAt.toISOString(),
@@ -86,7 +95,7 @@ export function toCourtSlotView(slot: CourtSlotWithRelations, now = new Date()) 
     ? { matchId: slot.match.id, status: slot.match.status, statusLabel: sessionStatusLabels[slot.match.status] }
     : null;
   const court = slot.courtUnit.court;
-  const representativeImage = court.images?.[0];
+  const representativeImage = isPubliclySuppliedCourt(court) ? court.images?.[0] : null;
 
   return {
     id: slot.id,
@@ -139,6 +148,9 @@ async function getOwnedCourt(prisma: PrismaClient, viewer: { id: string }, court
     include: courtInclude,
   });
   if (!court) throw new DomainError("COURT_NOT_FOUND", 404, "코트장을 찾을 수 없어요.");
+  if (!isCourtActive(court.status)) {
+    throw new DomainError("COURT_INACTIVE", 403, "비활성화된 코트에는 새 시간대를 만들 수 없어요.");
+  }
   if (!canCreatePrivateDraft(court.operatorApplication.status)) {
     throw new DomainError("OPERATOR_DRAFT_ACCESS_REQUIRED", 403, "현재 상태에서는 코트 시간대 초안을 만들 수 없어요.");
   }
@@ -158,6 +170,9 @@ async function getOwnedCourtSlot(prisma: PrismaClient, viewer: { id: string }, s
 }
 
 function assertPublishAccess(slot: CourtSlotWithRelations) {
+  if (!isCourtActive(slot.courtUnit.court.status)) {
+    throw new DomainError("COURT_INACTIVE", 403, "비활성화된 코트는 시간을 공개할 수 없어요.");
+  }
   if (!canPublish(slot.courtUnit.court.operatorApplication.status)) {
     throw new DomainError("OPERATOR_PUBLISH_APPROVAL_REQUIRED", 403, "공개하려면 운영자 공개 승인이 필요해요.");
   }
@@ -391,6 +406,7 @@ async function transitionSlot(
         status: slot.status,
         visibility: slot.visibility,
         version: slot.version,
+        courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
       },
       data: {
         status: nextStatus,
@@ -567,6 +583,7 @@ export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: b
   const slots = await prisma.courtSlot.findMany({
     where: {
       visibility: "PUBLIC",
+      courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
       ...(availableOnly ? { status: "AVAILABLE", startsAt: { gt: now } } : {}),
     },
     include: courtSlotInclude,
@@ -579,7 +596,11 @@ export async function getPublicCourtSlots(prisma: PrismaClient, availableOnly: b
 export async function getPublicCourtSlot(prisma: PrismaClient, slotId: string) {
   const now = new Date();
   const slot = await prisma.courtSlot.findFirst({
-    where: { id: slotId, visibility: "PUBLIC" },
+    where: {
+      id: slotId,
+      visibility: "PUBLIC",
+      courtUnit: { court: { status: "ACTIVE", operatorApplication: { status: "PUBLISH_APPROVED" } } },
+    },
     include: courtSlotInclude,
   });
   if (!slot) throw new DomainError("PARTNER_SLOT_NOT_AVAILABLE", 404, "이 제휴 코트 시간은 확인할 수 없어요.");

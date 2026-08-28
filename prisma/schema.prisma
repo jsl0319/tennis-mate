@@ -96,6 +96,11 @@ enum CourtImageStatus {
   DELETED
 }
 
+enum CourtStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum CourtSlotVisibility {
   PRIVATE
   PUBLIC
@@ -166,6 +171,7 @@ enum OperatorApplicationReviewDecision {
   APPROVE_PUBLISH
   REQUEST_CHANGES
   REJECT
+  SUSPEND_PUBLISH
 }
 
 enum OperatorApplicationReviewReasonCode {
@@ -175,6 +181,8 @@ enum OperatorApplicationReviewReasonCode {
   VENUE_UNVERIFIED
   OPERATING_AUTHORITY_UNCONFIRMED
   DUPLICATE_VENUE
+  SAFETY_REVIEW
+  VENUE_CLOSED
 }
 
 enum BusinessVerificationStatus {
@@ -224,6 +232,7 @@ model User {
   operatorApplications CourtOperatorApplication[] @relation("OperatorApplicationApplicant")
   operatorApplicationEvidenceUploads OperatorApplicationEvidenceUpload[] @relation("OperatorApplicationEvidenceUploadOwner")
   operatorApplicationReviews OperatorApplicationReview[] @relation("OperatorApplicationReviewer")
+  courtStatusChanges CourtStatusChange[] @relation("CourtStatusChangeReviewer")
   courtSlotStatusHistories CourtSlotStatusHistory[] @relation("CourtSlotStatusActor")
   supplyNoticeRecipients MatchSupplyNoticeRecipient[] @relation("MatchSupplyNoticeRecipientUser")
   clearedSupplyRestrictions OperatorSupplyRestriction[] @relation("OperatorSupplyRestrictionClearedBy")
@@ -496,6 +505,8 @@ model Court {
   name                  String   @db.VarChar(100)
   address               String   @db.VarChar(255)
   normalizedVenueKey    String   @unique @map("normalized_venue_key") @db.VarChar(255)
+  status                CourtStatus @default(ACTIVE)
+  deactivatedAt         DateTime? @map("deactivated_at") @db.Timestamptz(6)
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -503,9 +514,27 @@ model Court {
   region              Region                   @relation(fields: [regionCode], references: [code], onDelete: Restrict)
   units               CourtUnit[]
   images              CourtImage[]
+  statusChanges       CourtStatusChange[]
 
   @@index([regionCode, createdAt])
   @@map("courts")
+}
+
+model CourtStatusChange {
+  id             String                               @id @default(uuid()) @db.Uuid
+  courtId        String                               @map("court_id") @db.Uuid
+  reviewerUserId String                               @map("reviewer_user_id") @db.Uuid
+  fromStatus     CourtStatus                          @map("from_status")
+  toStatus       CourtStatus                          @map("to_status")
+  reasonCode     OperatorApplicationReviewReasonCode  @map("reason_code")
+  createdAt      DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  court    Court @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  reviewer User  @relation("CourtStatusChangeReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+
+  @@index([courtId, createdAt])
+  @@index([reviewerUserId, createdAt(sort: Desc)])
+  @@map("court_status_changes")
 }
 
 model CourtImage {
