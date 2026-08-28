@@ -13,6 +13,11 @@ enum UserStatus {
   WITHDRAWN
 }
 
+enum UserRole {
+  MEMBER
+  INTERNAL_REVIEWER
+}
+
 enum ExperienceRange {
   UNDER_3_MONTHS
   MONTHS_3_TO_6
@@ -141,6 +146,29 @@ enum OperatorApplicationStatus {
   SUSPENDED
 }
 
+enum OperatorApplicationEvidenceUploadStatus {
+  PENDING
+  ATTACHED
+  REPLACED
+  CLEANUP_PENDING
+  DELETED
+}
+
+enum OperatorApplicationReviewDecision {
+  APPROVE_PUBLISH
+  REQUEST_CHANGES
+  REJECT
+}
+
+enum OperatorApplicationReviewReasonCode {
+  MANUAL_VERIFIED
+  INFORMATION_INCOMPLETE
+  BUSINESS_UNVERIFIED
+  VENUE_UNVERIFIED
+  OPERATING_AUTHORITY_UNCONFIRMED
+  DUPLICATE_VENUE
+}
+
 enum BusinessVerificationStatus {
   PENDING
   VERIFIED
@@ -172,6 +200,7 @@ model User {
   id                    String     @id @default(uuid()) @db.Uuid
   nickname              String     @unique @db.VarChar(12)
   status                UserStatus @default(ACTIVE)
+  role                  UserRole   @default(MEMBER)
   nicknameConfirmedAt   DateTime?  @map("nickname_confirmed_at") @db.Timestamptz(6)
   onboardingCompletedAt DateTime?  @map("onboarding_completed_at") @db.Timestamptz(6)
   createdAt             DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -184,6 +213,8 @@ model User {
   matchApplications    MatchApplication[]
   courtImageUploads    CourtImageUpload[]
   operatorApplications CourtOperatorApplication[] @relation("OperatorApplicationApplicant")
+  operatorApplicationEvidenceUploads OperatorApplicationEvidenceUpload[] @relation("OperatorApplicationEvidenceUploadOwner")
+  operatorApplicationReviews OperatorApplicationReview[] @relation("OperatorApplicationReviewer")
   courtSlotStatusHistories CourtSlotStatusHistory[] @relation("CourtSlotStatusActor")
   supplyNoticeRecipients MatchSupplyNoticeRecipient[] @relation("MatchSupplyNoticeRecipientUser")
   clearedSupplyRestrictions OperatorSupplyRestriction[] @relation("OperatorSupplyRestrictionClearedBy")
@@ -384,6 +415,7 @@ model CourtOperatorApplication {
   status                         OperatorApplicationStatus  @default(DRAFT)
   businessName                   String                     @map("business_name") @db.VarChar(100)
   businessRegistrationNumberHash String                     @map("business_registration_number_hash") @db.VarChar(128)
+  businessRegistrationCertificateUploadId String?           @unique @map("business_registration_certificate_upload_id") @db.Uuid
   verificationInputRef           String?                    @map("verification_input_ref") @db.VarChar(255)
   businessVerificationStatus     BusinessVerificationStatus @default(PENDING) @map("business_verification_status")
   venueVerificationStatus        VenueVerificationStatus    @default(PENDING) @map("venue_verification_status")
@@ -398,7 +430,9 @@ model CourtOperatorApplication {
   updatedAt                      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   applicant            User                                     @relation("OperatorApplicationApplicant", fields: [applicantUserId], references: [id], onDelete: Restrict)
+  businessRegistrationCertificate OperatorApplicationEvidenceUpload? @relation("BusinessRegistrationCertificate", fields: [businessRegistrationCertificateUploadId], references: [id], onDelete: Restrict)
   verificationAttempts OperatorApplicationVerificationAttempt[]
+  reviews              OperatorApplicationReview[]
   court                Court?
   supplyRestrictions   OperatorSupplyRestriction[]
 
@@ -406,6 +440,44 @@ model CourtOperatorApplication {
   @@index([businessRegistrationNumberHash, status])
   @@index([normalizedVenueKey, status])
   @@map("court_operator_applications")
+}
+
+model OperatorApplicationEvidenceUpload {
+  id               String                                 @id @default(uuid()) @db.Uuid
+  ownerUserId      String                                 @map("owner_user_id") @db.Uuid
+  privateObjectRef String                                 @unique @map("private_object_ref") @db.VarChar(500)
+  contentType      String                                 @map("content_type") @db.VarChar(100)
+  byteSize         Int                                    @map("byte_size")
+  status           OperatorApplicationEvidenceUploadStatus @default(PENDING)
+  attachedAt       DateTime?                              @map("attached_at") @db.Timestamptz(6)
+  expiresAt        DateTime?                              @map("expires_at") @db.Timestamptz(6)
+  cleanupClaimedAt DateTime?                              @map("cleanup_claimed_at") @db.Timestamptz(6)
+  deletedAt        DateTime?                              @map("deleted_at") @db.Timestamptz(6)
+  createdAt        DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner               User                     @relation("OperatorApplicationEvidenceUploadOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  attachedApplication CourtOperatorApplication? @relation("BusinessRegistrationCertificate")
+
+  @@index([ownerUserId, status, createdAt])
+  @@index([status, expiresAt])
+  @@map("operator_application_evidence_uploads")
+}
+
+model OperatorApplicationReview {
+  id             String                               @id @default(uuid()) @db.Uuid
+  applicationId  String                               @map("application_id") @db.Uuid
+  reviewerUserId String                               @map("reviewer_user_id") @db.Uuid
+  decision       OperatorApplicationReviewDecision
+  reasonCode     OperatorApplicationReviewReasonCode  @map("reason_code")
+  createdAt      DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  application CourtOperatorApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  reviewer    User                     @relation("OperatorApplicationReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, createdAt])
+  @@index([reviewerUserId, createdAt(sort: Desc)])
+  @@map("operator_application_reviews")
 }
 
 model Court {

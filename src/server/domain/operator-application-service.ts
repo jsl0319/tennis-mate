@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 
 import {
   activeOperatorApplicationStatuses,
@@ -6,18 +6,41 @@ import {
   getVerificationDecision,
   manualVerificationProvider,
   normalizeVenueKey,
+  type OperatorApplicationReviewInput,
+  type OperatorApplicationReviewListQuery,
   type OperatorApplicationInput,
   type OperatorVerificationProvider,
 } from "@/server/domain/operator-application";
+import {
+  claimBusinessRegistrationCertificate,
+  expireBusinessRegistrationCertificate,
+  replaceClaimedBusinessRegistrationCertificate,
+} from "@/server/domain/operator-application-evidence-service";
 import { DomainError } from "@/server/domain/profile-service";
 
 const operatorApplicationInclude = {
   verificationAttempts: { orderBy: { attemptedAt: "desc" }, take: 1 },
+  businessRegistrationCertificate: { select: { status: true } },
 } satisfies Prisma.CourtOperatorApplicationInclude;
 
 type OperatorApplicationWithAttempts = Prisma.CourtOperatorApplicationGetPayload<{
   include: typeof operatorApplicationInclude;
 }>;
+
+type InternalReviewApplication = Prisma.CourtOperatorApplicationGetPayload<{
+  select: {
+    id: true;
+    businessName: true;
+    businessVerificationStatus: true;
+    venueVerificationStatus: true;
+    venueName: true;
+    venueAddress: true;
+    submittedAt: true;
+    businessRegistrationCertificate: { select: { status: true } };
+  };
+}>;
+
+type InternalReviewCursor = { submittedAt: string; id: string };
 
 const statusLabels = {
   DRAFT: "입력 중",
@@ -58,8 +81,93 @@ export function toOperatorApplicationView(application: OperatorApplicationWithAt
     canCreatePrivateDraft: application.status === "DRAFT_ACCESS_GRANTED" || application.status === "PUBLISH_APPROVED",
     canPublish: application.status === "PUBLISH_APPROVED",
     retryAvailable: application.status === "REVIEW_REQUIRED" || application.status === "DRAFT_ACCESS_GRANTED",
+    businessRegistrationCertificate: {
+      uploadId: application.businessRegistrationCertificateUploadId,
+      attached: application.businessRegistrationCertificate?.status === "ATTACHED",
+    },
     nextAction: nextAction(application.status),
     updatedAt: application.updatedAt.toISOString(),
+  };
+}
+
+function toInternalReviewApplicationView(application: InternalReviewApplication) {
+  return {
+    id: application.id,
+    businessName: application.businessName,
+    businessVerificationStatus: application.businessVerificationStatus,
+    venueVerificationStatus: application.venueVerificationStatus,
+    venue: { name: application.venueName, address: application.venueAddress },
+    submittedAt: application.submittedAt?.toISOString() ?? null,
+    businessRegistrationCertificateAvailable: application.businessRegistrationCertificate?.status === "ATTACHED",
+  };
+}
+
+function parseInternalReviewCursor(cursor: string): InternalReviewCursor {
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("Invalid cursor");
+    const value = parsed as { id?: unknown; submittedAt?: unknown };
+    if (
+      typeof value.id !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.id)
+      || typeof value.submittedAt !== "string"
+      || Number.isNaN(new Date(value.submittedAt).getTime())
+    ) throw new Error("Invalid cursor");
+    return { id: value.id, submittedAt: value.submittedAt };
+  } catch {
+    throw new DomainError("INVALID_REVIEW_CURSOR", 400, "심사 목록을 다시 불러와 주세요.");
+  }
+}
+
+function createInternalReviewCursor(application: InternalReviewApplication) {
+  if (!application.submittedAt) return null;
+  return Buffer.from(JSON.stringify({ id: application.id, submittedAt: application.submittedAt.toISOString() })).toString("base64url");
+}
+
+export function assertInternalReviewer(viewer: { role: string }) {
+  if (viewer.role !== "INTERNAL_REVIEWER") {
+    throw new DomainError("INTERNAL_REVIEWER_REQUIRED", 403, "내부 심사 권한이 필요해요.");
+  }
+}
+
+export async function listOperatorApplicationsForReview(
+  prisma: PrismaClient,
+  viewer: { role: string },
+  query: OperatorApplicationReviewListQuery,
+) {
+  assertInternalReviewer(viewer);
+  const cursor = query.cursor ? parseInternalReviewCursor(query.cursor) : null;
+  const applications = await prisma.courtOperatorApplication.findMany({
+    where: {
+      status: query.status,
+      submittedAt: { not: null },
+      ...(cursor ? {
+        OR: [
+          { submittedAt: { gt: new Date(cursor.submittedAt) } },
+          { submittedAt: new Date(cursor.submittedAt), id: { gt: cursor.id } },
+        ],
+      } : {}),
+    },
+    select: {
+      id: true,
+      businessName: true,
+      businessVerificationStatus: true,
+      venueVerificationStatus: true,
+      venueName: true,
+      venueAddress: true,
+      submittedAt: true,
+      businessRegistrationCertificate: { select: { status: true } },
+    },
+    orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
+    take: query.limit + 1,
+  });
+  const hasNext = applications.length > query.limit;
+  const items = hasNext ? applications.slice(0, query.limit) : applications;
+  const lastItem = items.at(-1);
+
+  return {
+    items: items.map(toInternalReviewApplicationView),
+    pageInfo: { nextCursor: hasNext && lastItem ? createInternalReviewCursor(lastItem) : null, hasNext },
   };
 }
 
@@ -101,31 +209,40 @@ export async function submitOperatorApplication(
 
   const { verification, normalizedVenueKey, decision } = await verifyInput(prisma, input, provider);
   const now = new Date();
-  const application = await prisma.courtOperatorApplication.create({
-    data: {
-      applicantUserId: viewer.id,
-      status: decision.status,
-      businessName: input.businessName,
-      businessRegistrationNumberHash: createBusinessRegistrationNumberHash(input.businessRegistrationNumber),
-      businessVerificationStatus: decision.businessVerificationStatus,
-      venueVerificationStatus: decision.venueVerificationStatus,
-      venueName: input.venueName,
-      venueAddress: input.venueAddress,
-      normalizedVenueKey,
-      verificationFailureCode: decision.verificationFailureCode,
-      submittedAt: now,
-      verifiedAt: decision.businessVerificationStatus === "VERIFIED" ? now : null,
-      publishApprovedAt: decision.status === "PUBLISH_APPROVED" ? now : null,
-      verificationAttempts: {
-        create: [
-          { kind: "BUSINESS", result: verification.business === "VERIFIED" ? "VERIFIED" : verification.business, safeFailureCode: decision.verificationFailureCode, providerRequestRef: verification.providerRequestRef },
-          { kind: "VENUE", result: verification.venue === "MATCHED" ? "VERIFIED" : verification.venue, safeFailureCode: decision.verificationFailureCode, providerRequestRef: verification.providerRequestRef },
-        ],
+  return prisma.$transaction(async (transaction) => {
+    const stillActive = await transaction.courtOperatorApplication.findFirst({
+      where: { applicantUserId: viewer.id, status: { in: [...activeOperatorApplicationStatuses] } },
+      select: { id: true },
+    });
+    if (stillActive) throw new DomainError("OPERATOR_APPLICATION_ALREADY_ACTIVE", 409, "진행 중인 운영자 신청이 있어요.");
+
+    await claimBusinessRegistrationCertificate(transaction, viewer.id, input.businessRegistrationCertificateUploadId, now);
+    return transaction.courtOperatorApplication.create({
+      data: {
+        applicantUserId: viewer.id,
+        status: decision.status,
+        businessName: input.businessName,
+        businessRegistrationNumberHash: createBusinessRegistrationNumberHash(input.businessRegistrationNumber),
+        businessRegistrationCertificateUploadId: input.businessRegistrationCertificateUploadId,
+        businessVerificationStatus: decision.businessVerificationStatus,
+        venueVerificationStatus: decision.venueVerificationStatus,
+        venueName: input.venueName,
+        venueAddress: input.venueAddress,
+        normalizedVenueKey,
+        verificationFailureCode: decision.verificationFailureCode,
+        submittedAt: now,
+        verifiedAt: decision.businessVerificationStatus === "VERIFIED" ? now : null,
+        publishApprovedAt: decision.status === "PUBLISH_APPROVED" ? now : null,
+        verificationAttempts: {
+          create: [
+            { kind: "BUSINESS", result: verification.business === "VERIFIED" ? "VERIFIED" : verification.business, safeFailureCode: decision.verificationFailureCode, providerRequestRef: verification.providerRequestRef },
+            { kind: "VENUE", result: verification.venue === "MATCHED" ? "VERIFIED" : verification.venue, safeFailureCode: decision.verificationFailureCode, providerRequestRef: verification.providerRequestRef },
+          ],
+        },
       },
-    },
-    include: operatorApplicationInclude,
+      include: operatorApplicationInclude,
+    });
   });
-  return application;
 }
 
 export async function getMyOperatorApplication(prisma: PrismaClient, viewer: { id: string }) {
@@ -136,6 +253,97 @@ export async function getMyOperatorApplication(prisma: PrismaClient, viewer: { i
   });
   if (!application) throw new DomainError("OPERATOR_APPLICATION_NOT_FOUND", 404, "운영자 신청 내역이 없어요.");
   return application;
+}
+
+export async function reviewOperatorApplication(
+  prisma: PrismaClient,
+  reviewer: { id: string; role: string },
+  applicationId: string,
+  input: OperatorApplicationReviewInput,
+) {
+  assertInternalReviewer(reviewer);
+
+  try {
+    return await prisma.$transaction(async (transaction) => {
+      const current = await transaction.courtOperatorApplication.findUnique({
+        where: { id: applicationId },
+        select: {
+          applicantUserId: true,
+          normalizedVenueKey: true,
+          status: true,
+          businessRegistrationCertificateUploadId: true,
+          businessRegistrationCertificate: { select: { status: true } },
+        },
+      });
+      if (!current) throw new DomainError("OPERATOR_APPLICATION_NOT_FOUND", 404, "운영자 신청을 찾을 수 없어요.");
+      if (current.applicantUserId === reviewer.id) {
+        throw new DomainError("INTERNAL_REVIEWER_SELF_REVIEW_FORBIDDEN", 403, "자신의 운영자 신청은 심사할 수 없어요.");
+      }
+      if (current.status !== "REVIEW_REQUIRED") {
+        throw new DomainError("OPERATOR_APPLICATION_STATE_CONFLICT", 409, "최신 심사 상태를 다시 확인해 주세요.");
+      }
+
+      if (input.decision === "APPROVE_PUBLISH") {
+        if (current.businessRegistrationCertificate?.status !== "ATTACHED") {
+          throw new DomainError("BUSINESS_REGISTRATION_CERTIFICATE_REQUIRED", 409, "사업자등록증을 다시 제출해 주세요.");
+        }
+        const activeVenue = await transaction.courtOperatorApplication.findFirst({
+          where: {
+            normalizedVenueKey: current.normalizedVenueKey,
+            status: "PUBLISH_APPROVED",
+            NOT: { id: applicationId },
+          },
+          select: { id: true },
+        });
+        if (activeVenue) throw new DomainError("VENUE_ALREADY_ACTIVE", 409, "같은 장소에서 이미 승인된 운영자가 있어요.");
+      }
+
+      const now = new Date();
+      const update = await transaction.courtOperatorApplication.updateMany({
+        where: { id: applicationId, status: "REVIEW_REQUIRED" },
+        data: input.decision === "APPROVE_PUBLISH"
+          ? {
+              status: "PUBLISH_APPROVED",
+              businessVerificationStatus: "VERIFIED",
+              venueVerificationStatus: "MATCHED",
+              verificationFailureCode: null,
+              verifiedAt: now,
+              publishApprovedAt: now,
+            }
+          : {
+              status: input.decision === "REQUEST_CHANGES" ? "CHANGES_REQUESTED" : "REJECTED",
+              verificationFailureCode: input.reasonCode,
+            },
+      });
+      if (update.count !== 1) {
+        throw new DomainError("OPERATOR_APPLICATION_STATE_CONFLICT", 409, "최신 심사 상태를 다시 확인해 주세요.");
+      }
+
+      if (input.decision !== "REQUEST_CHANGES") {
+        await expireBusinessRegistrationCertificate(transaction, current.businessRegistrationCertificateUploadId, now);
+      }
+
+      await transaction.operatorApplicationReview.create({
+        data: {
+          applicationId,
+          reviewerUserId: reviewer.id,
+          decision: input.decision,
+          reasonCode: input.reasonCode,
+        },
+      });
+      const reviewed = await transaction.courtOperatorApplication.findUnique({
+        where: { id: applicationId },
+        include: operatorApplicationInclude,
+      });
+      if (!reviewed) throw new DomainError("OPERATOR_APPLICATION_NOT_FOUND", 404, "운영자 신청을 찾을 수 없어요.");
+      return reviewed;
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new DomainError("VENUE_ALREADY_ACTIVE", 409, "같은 장소에서 이미 승인된 운영자가 있어요.");
+    }
+    throw error;
+  }
 }
 
 export async function updateOperatorApplication(
@@ -153,29 +361,53 @@ export async function updateOperatorApplication(
 
   const { verification, normalizedVenueKey, decision } = await verifyInput(prisma, input, provider, applicationId);
   const now = new Date();
-  return prisma.courtOperatorApplication.update({
-    where: { id: applicationId },
-    data: {
-      status: decision.status,
-      businessName: input.businessName,
-      businessRegistrationNumberHash: createBusinessRegistrationNumberHash(input.businessRegistrationNumber),
-      businessVerificationStatus: decision.businessVerificationStatus,
-      venueVerificationStatus: decision.venueVerificationStatus,
-      venueName: input.venueName,
-      venueAddress: input.venueAddress,
-      normalizedVenueKey,
-      verificationFailureCode: decision.verificationFailureCode,
-      submittedAt: now,
-      verifiedAt: decision.businessVerificationStatus === "VERIFIED" ? now : null,
-      publishApprovedAt: decision.status === "PUBLISH_APPROVED" ? now : null,
-      verificationAttempts: {
-        create: [
-          { kind: "BUSINESS", result: verification.business === "VERIFIED" ? "VERIFIED" : verification.business, safeFailureCode: decision.verificationFailureCode, providerRequestRef: verification.providerRequestRef },
-          { kind: "VENUE", result: verification.venue === "MATCHED" ? "VERIFIED" : verification.venue, safeFailureCode: decision.verificationFailureCode, providerRequestRef: verification.providerRequestRef },
-        ],
+  return prisma.$transaction(async (transaction) => {
+    const latest = await transaction.courtOperatorApplication.findFirst({
+      where: { id: applicationId, applicantUserId: viewer.id },
+      select: { status: true, businessRegistrationCertificateUploadId: true },
+    });
+    if (!latest || !["REVIEW_REQUIRED", "CHANGES_REQUESTED", "REJECTED"].includes(latest.status)) {
+      throw new DomainError("OPERATOR_APPLICATION_STATE_CONFLICT", 409, "현재 상태에서는 정보를 수정할 수 없어요.");
+    }
+
+    const { replacedUploadId } = await claimBusinessRegistrationCertificate(
+      transaction,
+      viewer.id,
+      input.businessRegistrationCertificateUploadId,
+      now,
+      latest.businessRegistrationCertificateUploadId,
+    );
+    const update = await transaction.courtOperatorApplication.updateMany({
+      where: { id: applicationId, applicantUserId: viewer.id, status: latest.status },
+      data: {
+        status: decision.status,
+        businessName: input.businessName,
+        businessRegistrationNumberHash: createBusinessRegistrationNumberHash(input.businessRegistrationNumber),
+        businessRegistrationCertificateUploadId: input.businessRegistrationCertificateUploadId,
+        businessVerificationStatus: decision.businessVerificationStatus,
+        venueVerificationStatus: decision.venueVerificationStatus,
+        venueName: input.venueName,
+        venueAddress: input.venueAddress,
+        normalizedVenueKey,
+        verificationFailureCode: decision.verificationFailureCode,
+        submittedAt: now,
+        verifiedAt: decision.businessVerificationStatus === "VERIFIED" ? now : null,
+        publishApprovedAt: decision.status === "PUBLISH_APPROVED" ? now : null,
       },
-    },
-    include: operatorApplicationInclude,
+    });
+    if (update.count !== 1) {
+      throw new DomainError("OPERATOR_APPLICATION_STATE_CONFLICT", 409, "최신 심사 상태를 다시 확인해 주세요.");
+    }
+    await replaceClaimedBusinessRegistrationCertificate(transaction, viewer.id, replacedUploadId, now);
+    await transaction.operatorApplicationVerificationAttempt.createMany({
+      data: [
+        { applicationId, kind: "BUSINESS", result: verification.business === "VERIFIED" ? "VERIFIED" : verification.business, safeFailureCode: decision.verificationFailureCode, providerRequestRef: verification.providerRequestRef },
+        { applicationId, kind: "VENUE", result: verification.venue === "MATCHED" ? "VERIFIED" : verification.venue, safeFailureCode: decision.verificationFailureCode, providerRequestRef: verification.providerRequestRef },
+      ],
+    });
+    const updated = await transaction.courtOperatorApplication.findUnique({ where: { id: applicationId }, include: operatorApplicationInclude });
+    if (!updated) throw new DomainError("OPERATOR_APPLICATION_NOT_FOUND", 404, "운영자 신청을 찾을 수 없어요.");
+    return updated;
   });
 }
 

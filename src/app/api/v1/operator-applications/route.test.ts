@@ -24,7 +24,7 @@ const validBody = {
   representativeName: "홍길동",
   venueName: "마포 테니스파크",
   venueAddress: "서울특별시 마포구 월드컵로 00",
-  operatorPhone: "010-1234-5678",
+  businessRegistrationCertificateUploadId: "00000000-0000-4000-8000-000000000001",
 };
 
 describe("POST /api/v1/operator-applications", () => {
@@ -35,6 +35,16 @@ describe("POST /api/v1/operator-applications", () => {
   it("validates sensitive registration fields before calling the domain service", async () => {
     getRateLimitedCurrentUser.mockResolvedValue({ id: "user-id" });
     const response = await POST(new Request("http://localhost/api/v1/operator-applications", { method: "POST", body: JSON.stringify({ ...validBody, businessRegistrationNumber: "1234" }) }));
+
+    expect(response.status).toBe(422);
+    expect(submitOperatorApplication).not.toHaveBeenCalled();
+  });
+
+  it("requires a business registration certificate before calling the domain service", async () => {
+    getRateLimitedCurrentUser.mockResolvedValue({ id: "user-id" });
+    const bodyWithoutCertificate = { ...validBody, businessRegistrationCertificateUploadId: undefined };
+
+    const response = await POST(new Request("http://localhost/api/v1/operator-applications", { method: "POST", body: JSON.stringify(bodyWithoutCertificate) }));
 
     expect(response.status).toBe(422);
     expect(submitOperatorApplication).not.toHaveBeenCalled();

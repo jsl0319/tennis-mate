@@ -21,7 +21,7 @@ const validInput = {
   representativeName: "홍길동",
   venueName: "마포 테니스파크",
   venueAddress: "서울특별시 마포구 월드컵로 00",
-  operatorPhone: "010-1234-5678",
+  businessRegistrationCertificateUploadId: "00000000-0000-4000-8000-000000000001",
 };
 
 const verifiedProvider: OperatorVerificationProvider = {
@@ -32,8 +32,8 @@ describe("operator application input and status policy", () => {
   it("normalizes private inputs without returning them from the public application view", () => {
     const input = operatorApplicationInputSchema.parse(validInput);
     expect(input.businessRegistrationNumber).toBe("1234567890");
-    expect(input.operatorPhone).toBe("01012345678");
     expect(() => operatorApplicationInputSchema.parse({ ...validInput, businessRegistrationNumber: "1234" })).toThrow();
+    expect(() => operatorApplicationInputSchema.parse({ ...validInput, businessRegistrationCertificateUploadId: "not-a-uuid" })).toThrow();
 
     const view = toOperatorApplicationView({
       id: "application-id", status: "REVIEW_REQUIRED", businessName: "마포 테니스파크",
@@ -41,10 +41,12 @@ describe("operator application input and status policy", () => {
       venueVerificationStatus: "UNAVAILABLE", venueName: "마포 테니스파크", venueAddress: "서울 마포구",
       normalizedVenueKey: "venue-key", verificationFailureCode: "VERIFICATION_UNAVAILABLE", submittedAt: new Date(),
       verifiedAt: null, publishApprovedAt: null, createdAt: new Date(), updatedAt: new Date(), applicantUserId: "user-id",
-      verificationAttempts: [],
+      businessRegistrationCertificateUploadId: validInput.businessRegistrationCertificateUploadId,
+      businessRegistrationCertificate: { status: "ATTACHED" }, verificationAttempts: [],
     });
     expect(view).not.toHaveProperty("businessRegistrationNumber");
     expect(view).not.toHaveProperty("operatorPhone");
+    expect(view.businessRegistrationCertificate).toEqual({ uploadId: validInput.businessRegistrationCertificateUploadId, attached: true });
     expect(view.canPublish).toBe(false);
   });
 
@@ -70,27 +72,39 @@ describe("operator application service", () => {
       businessRegistrationNumberHash: "hash", verificationInputRef: null, businessVerificationStatus: "VERIFIED",
       venueVerificationStatus: "MATCHED", venueName: validInput.venueName, venueAddress: validInput.venueAddress,
       normalizedVenueKey: "venue-key", verificationFailureCode: null, submittedAt: new Date(), verifiedAt: new Date(),
-      publishApprovedAt: new Date(), createdAt: new Date(), updatedAt: new Date(), applicantUserId: "user-id", verificationAttempts: [],
+      publishApprovedAt: new Date(), createdAt: new Date(), updatedAt: new Date(), applicantUserId: "user-id",
+      businessRegistrationCertificateUploadId: validInput.businessRegistrationCertificateUploadId,
+      businessRegistrationCertificate: { status: "ATTACHED" }, verificationAttempts: [],
+    };
+    const transaction = {
+      courtOperatorApplication: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue(created),
+      },
+      operatorApplicationEvidenceUpload: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     };
     const prisma = {
       courtOperatorApplication: {
         findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null),
-        create: vi.fn().mockResolvedValue(created),
       },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
     };
 
     const application = await submitOperatorApplication(prisma as never, { id: "user-id" }, operatorApplicationInputSchema.parse(validInput), verifiedProvider);
 
     expect(application.status).toBe("PUBLISH_APPROVED");
-    expect(prisma.courtOperatorApplication.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(transaction.courtOperatorApplication.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         businessRegistrationNumberHash: expect.any(String),
         status: "PUBLISH_APPROVED",
         verificationAttempts: expect.objectContaining({ create: expect.arrayContaining([expect.objectContaining({ kind: "BUSINESS" }), expect.objectContaining({ kind: "VENUE" })]) }),
       }),
     }));
-    expect(JSON.stringify(prisma.courtOperatorApplication.create.mock.calls)).not.toContain(validInput.businessRegistrationNumber);
-    expect(JSON.stringify(prisma.courtOperatorApplication.create.mock.calls)).not.toContain(validInput.operatorPhone.replaceAll("-", ""));
+    expect(JSON.stringify(transaction.courtOperatorApplication.create.mock.calls)).not.toContain(validInput.businessRegistrationNumber);
+    expect(transaction.operatorApplicationEvidenceUpload.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: validInput.businessRegistrationCertificateUploadId, ownerUserId: "user-id", status: "PENDING" }),
+      data: expect.objectContaining({ status: "ATTACHED" }),
+    }));
   });
 
   it("blocks a second active application and preserves owner/state checks for changes", async () => {

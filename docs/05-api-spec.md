@@ -1191,6 +1191,8 @@ POST /api/v1/applications/{applicationId}/withdraw
 
 | 코드 | 의미 |
 | --- | --- |
+| `BUSINESS_REGISTRATION_CERTIFICATE_REQUIRED` | 필수 사업자등록증 없음 |
+| `OPERATOR_APPLICATION_EVIDENCE_UNAVAILABLE` | 타인 소유·삭제됨·이미 연결됨 등 사용할 수 없는 증빙 |
 | `COURT_SLOT_NOT_FOUND` | 없거나 운영자 소유가 아닌 Slot |
 | `COURT_SLOT_STATE_CONFLICT` | 현재 Slot 상태에서 행동 불가 |
 | `COURT_SLOT_PUBLIC_IMMUTABLE` | 공개했거나 연결된 Slot은 직접 수정 불가 |
@@ -1336,14 +1338,27 @@ POST /api/v1/applications/{applicationId}/withdraw
 
 ### 22.0 운영자 자율 등록·검증 API — Pilot 첫 수직 단위
 
-Pilot 첫 수직 단위에서는 다음 계약을 활성화한다. 인증된 활성 회원이면 테니스 프로필 온보딩과 관계없이 신청할 수 있다. 코트·시간대·제휴 코트 세션 API, 증빙 파일 업로드, 내부 검토 API는 아직 활성화하지 않는다.
+Pilot의 현재 수직 단위에서는 다음 계약을 활성화한다. 인증된 활성 회원이면 테니스 프로필 온보딩과 관계없이 신청할 수 있다. 코트·시간대·제휴 코트 세션과 내부 검토 API는 별도 권한으로 분리하며, 사업자등록증은 신청 제출 전에 비공개 업로드한다.
 
 ```text
+POST /api/v1/operator-application-evidence-uploads
 POST /api/v1/operator-applications
 GET  /api/v1/operator-applications/me
 PATCH /api/v1/operator-applications/{applicationId}
 POST /api/v1/operator-applications/{applicationId}/retry-verification
 ```
+
+#### `POST /api/v1/operator-application-evidence-uploads`
+
+인증: 활성 계정. 일반 테니스 프로필 온보딩은 요구하지 않는다.
+
+요청은 `multipart/form-data`의 `file` 하나만 허용한다. PDF·JPEG·PNG, 10 MiB 이하와 서버의 파일 서명을 모두 통과해야 하며, 다른 필드·파일 여러 개·클라이언트가 지정한 소유자 식별자는 거절한다. 객체는 비공개 저장소에 UUID 경로로 저장하고 응답에는 객체 URL·파일명 대신 불투명 업로드 ID만 반환한다.
+
+```json
+{ "id": "0198..." }
+```
+
+`PENDING` 업로드는 24시간 안에 신청에 연결되지 않으면 삭제한다. 업로드 ID는 같은 신청자가 제출 또는 수정 요청에 한 번만 사용할 수 있다.
 
 #### `POST /api/v1/operator-applications`
 
@@ -1357,12 +1372,13 @@ POST /api/v1/operator-applications/{applicationId}/retry-verification
   "representativeName": "홍길동",
   "venueName": "마포 테니스파크",
   "venueAddress": "서울특별시 마포구 월드컵로 00",
-  "operatorPhone": "01012345678"
+  "businessRegistrationCertificateUploadId": "0198..."
 }
 ```
 
 - 로그인한 활성 회원만 요청할 수 있다. 온보딩 완료는 요구하지 않는다.
-- 사업자등록번호는 숫자 10자리, 개업일은 `YYYY-MM-DD`, 대표자명·사업자명·테니스장명·주소·연락처는 길이와 빈 값만 서버에서 검증한다.
+- 사업자등록번호는 숫자 10자리, 개업일은 `YYYY-MM-DD`, 대표자명·사업자명·테니스장명·주소는 길이와 빈 값을 서버에서 검증한다.
+- `businessRegistrationCertificateUploadId`는 현재 사용자 소유의 `PENDING` 업로드 한 건이어야 한다. 신청 생성 또는 수정 트랜잭션이 이를 `ATTACHED`로 원자적으로 연결하며, 누락·삭제됨·타인 소유·이미 사용된 증빙은 서버가 거절한다.
 - 서버는 원문을 저장하지 않고, 비밀키 HMAC 중복 키와 검증 결과만 보관한다. `verificationInputRef`는 비공개 입력 저장소가 승인되기 전까지 비워 둔다. 입력 원문과 외부 공급자 응답 전문은 오류 응답·로그에 넣지 않는다.
 - 기본 수동 제공자는 외부 확인을 호출하지 않고 `UNAVAILABLE`을 반환한다. 이 경우 `REVIEW_REQUIRED`와 `retryAvailable: true`를 반환한다. 실제 국세청·주소·장소 공급자 키를 설정하거나 호출하지 않는다.
 - 신청자 본인의 진행 중인 신청이 있으면 `409 OPERATOR_APPLICATION_ALREADY_ACTIVE`다. `REJECTED` 또는 `CHANGES_REQUESTED` 신청은 새 입력으로 다시 제출한다.
@@ -1387,7 +1403,7 @@ POST /api/v1/operator-applications/{applicationId}/retry-verification
 
 #### `GET /api/v1/operator-applications/me`
 
-신청자 본인의 가장 최근 신청을 반환한다. 신청 이력이 없으면 `404 OPERATOR_APPLICATION_NOT_FOUND`다. 반환 DTO에는 사업자등록번호, 개업일, 대표자명, 담당자 연락처와 증빙 참조를 포함하지 않는다.
+신청자 본인의 가장 최근 신청을 반환한다. 신청 이력이 없으면 `404 OPERATOR_APPLICATION_NOT_FOUND`다. 반환 DTO에는 사업자등록번호, 개업일, 대표자명, 담당자 연락처, 증빙 객체 참조·파일명·원문을 포함하지 않는다. 신청 화면 재제출을 위해 같은 신청에 이미 연결된 증빙의 불투명 식별자와 `ATTACHED` 여부만 반환할 수 있다.
 
 #### `PATCH /api/v1/operator-applications/{applicationId}`
 
@@ -1397,21 +1413,33 @@ POST /api/v1/operator-applications/{applicationId}/retry-verification
 
 신청자 본인만 `REVIEW_REQUIRED` 또는 `DRAFT_ACCESS_GRANTED` 상태에서 다시 확인을 요청할 수 있다. 검증 원문을 일반 DB에 보관하지 않으므로 첫 구현은 `409 OPERATOR_APPLICATION_RESUBMISSION_REQUIRED`로 새 입력 제출을 안내한다. 암호화된 비공개 입력 저장소와 공급자 설정이 승인되면 이 경로에서 제한된 자동 재시도를 활성화한다.
 
-등록 요청은 사업자등록번호, 개업일, 대표자명, 사업장명, 테니스장명, 도로명주소와 담당자 정보를 받는다. 실제 제공자를 연결할 때는 서버만 국세청 사업자등록정보 API와 주소·장소 API를 호출하며 외부 API 키나 원문 응답을 클라이언트에 반환하지 않는다. 증빙 업로드는 검토가 필요한 경우에만 별도의 비공개 업로드 계약으로 추가하며, 공개 URL을 요청·응답에 넣지 않는다.
+등록 요청은 사업자등록번호, 개업일, 대표자명, 사업장명, 테니스장명, 도로명주소와 필수 사업자등록증 업로드 식별자를 받는다. 실제 제공자를 연결할 때는 서버만 국세청 사업자등록정보 API와 주소·장소 API를 호출하며 외부 API 키나 원문 응답을 클라이언트에 반환하지 않는다. 운영 권한 보완 증빙은 조건부 별도 계약으로만 추가하며, 공개 URL을 요청·응답에 넣지 않는다.
 
 응답은 `applicationStatus`, `businessVerificationStatus`, `venueVerificationStatus`, `canCreatePrivateDraft`, `canPublish`, 사용자 문구와 다음 행동만 제공한다. 사업자 확인 완료는 `canCreatePrivateDraft: true`만 부여할 수 있다. `VERIFIED` 사업자, `MATCHED` 장소·주소, 활성 동일 장소 운영자 부재를 모두 충족하거나 운영 검토가 승인하기 전에는 `canPublish: false`이며 코트·Slot 공개 API를 허용하지 않는다.
 
 외부 API 장애와 신규 사업자 반영 지연은 `UNAVAILABLE`로 구분해 제한된 서버 재시도를 수행하고, 계속 실패하면 검토·수정 경로를 안내한다. 국세청 진위 불일치 또는 휴·폐업은 정정 후 새 신청 경로를 안내한다. 사업자번호·대표자명·주소 전문, 장소 검색 원문과 공급자 응답은 오류 응답과 로그에 포함하지 않는다. 이 엔드포인트에는 일반 등록 API보다 엄격한 로그인 사용자·동일 신청·입력 해시 단위 속도 제한을 적용한다.
 
-운영 검토용 API는 일반 운영자 API와 분리한다.
+운영 검토용 API는 일반 운영자 API와 분리하며 `User.role = INTERNAL_REVIEWER`인 활성 계정만 호출한다. 이 역할은 로그인한 일반 사용자가 API나 화면에서 자신에게 부여할 수 없고, Pilot의 초기 심사자는 서비스 외 보호된 DB 절차로만 지정한다. 심사자는 자신의 신청을 조회하거나 판정할 수 없다.
 
 ```text
 GET  /api/internal/operator-applications?status=REVIEW_REQUIRED
+GET  /api/internal/operator-applications/{applicationId}/business-registration-certificate
 POST /api/internal/operator-applications/{applicationId}/review
-POST /api/internal/operator-applications/{applicationId}/suspend
 ```
 
-권한 있는 내부 검토자만 호출할 수 있으며, 신청자는 자신의 신청을 검토할 수 없다. 각 판정은 안전한 사유 코드, 내부 메모, 검토자와 시각을 감사 이력에 기록한다. 이 내부 API와 역할 모델은 Pilot 구현 시 별도 인증·권한 설계와 함께 활성화한다.
+`GET /api/internal/operator-applications`는 기본값 `status=REVIEW_REQUIRED`의 cursor 목록을 반환한다. 목록 항목에는 `id`, `businessName`, `venue.name`, `venue.address`, 사업자·장소 확인 상태와 `submittedAt`만 포함한다. 사업자등록번호·개업일·대표자명·운영자 연락처·증빙 참조·외부 제공자 응답은 반환하지 않는다.
+
+`GET /api/internal/operator-applications/{applicationId}/business-registration-certificate`는 `INTERNAL_REVIEWER`만 호출한다. 연결된 `ATTACHED` 사업자등록증을 같은 출처에서 `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`로 중계한다. URL·파일명·객체 참조를 JSON으로 반환하지 않으며, 일반 회원·증빙 없는 신청에는 안전한 `404`를 반환한다.
+
+`POST /api/internal/operator-applications/{applicationId}/review`는 다음 요청을 받는다.
+
+```json
+{ "decision": "APPROVE_PUBLISH", "reasonCode": "MANUAL_VERIFIED" }
+```
+
+`decision`은 `APPROVE_PUBLISH`, `REQUEST_CHANGES`, `REJECT` 중 하나이고, `reasonCode`는 `MANUAL_VERIFIED`, `INFORMATION_INCOMPLETE`, `BUSINESS_UNVERIFIED`, `VENUE_UNVERIFIED`, `OPERATING_AUTHORITY_UNCONFIRMED`, `DUPLICATE_VENUE` 중 하나다. 승인에는 `MANUAL_VERIFIED`만 허용한다. 서버는 현재 `ATTACHED` 사업자등록증, `REVIEW_REQUIRED` 상태와 심사자·신청자 분리를 확인하고, 승인 시 같은 정규화 장소의 다른 `PUBLISH_APPROVED` 신청이 없는지 같은 트랜잭션에서 확인한다. 성공 시 신청자용 `OperatorApplicationView`를 반환한다.
+
+각 판정은 심사자 ID·결정·사유 코드·시각만 변경 불가 감사 이력으로 남긴다. 첫 Pilot은 자유 메모와 증빙 원문을 저장하지 않는다. 자신의 신청은 `403 INTERNAL_REVIEWER_SELF_REVIEW_FORBIDDEN`, 이미 판정된 신청은 `409 OPERATOR_APPLICATION_STATE_CONFLICT`, 다른 승인 신청과 장소가 겹치면 `409 VENUE_ALREADY_ACTIVE`다. 운영 중지 API와 역할 관리 UI는 운영 재확인 정책·팀 권한이 확정될 때 별도 단위로 추가한다.
 
 ### 22.1 일반 회원·세션 모집자 API
 

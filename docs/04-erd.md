@@ -73,6 +73,7 @@ erDiagram
         uuid id PK
         varchar nickname UK
         user_status status
+        user_role role
         timestamptz nickname_confirmed_at
         timestamptz onboarding_completed_at
         timestamptz created_at
@@ -196,6 +197,7 @@ erDiagram
 | `id` | UUID | O | PK, 서버 생성 |
 | `nickname` | varchar(12) | O | 2~12자 한글·영문·숫자 표시명, 정규화 후 유일 |
 | `status` | UserStatus | O | 기본 `ACTIVE` |
+| `role` | UserRole | O | 기본 `MEMBER`, Court Partner Pilot의 내부 심사 권한만 별도 부여 |
 | `nicknameConfirmedAt` | timestamptz | X | 최초 닉네임 확인 완료 시각 |
 | `onboardingCompletedAt` | timestamptz | X | 온보딩 완료 여부 판단 |
 | `createdAt` | timestamptz | O | 생성 시각 |
@@ -207,6 +209,13 @@ erDiagram
 - `ACTIVE`
 - `SUSPENDED`
 - `WITHDRAWN`
+
+#### UserRole
+
+- `MEMBER`
+- `INTERNAL_REVIEWER`
+
+`INTERNAL_REVIEWER`는 운영자 역할이나 일반 사용자의 영구 선택값이 아니다. 최초 부여는 일반 API·화면이 아닌 보호된 서비스 외 DB 절차로만 하며, 공개 출시 전에는 역할 관리와 다단계 권한 정책을 별도 확정한다.
 
 성별과 연령은 Core MVP에서 수집하지 않는다. 카카오 표시명은 닉네임 기본값으로만 사용하고 사용자가 확인하거나 수정한 뒤 `nicknameConfirmedAt`을 기록한다.
 
@@ -605,7 +614,9 @@ Court Partner Pilot 구현 단계에서 추가한다. 운영자는 자율 등록
 ```mermaid
 erDiagram
     USER ||--o{ COURT_OPERATOR_APPLICATION : submits
+    USER ||--o{ OPERATOR_APPLICATION_EVIDENCE_UPLOAD : uploads
     USER ||--o{ OPERATOR_APPLICATION_REVIEW : performs
+    OPERATOR_APPLICATION_EVIDENCE_UPLOAD ||--o| COURT_OPERATOR_APPLICATION : business_registration_certificate
     COURT_OPERATOR_APPLICATION ||--o{ OPERATOR_APPLICATION_VERIFICATION_ATTEMPT : records
     COURT_OPERATOR_APPLICATION ||--o{ OPERATOR_APPLICATION_REVIEW : receives
     USER ||--o| COURT_OPERATOR : owns
@@ -628,19 +639,35 @@ erDiagram
         uuid applicant_user_id FK
         operator_application_status status
         varchar business_name
-        varchar business_number_hash
+        varchar business_registration_number_hash
+        uuid business_registration_certificate_upload_id FK_UK
         varchar verification_input_ref
         business_verification_status business_verification_status
         venue_verification_status venue_verification_status
+        varchar venue_name
+        varchar venue_address
         varchar normalized_venue_key
         timestamptz verified_at
         timestamptz publish_approved_at
-        timestamptz revalidation_due_at
         varchar verification_failure_code
-        varchar verification_document_ref
-        varchar reviewer_note
         timestamptz submitted_at
-        timestamptz reviewed_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    OPERATOR_APPLICATION_EVIDENCE_UPLOAD {
+        uuid id PK
+        uuid owner_user_id FK
+        varchar private_object_ref UK
+        varchar content_type
+        int byte_size
+        operator_application_evidence_upload_status status
+        timestamptz attached_at
+        timestamptz expires_at
+        timestamptz cleanup_claimed_at
+        timestamptz deleted_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     OPERATOR_APPLICATION_VERIFICATION_ATTEMPT {
@@ -657,9 +684,8 @@ erDiagram
         uuid id PK
         uuid application_id FK
         uuid reviewer_user_id FK
-        operator_review_decision decision
-        varchar reason_code
-        varchar internal_note
+        operator_application_review_decision decision
+        operator_application_review_reason_code reason_code
         timestamptz created_at
     }
 
@@ -778,13 +804,15 @@ erDiagram
 
 ### 13.0 Pilot 현재 수직 단위 — 운영자 신청, 코트 시간 공급, 제휴 세션 연결
 
-Court Partner Pilot의 현재 구현은 `CourtOperatorApplication`·자동 확인 시도 이력에 더해, 비공개 `Court`·`CourtUnit`·`CourtSlot` 초안과 공개된 Slot의 `PARTNER_COURT` Match 연결까지 활성화한다. 일반 회원은 공개 Slot을 읽기 전용으로 보거나 `AVAILABLE` Slot을 선택해 세션을 열 수 있다. 결제·환불·정산, 운영자 사진, 증빙 파일, 내부 운영 검토 화면은 이 단위에 포함하지 않는다.
+Court Partner Pilot의 현재 구현은 `CourtOperatorApplication`·자동 확인 시도 이력·내부 심사 감사 이력·필수 사업자등록증 비공개 업로드에 더해, 비공개 `Court`·`CourtUnit`·`CourtSlot` 초안과 공개된 Slot의 `PARTNER_COURT` Match 연결까지 활성화한다. 일반 회원은 공개 Slot을 읽기 전용으로 보거나 `AVAILABLE` Slot을 선택해 세션을 열 수 있다. 결제·환불·정산, 운영자 사진, 조건부 운영 권한 보완 증빙과 실제 외부 확인 제공자 호출은 이 단위에 포함하지 않는다.
 
 이 단위가 해결하는 문제는 실제 코트 운영자가 등록을 시작한 뒤 심사 진행 상황과 다음 행동을 알 수 없고, 승인 전 코트 시간이 이용자에게 공개되는 위험이 있다는 점이다. 공개 권한을 `PUBLISH_APPROVED`로 분리해, 검증 전 입력 정보가 이용자 공개나 제휴 코트 세션 연결로 이어지지 않게 한다. `DRAFT_ACCESS_GRANTED` 또는 `PUBLISH_APPROVED` 신청자는 비공개 Court·Slot 초안만 만들 수 있고, 공개 전환은 후자만 할 수 있다. 더 단순한 대안인 신청 상태 문자열 하나만 저장하는 방식은 사업자 유효와 장소 운영 권한을 구분할 수 없어 사용하지 않는다.
 
 현재 수직 단위 마이그레이션에는 다음을 포함한다.
 
 - `CourtOperatorApplication`, `OperatorApplicationVerificationAttempt`
+- `OperatorApplicationEvidenceUpload`와 신청당 사업자등록증 1건의 비공개·원자적 연결, 미연결·만료 파일 정리
+- `User.role = INTERNAL_REVIEWER`와 `OperatorApplicationReview`의 판정·사유 코드·심사자·시각 감사 이력
 - 신청 상태·사업자 확인 상태·장소 확인 상태 enum
 - 신청자별 현재 진행 중인 신청을 빠르게 찾는 인덱스와 사업자·장소 중복 검토용 HMAC 키 인덱스
 - `Court`, `CourtUnit`, `CourtSlot`, `CourtSlotStatusHistory`, `Match.courtSlotId`
@@ -813,13 +841,14 @@ stateDiagram-v2
 
 운영자 신청과 심사 이력을 보존한다. 승인된 운영자와 신청 데이터를 하나의 테이블로 합치지 않는다. 신청 단계의 사업자 확인 완료는 비공개 Court·Slot 초안 작성 권한만 줄 수 있고, 공개 권한은 `PUBLISH_APPROVED` 상태에서만 부여한다.
 
-민감한 사업자 번호 원문을 일반 컬럼에 저장하지 않는다. 중복 확인은 일반 해시가 아니라 비밀값으로 키를 관리하는 HMAC으로 수행하고, 필요한 경우에만 암호화된 별도 저장소 참조를 사용한다. 증빙 파일은 비공개 객체 저장소 참조만 저장한다.
+민감한 사업자 번호 원문을 일반 컬럼에 저장하지 않는다. 중복 확인은 일반 해시가 아니라 비밀값으로 키를 관리하는 HMAC으로 수행하고, 필요한 경우에만 암호화된 별도 저장소 참조를 사용한다. `businessRegistrationCertificateUploadId`는 신청당 하나의 `ATTACHED` 사업자등록증 업로드만 가리키며, 증빙 파일 원문은 비공개 객체 저장소에만 둔다.
 
 자동 검증에는 사업자번호·개업일·대표자명, 사업장명, 사용자가 고른 표준 도로명주소와 장소 검색 결과를 사용한다. 원문 사업자번호·대표자명·외부 API 응답 전문은 로그나 분석 이벤트에 남기지 않는다. `CourtOperatorApplication`에는 최소한 다음 결과를 보관한다.
 
 | 필드 | 규칙 |
 | --- | --- |
 | `businessRegistrationNumberHash` | 정규화 사업자번호의 키 관리 HMAC. 원문 대입 공격 없이 중복 신청만 탐지 |
+| `businessRegistrationCertificateUploadId` | 신청자 소유 `PENDING` 업로드를 제출 트랜잭션에서 원자적으로 연결한 1:1 FK. 원문·파일명·객체 URL은 반환하지 않음 |
 | `verificationInputRef` | 사업자번호·개업일·대표자명·제출 주소를 재확인에만 쓰는 암호화된 비공개 참조 |
 | `businessVerificationStatus` | `PENDING`, `VERIFIED`, `MISMATCH`, `UNAVAILABLE` |
 | `venueVerificationStatus` | `PENDING`, `MATCHED`, `REVIEW_REQUIRED`, `UNAVAILABLE` |
@@ -833,13 +862,31 @@ stateDiagram-v2
 
 `UNAVAILABLE`은 외부 서비스 장애·지연을 뜻하므로 반려와 구분한다. 재시도는 별도 Attempt 이력으로 남기고 제한된 횟수 이후 `REVIEW_REQUIRED`로 전환한다. 첫 구현은 검증 원문을 일반 DB에 저장하지 않아 새 입력 제출로만 재확인을 시작한다. `MISMATCH` 또는 휴·폐업처럼 명백히 잘못된 사업자 상태만 정정 후 새 신청하도록 `REJECTED`로 전환할 수 있다.
 
+#### OperatorApplicationEvidenceUpload
+
+사업자등록증을 신청 생성 전 잠시 보관하고 심사 중에만 안전하게 열람하기 위한 비공개 업로드 메타데이터다. `ownerUserId`, UUID 기반 객체 참조, 허용 MIME·바이트 수·상태·기한만 저장하며 원본 파일명, OCR 결과, 문서에서 읽은 사업자번호·대표자명은 저장하지 않는다.
+
+| 필드 | 규칙 |
+| --- | --- |
+| `privateObjectRef` | 비공개 객체 저장소 참조. API DTO·클라이언트·로그에 노출하지 않음 |
+| `contentType` | `application/pdf`, `image/jpeg`, `image/png`만 허용하고 서버가 파일 서명을 재확인 |
+| `byteSize` | 10 MiB 이하 |
+| `status` | `PENDING`, `ATTACHED`, `REPLACED`, `CLEANUP_PENDING`, `DELETED` |
+| `attachedAt` | 신청 제출·수정 트랜잭션에서 `ATTACHED`로 점유한 시각 |
+| `expiresAt` | 연결 뒤 최대 30일의 심사·보완 기한. 승인·반려 시 즉시 만료 처리 |
+| `cleanupClaimedAt`, `deletedAt` | 비공개 객체 삭제 작업의 동시성·완료 시각 |
+
+`PENDING`은 24시간 안에 신청에 연결되지 않으면, `REPLACED`와 만료된 `ATTACHED`는 다음 정리 작업에서 객체와 메타데이터를 함께 삭제한다. 신청자가 새 등록증으로 교체하면 기존 증빙은 `REPLACED`로 전환해 재사용을 막는다. 내부 심사자만 현재 `ATTACHED` 증빙을 서버 중계 경로로 열람할 수 있고, 일반 운영자·일반 회원·감사 이력은 원문에 접근하지 못한다.
+
 #### OperatorApplicationVerificationAttempt
 
 사업자·주소·장소 확인의 실행 이력만 보관한다. 외부 응답 전문, 사업자번호 원문, 대표자명 원문, 주소 원문은 저장하지 않는다. `providerRequestRef`는 공급자 문의·장애 추적에 필요한 비식별 참조값만 허용한다.
 
 #### OperatorApplicationReview
 
-자동 확인으로 결론 낼 수 없는 장소·운영 권한을 권한 있는 운영 검토자가 판정한 감사 이력이다. `reviewerUserId`는 신청자와 같을 수 없고, 결정은 `APPROVE_PUBLISH`, `REQUEST_CHANGES`, `REJECT`, `SUSPEND` 중 하나다. 공개 검토 권한은 일반 운영자 권한과 분리된 내부 역할에만 부여한다.
+자동 확인으로 결론 낼 수 없는 장소·운영 권한을 권한 있는 운영 검토자가 판정한 감사 이력이다. `reviewerUserId`는 신청자와 같을 수 없고, 결정은 첫 Pilot에서 `APPROVE_PUBLISH`, `REQUEST_CHANGES`, `REJECT` 중 하나다. `reasonCode`는 `MANUAL_VERIFIED`, `INFORMATION_INCOMPLETE`, `BUSINESS_UNVERIFIED`, `VENUE_UNVERIFIED`, `OPERATING_AUTHORITY_UNCONFIRMED`, `DUPLICATE_VENUE` 중 하나로 제한한다. 자유 메모와 증빙 원문은 일반 DB에 저장하지 않으며, 중지 판정은 운영 중 재확인 정책이 확정될 때 추가한다. 공개 검토 권한은 일반 운영자 권한과 분리된 `User.role = INTERNAL_REVIEWER`에만 부여한다.
+
+`OperatorApplicationReview(applicationId, reviewerUserId, decision, reasonCode, createdAt)`는 판정 후 수정·삭제하지 않는다. 같은 정규화 장소의 승인 신청은 PostgreSQL 부분 유일 인덱스로 한 건만 허용해, 동시에 승인해도 한 건만 `PUBLISH_APPROVED`가 되게 한다.
 
 #### OperatorApplicationStatus
 
@@ -1125,6 +1172,7 @@ WHERE id = :id AND version = :expectedVersion
 | 세션 모집자 취소 후 Slot 처리 | 자동 재공개하지 않음 | 정책 확정 시 별도 상태 전이 또는 새 Slot 생성 규칙 필요 |
 | 공개 Slot 상태 보존 | 한 번 공개하면 상태와 이력을 계속 공개 | 상태 이력, `visibility`, 공개 응답 DTO 필요 |
 | 현장 최대 인원 | Slot별 `maxParticipantCount` 필수 | Partner Match 생성 시 정원 검증 필요 |
+| 내부 심사자 부여 | `User.role = INTERNAL_REVIEWER`, 서비스 외 보호된 DB 절차로만 초기 부여 | 역할 관리 UI·다단계 권한은 실제 팀 운영 시 재설계 |
 | 운영자 직원 계정 | Pilot 소유자 한 명 | 필요 시 CourtOperatorMember 추가 |
 
 ## 22. 구현 순서
@@ -1140,7 +1188,7 @@ WHERE id = :id AND version = :expectedVersion
 
 ### Court Partner Pilot
 
-1. CourtOperatorApplication·VerificationAttempt·Review·CourtOperator와 공개 권한 분리
+1. CourtOperatorApplication·VerificationAttempt·내부 심사자 역할·Review 감사 이력과 공개 권한 분리
 2. Court·CourtUnit·Amenity와 사진 없는 기본 일러스트
 3. CourtSlot 공개 여부·상태 이력·현장 최대 인원, 시간 중복 제약 및 `PUBLISH_APPROVED` 공개 게이트
 4. `Match.courtSlotId` 확장과 정원 검증, `AVAILABLE → ALLOCATED` 트랜잭션

@@ -33,3 +33,18 @@ export async function requireActivePage(returnTo: string) {
   const user = await getPrisma().user.findUnique({ where: { id: userId }, select: { status: true } });
   if (!user || user.status !== "ACTIVE") redirect(getLoginPath(returnTo));
 }
+
+/** Internal review pages use a role stored in the database, never a client-supplied flag. */
+export async function requireInternalReviewerPage(returnTo: string) {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) redirect(getLoginPath(returnTo));
+
+  const user = await getPrisma().user.findUnique({
+    where: { id: userId },
+    select: { status: true, role: true },
+  });
+  if (!user || user.status !== "ACTIVE") redirect(getLoginPath(returnTo));
+  if (user.role !== "INTERNAL_REVIEWER") redirect("/");
+}

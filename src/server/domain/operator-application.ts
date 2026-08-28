@@ -8,12 +8,6 @@ const businessRegistrationNumberSchema = z
   .transform((value) => value.replaceAll(/\D/g, ""))
   .refine((value) => /^\d{10}$/.test(value), "사업자등록번호는 숫자 10자리로 입력해 주세요.");
 
-const phoneSchema = z
-  .string()
-  .trim()
-  .transform((value) => value.replaceAll(/\D/g, ""))
-  .refine((value) => /^01\d{8,9}$/.test(value), "운영자 연락처를 다시 확인해 주세요.");
-
 export const operatorApplicationInputSchema = z.object({
   businessName: z.string().trim().min(1, "사업자명을 입력해 주세요.").max(100, "사업자명은 100자 이하여야 해요."),
   businessRegistrationNumber: businessRegistrationNumberSchema,
@@ -21,10 +15,56 @@ export const operatorApplicationInputSchema = z.object({
   representativeName: z.string().trim().min(1, "대표자명을 입력해 주세요.").max(100, "대표자명은 100자 이하여야 해요."),
   venueName: z.string().trim().min(1, "테니스장 이름을 입력해 주세요.").max(100, "테니스장 이름은 100자 이하여야 해요."),
   venueAddress: z.string().trim().min(1, "테니스장 주소를 입력해 주세요.").max(255, "테니스장 주소는 255자 이하여야 해요."),
-  operatorPhone: phoneSchema,
+  businessRegistrationCertificateUploadId: z.string().uuid("사업자등록증을 올려 주세요."),
 });
 
 export type OperatorApplicationInput = z.infer<typeof operatorApplicationInputSchema>;
+
+const operatorApplicationReviewDecisionSchema = z.enum([
+  "APPROVE_PUBLISH",
+  "REQUEST_CHANGES",
+  "REJECT",
+]);
+
+const operatorApplicationReviewReasonCodeSchema = z.enum([
+  "MANUAL_VERIFIED",
+  "INFORMATION_INCOMPLETE",
+  "BUSINESS_UNVERIFIED",
+  "VENUE_UNVERIFIED",
+  "OPERATING_AUTHORITY_UNCONFIRMED",
+  "DUPLICATE_VENUE",
+]);
+
+export const operatorApplicationReviewInputSchema = z.object({
+  decision: operatorApplicationReviewDecisionSchema,
+  reasonCode: operatorApplicationReviewReasonCodeSchema,
+}).superRefine((input, context) => {
+  if (input.decision === "APPROVE_PUBLISH" && input.reasonCode !== "MANUAL_VERIFIED") {
+    context.addIssue({
+      code: "custom",
+      path: ["reasonCode"],
+      message: "승인에는 수동 확인 완료 사유만 선택할 수 있어요.",
+    });
+  }
+
+  if (input.decision !== "APPROVE_PUBLISH" && input.reasonCode === "MANUAL_VERIFIED") {
+    context.addIssue({
+      code: "custom",
+      path: ["reasonCode"],
+      message: "보완 요청 또는 반려에는 확인이 필요한 사유를 선택해 주세요.",
+    });
+  }
+});
+
+export type OperatorApplicationReviewInput = z.infer<typeof operatorApplicationReviewInputSchema>;
+
+export const operatorApplicationReviewListQuerySchema = z.object({
+  status: z.literal("REVIEW_REQUIRED").default("REVIEW_REQUIRED"),
+  cursor: z.string().trim().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export type OperatorApplicationReviewListQuery = z.infer<typeof operatorApplicationReviewListQuerySchema>;
 
 export type ProviderVerificationResult = {
   business: "VERIFIED" | "MISMATCH" | "UNAVAILABLE";
@@ -110,6 +150,7 @@ export const activeOperatorApplicationStatuses = [
   "DRAFT_ACCESS_GRANTED",
   "REVIEW_REQUIRED",
   "UNDER_REVIEW",
+  "CHANGES_REQUESTED",
   "PUBLISH_APPROVED",
   "SUSPENDED",
 ] as const;
