@@ -3,6 +3,7 @@ import type { PlayPurpose, PrismaClient } from "@/generated/prisma/client";
 
 import { getProfile, type ProfileWithRelations } from "@/server/domain/profile-service";
 import { DomainError } from "@/server/domain/profile-service";
+import { addAcceptedMemberToConversation, makeConversationReadOnly } from "@/server/domain/match-chat-service";
 
 import {
   getAcceptedCount,
@@ -39,6 +40,7 @@ const matchInclude = {
     },
   },
   applications: { select: { id: true, applicantUserId: true, status: true } },
+  conversation: { select: { status: true } },
   externalCourtImageUpload: { select: { id: true } },
   courtSlot: {
     include: {
@@ -418,7 +420,7 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
       canComplete: relation === "HOST" && match.status === "CLOSED" && match.endsAt <= now,
     },
     contact: canSeeContact
-      ? { type: "KAKAO_OPEN_CHAT", url: match.contactOpenChatUrl, label: "카카오 오픈채팅으로 연락하기" }
+      ? { conversationStatus: match.conversation?.status ?? "NOT_CREATED", href: match.conversation ? `/chats/${match.id}` : null, label: "채팅방 열기" }
       : null,
     supplyNotice: notice ? toSupplyNoticeView(notice) : null,
     version: match.version,
@@ -437,7 +439,6 @@ function isSameCreateRequest(match: MatchWithRelations, input: MatchCreateInput)
     match.recruitCount === input.recruitCount &&
     match.partnerPreference === input.partnerPreference &&
     match.introduction === optionalText(input.introduction) &&
-    match.contactOpenChatUrl === input.contactOpenChatUrl &&
     match.purposes.map(({ purpose }) => purpose).sort().join(",") === [...input.playPurposes].sort().join(",");
 
   if (!sameCommonInput) return false;
@@ -542,7 +543,6 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
             totalCourtFeeKrw: slot.priceKrw,
             additionalCostNote: null,
             introduction: optionalText(input.introduction),
-            contactOpenChatUrl: input.contactOpenChatUrl,
             purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
           },
           select: { id: true },
@@ -570,7 +570,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           externalCourtImageUploadId: imageUploadId, courtSlotId: null, recruitCount: input.recruitCount,
           partnerPreference: input.partnerPreference, totalCourtFeeKrw: input.totalCourtFeeKrw,
           additionalCostNote: optionalText(input.additionalCostNote), introduction: optionalText(input.introduction),
-          contactOpenChatUrl: input.contactOpenChatUrl, purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
+          purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
         },
         select: { id: true },
       });
@@ -593,6 +593,7 @@ const applicationInclude = {
     include: {
       region: true,
       courtSlot: { include: { courtUnit: { include: { court: true } } } },
+      conversation: { select: { status: true } },
     },
   },
 } satisfies Prisma.MatchApplicationInclude;
@@ -628,7 +629,7 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
     withdrawnAt: application.withdrawnAt?.toISOString() ?? null,
     cancelledAt: application.cancelledAt?.toISOString() ?? null,
     contact: application.status === "ACCEPTED"
-      ? { type: "KAKAO_OPEN_CHAT", url: application.match.contactOpenChatUrl, label: "카카오 오픈채팅으로 연락하기" }
+      ? { conversationStatus: application.match.conversation?.status ?? "NOT_CREATED", href: application.match.conversation ? `/chats/${application.match.id}` : null, label: "채팅방 열기" }
       : null,
     supplyNotice,
   };
@@ -760,6 +761,13 @@ export async function acceptApplication(prisma: PrismaClient, viewer: Viewer, ap
     });
     if (accepted.count !== 1) throw new DomainError("APPLICATION_STATE_CONFLICT", 409, "이미 처리된 신청이에요.");
 
+    await addAcceptedMemberToConversation(transaction, {
+      matchId: application.match.id,
+      hostUserId: application.match.hostUserId,
+      applicantUserId: application.applicantUserId,
+      now: decidedAt,
+    });
+
     const nextAcceptedCount = acceptedCount + 1;
     const isFull = nextAcceptedCount >= application.match.recruitCount;
     if (isFull) {
@@ -850,6 +858,7 @@ export async function cancelMatch(prisma: PrismaClient, viewer: Viewer, matchId:
       where: { matchId: match.id, status: { in: ["PENDING", "ACCEPTED"] } },
       data: { status: "CANCELLED", cancelledAt },
     });
+    await makeConversationReadOnly(transaction, match.id, "매칭이 취소되어 이 채팅방은 읽기 전용이에요.", cancelledAt);
     return {
       id: match.id,
       status: "CANCELLED" as const,
@@ -934,7 +943,7 @@ export async function getHostedMatches(prisma: PrismaClient, viewer: Viewer) {
     })
     .map(({ match, card, pendingApplicationCount, canClose, canCancel, canComplete }) => ({
       ...card,
-      contact: { type: "KAKAO_OPEN_CHAT" as const, url: match.contactOpenChatUrl, label: "카카오 오픈채팅으로 연락하기" },
+      contact: { conversationStatus: match.conversation?.status ?? "NOT_CREATED", href: match.conversation ? `/chats/${match.id}` : null, label: "채팅방 열기" },
       pendingApplicationCount,
       canClose,
       canCancel,

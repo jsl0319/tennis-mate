@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import type { CourtSlotStatus, MatchStatus, PrismaClient } from "@/generated/prisma/client";
 
 import { DomainError } from "@/server/domain/profile-service";
+import { makeConversationReadOnly } from "@/server/domain/match-chat-service";
 
 import type {
   CourtCreateInput,
@@ -534,6 +535,7 @@ export async function reportCourtSupplyIncident(
       where: { matchId: slot.match!.id, status: { in: ["PENDING", "ACCEPTED"] } },
       data: { status: "CANCELLED", cancelledAt: now },
     });
+    await makeConversationReadOnly(transaction, slot.match!.id, "코트 운영 사정으로 매칭이 취소되어 이 채팅방은 읽기 전용이에요.", now);
     const incident = await transaction.courtSupplyIncident.create({
       data: {
         courtSlotId: slot.id,

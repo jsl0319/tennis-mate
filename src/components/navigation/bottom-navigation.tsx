@@ -13,9 +13,9 @@ type NavigationItem = {
 const iconClassName = "size-5";
 
 const navigationItems: NavigationItem[] = [
-  { href: "/", label: "홈", isActive: (pathname) => pathname === "/", icon: <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg> },
-  { href: "/matches/new", label: "만들기", isActive: (pathname) => pathname === "/matches/new", icon: <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeLinecap="round" strokeWidth="2" /></svg> },
-  { href: "/activity/received", label: "활동", isActive: (pathname) => pathname.startsWith("/activity"), icon: <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24"><path d="M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg> },
+  { href: "/", label: "매칭", isActive: (pathname) => pathname === "/", icon: <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg> },
+  { href: "/partner-sessions", label: "코트 매칭", isActive: (pathname) => pathname.startsWith("/partner-sessions"), icon: <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24"><path d="M4 5.5h16v13H4zM4 12h16M12 5.5v13M7.5 8.5c1.1.7 2 1.9 2 3.5s-.9 2.8-2 3.5M16.5 8.5c-1.1.7-2 1.9-2 3.5s.9 2.8 2 3.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg> },
+  { href: "/chats", label: "채팅", isActive: (pathname) => pathname.startsWith("/chats"), icon: <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24"><path d="M5 5.5h14A1.5 1.5 0 0 1 20.5 7v8A1.5 1.5 0 0 1 19 16.5h-7.7L7 20v-3.5H5A1.5 1.5 0 0 1 3.5 15V7A1.5 1.5 0 0 1 5 5.5Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg> },
   { href: "/my", label: "마이", isActive: (pathname) => pathname === "/my", icon: <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" /><path d="M5 21a7 7 0 0 1 14 0" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" /></svg> },
 ];
 

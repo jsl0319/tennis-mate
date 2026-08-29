@@ -5,10 +5,10 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서명 | 서비스 내 Match 채팅 설계 |
-| 상태 | 제품 설계 확정안 — 구현·DB migration·실시간 인프라·Figma 동기화 전 |
+| 상태 | Match Chat MVP 구현 승인 — 기존 카카오 링크 호환·공개 출시 게이트 유지 |
 | 대상 | 하나의 Match에서 모집자와 실제 수락 참가자가 일정·준비물을 조율하는 텍스트 채팅 |
 | 관련 문서 | `01-product-overview.md`, `02-prd.md`, `03-screen-spec.md`, `04-erd.md`, `05-api-spec.md`, `06-development-plan.md`, `07-court-commerce-design.md` |
-| 구현 상태 | 미구현. 현재 카카오 오픈채팅 흐름은 동작을 유지한다. |
+| 구현 상태 | 소스 구현 완료. 모든 Match는 서비스 내 Match 채팅만 사용하며, 공개 출시는 보관·파기와 운영 SLA 법무 검토 게이트 뒤에만 진행한다. |
 
 이 문서는 외부 오픈채팅 링크를 서비스 내 Match 채팅으로 단계적으로 대체하는 설계다. 범용 메신저나 개인 DM을 만들지 않으며, 코트 운영자에게 참가 신청 승인 권한을 주지도 않는다.
 
@@ -22,7 +22,7 @@
 
 ### 2.2 일정 영향과 더 단순한 대안
 
-서비스 내 채팅은 메시지 저장, 권한, 신고·운영 조치, 보관·삭제, 전송 지연과 장애 안내가 함께 필요하므로 Core와 현재 Pilot 범위를 넓힌다. 더 단순한 대안은 카카오 오픈채팅을 계속 쓰는 것이지만, 외부 이동과 서비스 밖 안전 정책 문제는 남는다.
+서비스 내 채팅은 메시지 저장, 권한, 신고·운영 조치, 보관·삭제, 전송 지연과 장애 안내가 함께 필요하므로 Core와 현재 Pilot 범위를 넓힌다. 더 단순한 대안은 외부 연락 수단을 유지하는 것이지만, 외부 이동과 서비스 밖 안전 정책 문제 때문에 채택하지 않는다.
 
 권장 첫 단계는 **Match마다 하나의 텍스트 방**이다. 실시간 개인 메신저, 사진·파일·음성, 읽음 표시, 반응, 메시지 편집·사용자 삭제, 개인 DM, 참여자 검색, 운영자–참가자 대화는 모두 제외한다.
 
@@ -35,7 +35,7 @@
 | 방 수 | Match당 최대 하나. 대화는 새 Match로 재사용하지 않는다. |
 | 입장 | 모집자와 해당 Match의 `ACCEPTED` 참가자만. `PENDING`, `REJECTED`, `WITHDRAWN`, 수락된 적 없는 `CANCELLED` 신청자와 운영자는 입장하지 못한다. Match 취소 뒤에는 이미 입장한 멤버만 보관 기간 동안 읽기 전용으로 남는다. |
 | 생성 | 첫 `ACCEPTED`가 확정될 때 서버가 생성하거나 기존 방에 멤버를 원자적으로 추가한다. 빈 방을 미리 만들지 않는다. |
-| 표시 | 사용자는 Match 상세와 활동 화면에서만 `채팅방 열기`로 들어간다. 임의 대화방 목록·사용자 검색은 없다. |
+| 표시 | 사용자는 Match 상세·활동 화면 또는 전역 `채팅` 탭에서 `채팅방 열기`로 들어간다. 전역 탭은 내가 만든 Match와 내가 신청해 수락된 Match를 나누며, 방 생성·사용자 검색은 없다. |
 | 메시지 | 텍스트 1~500자, 줄바꿈 제한, URL 미리보기·파일·사진·위치 공유 없음. |
 | 발신 | 모집자와 현재 수락 참가자만. 서버가 멤버십·방 상태·속도 제한을 모두 검사한다. |
 | 읽음 | 내부의 마지막 읽은 메시지 커서만 저장해 미확인 수를 계산할 수 있다. 다른 사용자에게 읽음·접속 상태를 보여 주지 않는다. |
@@ -59,16 +59,16 @@ stateDiagram-v2
 - `ARCHIVED`: 일반 멤버에게 보이지 않는다. 실제 메시지 보관·삭제는 7장의 정책 게이트를 통과한 뒤에만 자동화한다.
 - 공급 철회와 모집자 취소는 서버가 안전한 시스템 메시지를 만든 뒤 방을 읽기 전용으로 바꾼다. 취소된 Match를 대화로 재개하거나 Slot을 재공개하지 않는다.
 
-### 3.3 외부 오픈채팅에서의 전환
+### 3.3 외부 오픈채팅 제거와 기존 Match 전환
 
-현재 구현된 `contactOpenChatUrl`은 이전 Match를 위해 유지한다. 서비스 내 채팅 출시 migration은 다음 순서를 따른다.
+외부 오픈채팅 링크는 더 이상 연락 수단으로 사용하지 않는다. 출시 migration은 다음 순서로 기존 데이터를 안전하게 전환한다.
 
-1. `MatchContactMode`를 `KAKAO_OPEN_CHAT`과 `IN_APP_CHAT`으로 분리하고, 기존 Match는 전자로 backfill한다.
-2. 새 코드가 두 모드를 모두 안전하게 읽은 뒤 `contactOpenChatUrl`을 nullable로 바꾼다.
-3. 새 Match의 연락 수단을 `IN_APP_CHAT`으로 만들고, 카카오 링크 입력·노출 CTA를 제거한다.
-4. 기존 Match의 외부 링크는 과거 참가자에게만 호환 목적으로 남기며, 새 Match에는 외부 링크를 요구·반환하지 않는다.
+1. `matches.contact_open_chat_url`과 그 URL CHECK 제약을 제거한다. 링크 원문은 복구·반환하지 않는다.
+2. 현재 진행 중이며 수락자가 있는 기존 Match에는 모집자와 `ACCEPTED` 참가자 멤버십을 가진 서비스 내 방을 backfill한다.
+3. 모든 새·기존 Match의 상세와 활동 응답은 URL 대신 방 상태와 안전한 진입 경로만 반환한다.
+4. 수락자가 없거나 보관 기한이 지난 기존 Match에는 빈 방을 만들지 않는다.
 
-이 전환 전에는 기존 `COURT_TBD`도 오픈채팅으로 조율한다. 전환 후에는 수락자만 서비스 내 Match 방에서 조율한다.
+`COURT_TBD`를 포함한 모든 Match는 첫 수락 뒤 서비스 내 Match 방에서 코트·비용을 조율한다.
 
 ## 4. 안전, 신고와 보관
 
@@ -108,7 +108,7 @@ erDiagram
 | 모델 | 핵심 필드 | 무결성 규칙 |
 | --- | --- | --- |
 | `MatchConversation` | `matchId`, `status`, `readOnlyAt`, `archiveAt`, `createdAt` | `matchId` 유일. Match를 삭제·재사용하지 않는다. |
-| `MatchConversationMember` | `conversationId`, `userId`, `role`, `joinedAt`, `leftAt?`, `sendingSuspendedAt?`, `lastReadMessageId?` | `(conversationId, userId)` 유일. 서버가 모집자 또는 수락 시점의 `ACCEPTED` Application에서만 만든다. Match 취소 뒤 기존 멤버는 읽기 전용으로 보관한다. |
+| `MatchConversationMember` | `conversationId`, `userId`, `role`, `joinedAt`, `sendingSuspendedAt?`, `lastReadMessageId?` | `(conversationId, userId)` 유일. 서버가 모집자 또는 수락 시점의 `ACCEPTED` Application에서만 만든다. Match 취소 뒤 기존 멤버는 읽기 전용으로 보관한다. |
 | `MatchChatMessage` | `conversationId`, `senderUserId?`, `type`, `body`, `visibility`, `clientRequestId?`, `createdAt` | 일반 메시지는 활성 발신 멤버만 생성한다. 시스템 메시지는 서버만 만든다. `(senderUserId, clientRequestId)`는 non-null 부분 유일이다. |
 | `MatchChatReport` | `messageId`, `reporterUserId`, `reason`, `description?`, `status`, `createdAt` | 신고자는 해당 방 멤버여야 하며 같은 메시지를 중복 신고하지 않는다. |
 | `MatchChatModerationAction` | `reportId`, `reviewerUserId`, `action`, `reason`, `createdAt` | `INTERNAL_REVIEWER`만 생성하고 수정·삭제하지 않는다. |
@@ -126,8 +126,8 @@ erDiagram
 | `POST /api/v1/matches/{matchId}/conversation/messages` | 발신 가능한 방 멤버 | `body`, `clientRequestId`로 텍스트 메시지 생성 |
 | `POST /api/v1/matches/{matchId}/conversation/read` | 방 멤버 | 내 마지막 읽은 커서 갱신. 다른 멤버에게 읽음 표시 안 함 |
 | `POST /api/v1/matches/{matchId}/conversation/messages/{messageId}/reports` | 방 멤버 | 메시지 신고 생성 |
-| `GET /api/v1/internal/chat-reports` | `INTERNAL_REVIEWER` | 대기 신고 목록 조회 |
-| `POST /api/v1/internal/chat-reports/{reportId}/actions` | `INTERNAL_REVIEWER` | 메시지 숨김·발신 중지·방 읽기 전용 등 감사 가능한 조치 |
+| `GET /api/internal/chat-reports` | `INTERNAL_REVIEWER` | 대기 신고 목록 조회 |
+| `POST /api/internal/chat-reports/{reportId}/actions` | `INTERNAL_REVIEWER` | 메시지 숨김·발신 중지·방 읽기 전용 등 감사 가능한 조치 |
 
 주요 오류 코드는 `MATCH_CONVERSATION_NOT_FOUND`, `MATCH_CONVERSATION_NOT_OPEN`, `CHAT_MEMBER_REQUIRED`, `CHAT_SENDING_SUSPENDED`, `CHAT_MESSAGE_INVALID`, `CHAT_MESSAGE_RATE_LIMITED`, `CHAT_MESSAGE_DUPLICATE`, `CHAT_REPORT_DUPLICATE`다. 메시지 본문과 신고 설명은 오류 응답·분석·로그에 되돌려 보내지 않는다.
 
@@ -150,6 +150,7 @@ erDiagram
 | --- | --- | --- |
 | Match 상세·활동 | `채팅방 열기`, 현재 방 상태, 수락 후 이용 가능 안내 | 외부 오픈채팅 CTA(새 Match), 운영자 연락처 |
 | 채팅방 | Match 제목·일정의 짧은 고정 정보, 텍스트 메시지, 시스템 안내, 신고 | 전화번호·이메일·결제수단·읽음/접속/입력 중 표시 |
+| 채팅 목록 | 내가 입장 권한을 가진 Match 방, 호스트·참가자 구분 탭, 안전한 마지막 메시지와 내 미확인 수 | 임의 방 생성, 사용자 검색, 알림 권한 설정 |
 | 읽기 전용 방 | 취소·이용 종료 이유의 안전한 안내, 보관 종료 시각 | 새 메시지 입력·재개 CTA |
 | 신고 | 선택형 사유, 짧은 설명, 접수 완료 안내 | 신고 대상에게 신고자·원문 운영 메모 공개 |
 
@@ -163,7 +164,7 @@ erDiagram
 - 채팅 API 실패·폴링 지연·신고 접수·운영 조치에는 식별자와 상태만 관측한다. 본문·신고 설명·닉네임을 분석 속성에 넣지 않는다.
 - 지표는 `conversation_opened`, `chat_message_sent`, `chat_message_send_failed`, `chat_report_submitted`, `chat_moderation_actioned`, `chat_read_only`를 사용한다.
 
-### 8.2 구현 전 게이트
+### 8.2 공개 출시 전 게이트
 
 - [ ] 메시지·신고 보관·삭제와 약관·개인정보 처리 문구를 법무 검토로 확정했다.
 - [ ] 신고 검토 담당자, 긴급 조치 권한, 응답 SLA와 이용자 안내를 정했다.
@@ -178,7 +179,7 @@ erDiagram
 - [ ] 같은 `clientRequestId` 재시도와 동시 발신이 메시지를 중복 생성하지 않고 커서 순서가 안정적이다.
 - [ ] 취소·공급 철회·이용 종료 뒤 메시지 발신이 거절되고 안전한 시스템 안내만 남는다.
 - [ ] 메시지 길이·빈 값·속도 제한·권한·읽기 전용·발신 중지·신고 중복을 서버에서 검증한다.
-- [ ] 신고 조치는 일반 메시지 원문을 노출하지 않고 감사 이력으로 남는다.
+- [ ] 신고 조치는 일반 사용자에게 메시지 원문을 노출하지 않고, `INTERNAL_REVIEWER`의 제한된 검토 화면에만 필요한 원문을 보이며 감사 이력으로 남는다.
 - [ ] 메시지·신고 원문이 API 오류·로그·분석 이벤트에 포함되지 않는다.
 - [ ] 모바일 키보드·로딩·빈 방·폴링 실패·네트워크 재시도·접근성 상태를 확인한다.
 

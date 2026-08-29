@@ -65,7 +65,6 @@ async function seedMatches() {
         regionCode: host.regionCode, title, startsAt: start, endsAt: end,
         externalCourtName: courtName, externalCourtAddress: address, recruitCount: 2,
         partnerPreference, totalCourtFeeKrw: fee, introduction: "처음 만나는 메이트와도 천천히, 편하게 쳐요.",
-        contactOpenChatUrl: `https://open.kakao.com/o/tennisMateM3${index + 1}`,
         purposes: { create: { purpose } },
       },
     });
@@ -81,8 +80,8 @@ async function seedMatches() {
     create: {
       hostUserId: hosts[0].id, clientRequestId: "20000000-0000-4000-8000-000000000005", regionCode: hosts[0].regionCode,
       title: "주말 코트, 같이 정해요", startsAt: tbdStart, endsAt: tbdEnd, courtSource: "COURT_TBD", recruitCount: 2,
-      partnerPreference: "COMPLETE_BEGINNER_WELCOME", introduction: "코트와 비용은 수락 후 오픈채팅에서 함께 정해요.",
-      contactOpenChatUrl: "https://open.kakao.com/o/tennisMateM3CourtTbd", purposes: { create: { purpose: "RALLY_PRACTICE" } },
+      partnerPreference: "COMPLETE_BEGINNER_WELCOME", introduction: "코트와 비용은 수락 후 서비스 내 채팅에서 함께 정해요.",
+      purposes: { create: { purpose: "RALLY_PRACTICE" } },
     },
   });
 }

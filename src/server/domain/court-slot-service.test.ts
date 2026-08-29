@@ -329,6 +329,11 @@ describe("Court Partner time supply authorization and state transitions", () => 
       },
       courtSlotStatusHistory: { create: vi.fn().mockResolvedValue({ id: "history-id" }) },
       matchSupplyNoticeRecipient: { createMany: vi.fn().mockResolvedValue({ count: 3 }) },
+      matchConversation: {
+        findUnique: vi.fn().mockResolvedValue({ id: "conversation-id", status: "OPEN" }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      matchChatMessage: { create: vi.fn().mockResolvedValue({ id: "system-message-id" }) },
       operatorSupplyRestriction: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "restriction-id" }) },
     };
     const prisma = {
@@ -341,6 +346,8 @@ describe("Court Partner time supply authorization and state transitions", () => 
     expect(result).toMatchObject({ status: "WITHDRAWN", impact: "CANCEL_MATCH" });
     expect(transaction.courtSlot.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELLED" }) }));
     expect(transaction.match.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "CANCELLED", cancellationReason: "COURT_SUPPLY_WITHDRAWN" }) }));
+    expect(transaction.matchConversation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "READ_ONLY" }) }));
+    expect(transaction.matchChatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ conversationId: "conversation-id", type: "SYSTEM" }) }));
     expect(transaction.matchSupplyNoticeRecipient.createMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.arrayContaining([expect.objectContaining({ recipientUserId: "host-user-id" }), expect.objectContaining({ recipientUserId: "pending-user-id" }), expect.objectContaining({ recipientUserId: "accepted-user-id" })]),
     }));

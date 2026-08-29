@@ -39,7 +39,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     playPurposes: ["RALLY_PRACTICE"],
     partnerPreference: "COMPLETE_BEGINNER_WELCOME",
     introduction: "",
-    contactOpenChatUrl: "",
   }));
 
   const load = useCallback(async () => {
@@ -71,7 +70,6 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     if (!slot) return;
     if (!form.title.trim() || form.playPurposes.length === 0) return setSubmitError("매칭 제목과 원하는 플레이를 확인해 주세요.");
     if (form.recruitCount < 1 || form.recruitCount + 1 > slot.maxParticipantCount) return setSubmitError(`추가 모집 인원은 ${Math.max(slot.maxParticipantCount - 1, 0)}명까지 선택할 수 있어요.`);
-    if (!form.contactOpenChatUrl.trim()) return setSubmitError("카카오 오픈채팅 링크를 입력해 주세요.");
 
     setSaving(true);
     try {
@@ -87,14 +85,13 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
           playPurposes: form.playPurposes,
           partnerPreference: form.partnerPreference,
           introduction: form.introduction || null,
-          contactOpenChatUrl: form.contactOpenChatUrl,
         }),
       });
       const body: unknown = await response.json();
-      if (!response.ok) throw new Error(apiMessage(body, "제휴 코트 세션을 열지 못했어요."));
+      if (!response.ok) throw new Error(apiMessage(body, "코트 매칭을 열지 못했어요."));
       router.replace(`/matches/${(body as { id: string }).id}`);
     } catch (caught) {
-      setSubmitError(caught instanceof Error ? caught.message : "제휴 코트 세션을 열지 못했어요.");
+      setSubmitError(caught instanceof Error ? caught.message : "코트 매칭을 열지 못했어요.");
     } finally {
       setSaving(false);
     }
@@ -105,7 +102,7 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
   const estimatedFee = Math.ceil(slot.totalCourtFeeKrw / (form.recruitCount + 1));
   const maxRecruitCount = Math.max(slot.maxParticipantCount - 1, 1);
   return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-6 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><BackButton className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath={`/partner-sessions/${slot.id}`} />
-    <p className="mt-5 text-sm font-semibold text-[var(--tm-action-primary)]">제휴 코트 세션 열기</p><h1 className="mt-1 text-2xl font-bold">함께 칠 메이트를<br />모집해 볼까요?</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">코트, 시간, 비용은 운영자가 준비한 정보로 고정돼요.</p>
+    <p className="mt-5 text-sm font-semibold text-[var(--tm-action-primary)]">코트 매칭 열기</p><h1 className="mt-1 text-2xl font-bold">함께 칠 메이트를<br />모집해 볼까요?</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">코트, 시간, 비용은 운영자가 준비한 정보로 고정돼요.</p>
     <section className="mt-6 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white p-4"><CourtMedia alt={`${slot.court.name} 코트 이미지`} className="aspect-[7/3] w-full" fallbackLabel="Tennis Mate 기본 코트 이미지" image={slot.court.image} /><p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">Tennis Mate에서 준비한 코트예요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">🗓 {formatPartnerSchedule(slot.startsAt, slot.endsAt)}<br />📍 {slot.court.name} · {slot.court.courtNumber}<br />전체 {slot.totalCourtFeeKrw.toLocaleString("ko-KR")}원 · 현장 최대 {slot.maxParticipantCount}명</p>{slot.usageNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-sm leading-5 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}</section>
     <FormFields>
       <label>매칭 제목<input maxLength={80} onChange={(event) => update("title", event.target.value)} placeholder="예: 퇴근 후 편하게 랠리해요" value={form.title} /></label>
@@ -113,10 +110,10 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     </FormFields>
     <p className="mt-6 text-sm font-semibold">원하는 플레이 <span className="font-normal text-[var(--tm-text-secondary)]">(최대 2개)</span></p><div className="mt-3 grid gap-2">{purposes.map(([code, label]) => <SelectCard key={code} selected={form.playPurposes.includes(code)} onClick={() => togglePurpose(code)}>{label}</SelectCard>)}</div>
     <p className="mt-6 text-sm font-semibold">원하는 상대</p><div className="mt-3 grid gap-2">{preferences.map(([code, label]) => <SelectCard key={code} selected={form.partnerPreference === code} onClick={() => update("partnerPreference", code)}>{label}</SelectCard>)}</div>
-    <FormFields><label>소개 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span><textarea maxLength={300} onChange={(event) => update("introduction", event.target.value)} value={form.introduction} /></label><label>카카오 오픈채팅 링크<input onChange={(event) => update("contactOpenChatUrl", event.target.value)} placeholder="https://open.kakao.com/..." value={form.contactOpenChatUrl} /></label></FormFields>
+    <FormFields><label>소개 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span><textarea maxLength={300} onChange={(event) => update("introduction", event.target.value)} value={form.introduction} /></label><p className="rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">수락된 참가자와 서비스 내 채팅에서 당일 준비를 조율해요.</p></FormFields>
     <section className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] p-4 text-sm leading-6"><p className="font-semibold">예상 1인 비용 약 {estimatedFee.toLocaleString("ko-KR")}원</p><p className="mt-1 text-[var(--tm-text-secondary)]">모집자를 포함한 예상 {form.recruitCount + 1}명 기준이에요. Tennis Mate에서 결제하지 않아요.</p></section>
     {submitError ? <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]">{submitError}</p> : null}
-    <button className="mt-6 min-h-[52px] w-full rounded-2xl bg-[var(--tm-action-primary)] font-semibold text-white shadow-[0_8px_20px_rgba(49,94,158,0.18)] disabled:opacity-50" disabled={saving} onClick={() => void submit()} type="button">{saving ? "세션 여는 중…" : "이 시간으로 세션 열기"}</button>
+    <button className="mt-6 min-h-[52px] w-full rounded-2xl bg-[var(--tm-action-primary)] font-semibold text-white shadow-[0_8px_20px_rgba(49,94,158,0.18)] disabled:opacity-50" disabled={saving} onClick={() => void submit()} type="button">{saving ? "코트 매칭 여는 중…" : "이 시간으로 코트 매칭 열기"}</button>
   </section></main>;
 }
 

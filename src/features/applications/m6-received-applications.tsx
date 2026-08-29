@@ -24,7 +24,7 @@ type HostedMatch = {
   canClose: boolean;
   canCancel: boolean;
   canComplete: boolean;
-  contact: { type: "KAKAO_OPEN_CHAT"; url: string; label: string };
+  contact: { href: string | null; label: string; conversationStatus: "OPEN" | "READ_ONLY" | "ARCHIVED" | "NOT_CREATED" };
 };
 
 type ProfileSnapshot = {
@@ -67,11 +67,12 @@ function snapshotDetails(snapshot: ProfileSnapshot) {
 }
 
 function hostCoordinationMessage(courtSource: HostedMatch["court"]["source"]) {
+  const channel = "서비스 내 채팅";
   return courtSource === "COURT_TBD"
-    ? "수락된 참가자와 오픈채팅에서 코트와 비용을 조율해요."
+    ? `수락된 참가자와 ${channel}에서 코트와 비용을 조율해요.`
     : courtSource === "PARTNER_COURT"
       ? "Tennis Mate에서 준비한 코트예요. 수락된 참가자와 당일 준비와 비용 정산 방법을 확인해요."
-    : "수락된 참가자와 오픈채팅에서 당일 준비와 비용 정산 방법을 확인해요.";
+    : `수락된 참가자와 ${channel}에서 당일 준비와 비용 정산 방법을 확인해요.`;
 }
 
 function useJsonLoader<T>(url: string) {
@@ -104,7 +105,8 @@ function LoadingOrError({ error, label, load }: { error: string; label: string; 
 export function M6ReceivedApplications() {
   const { data, error, load } = useJsonLoader<{ items: HostedMatch[] }>("/api/v1/me/hosted-matches");
   return <PageShell withNavigation>
-    <p className="text-sm font-semibold text-[var(--tm-action-primary)]">활동</p>
+    <BackButton ariaLabel="마이로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" />
+    <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">내 활동</p>
     <h1 className="mt-1 text-2xl font-bold">받은 신청</h1>
     <ActivityTabs current="received" />
     <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">내가 만든 매칭에 들어온 신청을 한곳에서 확인해요.</p>
@@ -144,7 +146,7 @@ function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: 
       <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-semibold">수락 {match.acceptedCount}명 / 모집 {match.recruitCount}명 <span className="font-normal text-[var(--tm-text-secondary)]">· 남은 자리 {match.remainingSpots}명</span></p>
       {match.acceptedCount > 0 && match.status !== "COMPLETED" ? <>
         <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{hostCoordinationMessage(match.court.source)}</p>
-        <a className="mt-3 flex min-h-[52px] items-center justify-center rounded-2xl border border-[var(--tm-border-strong)] px-4 text-center text-sm font-semibold text-[var(--tm-action-primary)]" href={match.contact.url} rel="noreferrer" target="_blank">{match.contact.label}</a>
+        <HostedContactButton contact={match.contact} />
       </> : null}
       {match.pendingApplicationCount > 0 ? <Link className="mt-4 flex min-h-[52px] items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-center text-sm font-semibold text-white" href={`/activity/received/${match.id}`}>신청자 보기</Link> : <p className="mt-4 text-sm text-[var(--tm-text-secondary)]">{match.status === "COMPLETED" ? "함께한 일정이 완료됐어요." : "새로 검토할 신청을 기다리고 있어요."}</p>}
       {match.canComplete ? <button className="mt-3 min-h-[52px] w-full rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white disabled:opacity-50" disabled={action !== null} onClick={() => setConfirmAction("complete")} type="button">플레이 완료하기</button> : null}
@@ -154,6 +156,10 @@ function HostedMatchCard({ match, onChanged }: { match: HostedMatch; onChanged: 
     </section>
     {confirmAction ? <LifecycleConfirm action={confirmAction} busy={action !== null} onCancel={() => setConfirmAction(null)} onConfirm={() => { setConfirmAction(null); void runAction(confirmAction); }} /> : null}
   </>;
+}
+
+function HostedContactButton({ contact }: { contact: HostedMatch["contact"] }) {
+  return contact.href ? <Link className="mt-3 flex min-h-[52px] items-center justify-center rounded-2xl border border-[var(--tm-border-strong)] px-4 text-center text-sm font-semibold text-[var(--tm-action-primary)]" href={contact.href}>{contact.label}</Link> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
 }
 
 function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: "close" | "cancel" | "complete"; busy: boolean; onCancel: () => void; onConfirm: () => void }) {

@@ -81,6 +81,47 @@ enum ApplicationStatus {
   CANCELLED
 }
 
+enum MatchConversationStatus {
+  OPEN
+  READ_ONLY
+  ARCHIVED
+}
+
+enum MatchConversationMemberRole {
+  HOST
+  PARTICIPANT
+}
+
+enum MatchChatMessageType {
+  USER
+  SYSTEM
+}
+
+enum MatchChatMessageVisibility {
+  VISIBLE
+  HIDDEN
+}
+
+enum MatchChatReportReason {
+  HARASSMENT
+  SEXUAL_OR_HATEFUL_CONTENT
+  PERSONAL_INFORMATION
+  SPAM_OR_FRAUD
+  OTHER
+}
+
+enum MatchChatReportStatus {
+  OPEN
+  RESOLVED
+}
+
+enum MatchChatModerationActionType {
+  NO_ACTION
+  HIDE_MESSAGE
+  SUSPEND_SENDING
+  SET_READ_ONLY
+}
+
 enum CourtImageUploadStatus {
   PENDING
   ATTACHED
@@ -236,6 +277,10 @@ model User {
   courtSlotStatusHistories CourtSlotStatusHistory[] @relation("CourtSlotStatusActor")
   supplyNoticeRecipients MatchSupplyNoticeRecipient[] @relation("MatchSupplyNoticeRecipientUser")
   clearedSupplyRestrictions OperatorSupplyRestriction[] @relation("OperatorSupplyRestrictionClearedBy")
+  matchConversationMemberships MatchConversationMember[]
+  sentMatchChatMessages MatchChatMessage[] @relation("MatchChatMessageSender")
+  matchChatReports MatchChatReport[] @relation("MatchChatReportReporter")
+  matchChatModerationActions MatchChatModerationAction[] @relation("MatchChatModerationReviewer")
 
   @@map("users")
 }
@@ -345,7 +390,6 @@ model Match {
   totalCourtFeeKrw     Int?              @map("total_court_fee_krw")
   additionalCostNote   String?           @map("additional_cost_note") @db.VarChar(200)
   introduction         String?           @db.VarChar(300)
-  contactOpenChatUrl   String            @map("contact_open_chat_url") @db.VarChar(500)
   status               MatchStatus       @default(OPEN)
   version              Int               @default(1)
   closedAt             DateTime?         @map("closed_at") @db.Timestamptz(6)
@@ -364,6 +408,7 @@ model Match {
   courtSlot    CourtSlot?          @relation(fields: [courtSlotId], references: [id], onDelete: Restrict)
   supplyIncidents CourtSupplyIncident[]
   supplyNoticeRecipients MatchSupplyNoticeRecipient[]
+  conversation MatchConversation?
 
   @@unique([hostUserId, clientRequestId])
   @@index([status, startsAt])
@@ -425,6 +470,95 @@ model MatchApplication {
   @@index([matchId, status, createdAt])
   @@index([applicantUserId, status, createdAt(sort: Desc)])
   @@map("match_applications")
+}
+
+model MatchConversation {
+  id          String                  @id @default(uuid()) @db.Uuid
+  matchId     String                  @unique @map("match_id") @db.Uuid
+  status      MatchConversationStatus @default(OPEN)
+  readOnlyAt  DateTime?               @map("read_only_at") @db.Timestamptz(6)
+  archiveAt   DateTime?               @map("archive_at") @db.Timestamptz(6)
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match    Match                     @relation(fields: [matchId], references: [id], onDelete: Restrict)
+  members  MatchConversationMember[]
+  messages MatchChatMessage[]
+
+  @@index([status, archiveAt])
+  @@map("match_conversations")
+}
+
+model MatchConversationMember {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  conversationId     String                      @map("conversation_id") @db.Uuid
+  userId             String                      @map("user_id") @db.Uuid
+  role               MatchConversationMemberRole
+  joinedAt           DateTime                    @default(now()) @map("joined_at") @db.Timestamptz(6)
+  sendingSuspendedAt DateTime?                   @map("sending_suspended_at") @db.Timestamptz(6)
+  lastReadMessageId  String?                     @map("last_read_message_id") @db.Uuid
+  updatedAt          DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  conversation MatchConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([conversationId, userId])
+  @@index([userId, updatedAt])
+  @@map("match_conversation_members")
+}
+
+model MatchChatMessage {
+  id              String                     @id @default(uuid()) @db.Uuid
+  conversationId  String                     @map("conversation_id") @db.Uuid
+  senderUserId    String?                    @map("sender_user_id") @db.Uuid
+  type            MatchChatMessageType       @default(USER)
+  body            String                     @db.VarChar(500)
+  visibility      MatchChatMessageVisibility @default(VISIBLE)
+  clientRequestId String?                    @map("client_request_id") @db.Uuid
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation MatchConversation   @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  sender       User?               @relation("MatchChatMessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  reports      MatchChatReport[]
+
+  @@unique([senderUserId, clientRequestId])
+  @@index([conversationId, createdAt, id])
+  @@map("match_chat_messages")
+}
+
+model MatchChatReport {
+  id             String                @id @default(uuid()) @db.Uuid
+  messageId      String                @map("message_id") @db.Uuid
+  reporterUserId String                @map("reporter_user_id") @db.Uuid
+  reason         MatchChatReportReason
+  description    String?               @db.VarChar(200)
+  status         MatchChatReportStatus @default(OPEN)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt     DateTime?             @map("resolved_at") @db.Timestamptz(6)
+
+  message  MatchChatMessage             @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  reporter User                         @relation("MatchChatReportReporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
+  actions  MatchChatModerationAction[]
+
+  @@unique([messageId, reporterUserId])
+  @@index([status, createdAt])
+  @@map("match_chat_reports")
+}
+
+model MatchChatModerationAction {
+  id             String                        @id @default(uuid()) @db.Uuid
+  reportId       String                        @map("report_id") @db.Uuid
+  reviewerUserId String                        @map("reviewer_user_id") @db.Uuid
+  action         MatchChatModerationActionType
+  reason         String?                       @db.VarChar(200)
+  createdAt      DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  report   MatchChatReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  reviewer User            @relation("MatchChatModerationReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+
+  @@index([reportId, createdAt])
+  @@index([reviewerUserId, createdAt(sort: Desc)])
+  @@map("match_chat_moderation_actions")
 }
 
 model CourtOperatorApplication {

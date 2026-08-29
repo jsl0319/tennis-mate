@@ -51,7 +51,7 @@ Core MVP의 통화는 KRW로 가정하고 금액을 정수 원 단위로 저장�
 | Core MVP | User, AuthAccount, TennisProfile, Region, TennisProfileRegion, TennisProfilePurpose, Match, MatchPurpose, MatchApplication, CourtImageUpload |
 | Court Partner Pilot | CourtOperatorApplication, CourtOperator, Court, CourtUnit, CourtAmenity, CourtImage, CourtSlot, Match.courtSlotId |
 | Court Commerce | 설계 완료, 미구현 — `07-court-commerce-design.md`의 구현 게이트 통과 뒤 별도 migration |
-| Match Chat | 설계 완료, 미구현 — `08-in-app-match-chat-design.md`의 보관·신고·운영 게이트 통과 뒤 별도 migration |
+| Match Chat | 구현 승인 — `08-in-app-match-chat-design.md`의 보관·신고·운영 게이트를 갖춘 별도 migration. 공개 출시는 법무·운영 확인 뒤 결정 |
 
 ## 4. Core MVP ERD
 
@@ -140,7 +140,6 @@ erDiagram
         int total_court_fee_krw
         varchar additional_cost_note
         varchar introduction
-        varchar contact_open_chat_url
         match_status status
         int version
         timestamptz closed_at
@@ -342,7 +341,6 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `totalCourtFeeKrw` | int | 예약 코트만 O | 0 이상, 코트 미정이면 NULL |
 | `additionalCostNote` | varchar(200) | X | 조명비·볼 비용 등 |
 | `introduction` | varchar(300) | X | 짧은 소개 메시지 |
-| `contactOpenChatUrl` | varchar(500) | 현재 Core O | 매칭별 카카오 오픈채팅 URL, 모집자·수락자에게만 공개. Match Chat 단계에서 `IN_APP_CHAT`이면 null 허용 |
 | `status` | MatchStatus | O | 기본 `OPEN` |
 | `version` | int | O | 낙관적 잠금용, 기본 1 |
 | `closedAt` | timestamptz | X | 모집 마감 시각 |
@@ -374,10 +372,10 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 #### CourtSource
 
 - `EXTERNAL_RESERVED`: 모집자가 외부에서 직접 예약
-- `COURT_TBD`: 일정과 활동 지역은 정했지만 코트·비용은 수락자와 현재 연락 수단(카카오 오픈채팅 또는 이후 Match 채팅)에서 조율
+- `COURT_TBD`: 일정과 활동 지역은 정했지만 코트·비용은 수락자와 서비스 내 Match 채팅에서 조율
 - `PARTNER_COURT`: Court Partner Pilot에서 운영자가 준비한 Slot에 일반 모집자가 연 Match
 
-Core MVP에서는 첫 두 값만 허용한다. `COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한다. `PARTNER_COURT`의 CourtSlot 연결 규칙은 13.5에서 정의한다. 현재 Core에서 오픈채팅 링크는 세 상태 모두 필수이며 모집자와 수락자에게만 공개한다. Match Chat 단계의 새 `IN_APP_CHAT` Match는 16.1의 `contactMode` 제약을 따른다.
+Core MVP에서는 첫 두 값만 허용한다. `COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한다. `PARTNER_COURT`의 CourtSlot 연결 규칙은 13.5에서 정의한다. 세 출처 모두 첫 수락 뒤 `MatchConversation`을 만들며 외부 연락 링크는 Match에 저장하지 않는다.
 
 #### PartnerPreference
 
@@ -439,7 +437,7 @@ Core MVP에서는 `(matchId, applicantUserId)`를 UNIQUE로 두어 한 사용자
 }
 ```
 
-스냅샷은 정해진 스키마로 검증하고 닉네임, 오픈채팅 링크, 연락처와 인증 정보를 넣지 않는다. 플레이 상태 이름은 Core에서 생성하지 않는다. 닉네임은 현재 User에서 읽는다.
+스냅샷은 정해진 스키마로 검증하고 닉네임, 서비스 외부 연락 링크, 연락처와 인증 정보를 넣지 않는다. 플레이 상태 이름은 Core에서 생성하지 않는다. 닉네임은 현재 User에서 읽는다.
 
 ## 6. Core MVP 관계와 삭제 정책
 
@@ -463,7 +461,6 @@ Core MVP에서는 `(matchId, applicantUserId)`를 UNIQUE로 두어 한 사용자
 - `Match.recruitCount >= 1`
 - `Match.totalCourtFeeKrw IS NULL OR Match.totalCourtFeeKrw >= 0`
 - `Match.courtSource = EXTERNAL_RESERVED`인 경우 외부 코트명·주소·비용 필수, `COURT_TBD`인 경우 해당 값은 NULL
-- `Match.contactOpenChatUrl`은 HTTPS와 `open.kakao.com` host만 허용
 - `Match.status = CANCELLED`인 경우 `cancelledAt` 필수
 - `Match.status = COMPLETED`인 경우 `completedAt` 필수
 - `Match.status = EXPIRED`인 경우 `expiredAt` 필수
@@ -1120,11 +1117,11 @@ Court Commerce는 Pilot 범위 밖의 다음 단계이며, 일반 사용자의 `
 
 ### 16.1 서비스 내 Match Chat ERD
 
-Match Chat은 Core의 외부 카카오 링크를 호환 기간 뒤 대체하는 별도 단계다. 일반 사용자 DM이나 범용 채팅방 모델을 만들지 않으며, `Match` 하나에 방 하나만 둔다. 상세 설계는 `08-in-app-match-chat-design.md`를 기준으로 한다.
+Match Chat은 모든 Match의 연락을 처리하는 MVP다. 일반 사용자 DM이나 범용 채팅방 모델을 만들지 않으며, `Match` 하나에 방 하나만 둔다. 상세 설계는 `08-in-app-match-chat-design.md`를 기준으로 한다.
 
 | 모델 | 관계와 역할 |
 | --- | --- |
-| `Match` 확장 | `contactMode`를 `KAKAO_OPEN_CHAT` 또는 `IN_APP_CHAT`으로 둔다. 전자는 `contactOpenChatUrl`을 요구하고, 후자는 URL을 `null`로 둔다. 기존 Match는 전자로 backfill한다. |
+| `Match` 확장 | 외부 연락 링크와 연락 수단 enum을 두지 않는다. 첫 수락이 확정된 Match만 `MatchConversation`을 가진다. |
 | `MatchConversation` | `Match`와 1:1. `OPEN`·`READ_ONLY`·`ARCHIVED` 상태와 보관 시각을 가진다. |
 | `MatchConversationMember` | 방과 User를 연결한다. 모집자 또는 수락 시점의 `ACCEPTED` 신청자만 서버 트랜잭션에서 생성하며, 마지막 읽은 커서는 내부 미확인 수용이다. Match 취소 뒤 기존 수락자는 읽기 전용 멤버십을 보관 기간 동안 유지한다. |
 | `MatchChatMessage` | 텍스트 또는 서버 시스템 메시지. 일반 사용자는 수정·삭제하지 못하며 `clientRequestId`로 중복 발신을 막는다. |
@@ -1200,7 +1197,7 @@ WHERE id = :id AND version = :expectedVersion
 | --- | --- |
 | 인증 공급자 식별자 | 인증 목적 외 노출 금지 |
 | 프로필 스냅샷 | 연락처와 인증정보 포함 금지 |
-| 카카오 오픈채팅 URL | 모집자와 ACCEPTED 신청자에게만 반환, 로그·스냅샷 제외 |
+| 연락 수단 | Match 방 상태와 안전한 진입 경로만 모집자와 ACCEPTED 신청자에게 반환, 로그·스냅샷 제외 |
 | 외부 코트 주소 | 매칭 참여 판단에 필요한 범위로 노출 |
 | 코트 사진 | 운영자 또는 모집자가 직접 제공한 사진만 비공개 객체 참조로 저장. 사진 출처와 표시 권한을 안내하고, 인물·연락처·예약번호 노출을 금지 |
 | 사업자 증빙 | 비공개 저장, 접근 감사와 보존 기간 필요 |
@@ -1221,7 +1218,7 @@ WHERE id = :id AND version = :expectedVersion
 8. 같은 clientRequestId로 Match 생성 요청을 재시도하는 상황
 9. 한 명 수락 후 조기 마감하여 PENDING 신청이 취소되는 상황
 10. endsAt 이전과 이후의 완료 확인 요청
-11. 수락 전·후 오픈채팅 링크 조회 권한
+11. 수락 전·후 Match 채팅방 조회 권한
 
 ### 20.2 Court Partner
 

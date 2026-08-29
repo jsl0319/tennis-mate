@@ -2,7 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { matchCreateInputSchema } from "./match";
-import { createMatch, getMatchDetail, getMatches, reconcileStartedMatches, rejectApplication } from "./match-service";
+import { acceptApplication, cancelMatch, createMatch, getMatchDetail, getMatches, reconcileStartedMatches, rejectApplication } from "./match-service";
 
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
 const futureEndsAt = new Date("2030-01-02T03:00:00.000Z");
@@ -38,7 +38,6 @@ const input = matchCreateInputSchema.parse({
   totalCourtFeeKrw: null,
   additionalCostNote: null,
   introduction: "처음이라 천천히 랠리하고 싶어요.",
-  contactOpenChatUrl: "https://open.kakao.com/o/example",
 });
 
 function makeMatch(overrides: Record<string, unknown> = {}) {
@@ -63,7 +62,6 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
     totalCourtFeeKrw: null,
     additionalCostNote: null,
     introduction: input.introduction,
-    contactOpenChatUrl: input.contactOpenChatUrl,
     status: "OPEN",
     version: 1,
     closedAt: null,
@@ -77,6 +75,7 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
     purposes: [{ purpose: "RALLY_PRACTICE" }],
     host: { id: "host-user-id", nickname: "테스트모집자", tennisProfile: viewer.profile },
     applications: [],
+    conversation: null,
     ...overrides,
   };
 }
@@ -130,6 +129,46 @@ describe("match service operation safeguards", () => {
       data: expect.objectContaining({ status: "CANCELLED" }),
     }));
     expect(matchApplicationUpdateMany).toHaveBeenCalledOnce();
+  });
+
+  it("creates the first in-app conversation in the same acceptance transaction", async () => {
+    const transaction = {
+      matchApplication: {
+        findUnique: vi.fn().mockResolvedValue({ id: "application-id", applicantUserId: "applicant-user-id", status: "PENDING", match: { id: "match-id", hostUserId: viewer.id, status: "OPEN", startsAt: futureStartsAt, recruitCount: 2, version: 3 } }),
+        count: vi.fn().mockResolvedValue(0),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      match: {
+        findUnique: vi.fn().mockResolvedValueOnce({ id: "match-id", status: "OPEN", startsAt: futureStartsAt, applications: [] }).mockResolvedValueOnce({ status: "OPEN", startsAt: futureStartsAt, version: 3 }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn(),
+      },
+      matchConversation: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "conversation-id" }) },
+      matchConversationMember: { createMany: vi.fn() },
+    };
+    const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof acceptApplication>[0];
+    await expect(acceptApplication(prisma, viewer, "application-id", { expectedMatchVersion: 3 })).resolves.toMatchObject({ application: { status: "ACCEPTED" } });
+    expect(transaction.matchConversation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ matchId: "match-id" }) }));
+  });
+
+  it("makes an in-app conversation read-only in the same cancellation transaction", async () => {
+    const transaction = {
+      match: {
+        findUnique: vi.fn()
+          .mockResolvedValueOnce({ id: "match-id", status: "OPEN", startsAt: futureStartsAt, applications: [] })
+          .mockResolvedValueOnce({ id: "match-id", hostUserId: viewer.id, status: "OPEN", startsAt: futureStartsAt, version: 3, courtSource: "COURT_TBD" }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      matchApplication: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      matchConversation: { findUnique: vi.fn().mockResolvedValue({ id: "conversation-id", status: "OPEN" }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      matchChatMessage: { create: vi.fn().mockResolvedValue({ id: "system-message-id" }) },
+    };
+    const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof cancelMatch>[0];
+
+    await expect(cancelMatch(prisma, viewer, "match-id", { expectedVersion: 3, reason: null })).resolves.toMatchObject({ status: "CANCELLED" });
+
+    expect(transaction.matchConversation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "READ_ONLY" }) }));
+    expect(transaction.matchChatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: "SYSTEM" }) }));
   });
 
   it("does not attach another user's or an already-claimed court image", async () => {
@@ -215,7 +254,6 @@ describe("match service operation safeguards", () => {
       recruitCount: 2,
       playPurposes: ["RALLY_PRACTICE"],
       partnerPreference: "SIMILAR_LEVEL",
-      contactOpenChatUrl: "https://open.kakao.com/o/example",
     });
     const courtSlot = {
       id: partnerSlotId,
@@ -293,7 +331,6 @@ describe("match service operation safeguards", () => {
       recruitCount: 2,
       playPurposes: ["RALLY_PRACTICE"],
       partnerPreference: "SIMILAR_LEVEL",
-      contactOpenChatUrl: "https://open.kakao.com/o/example",
     });
     const transaction = {
       courtSlot: {
@@ -330,7 +367,6 @@ describe("match service operation safeguards", () => {
       recruitCount: 1,
       playPurposes: ["RALLY_PRACTICE"],
       partnerPreference: "SIMILAR_LEVEL",
-      contactOpenChatUrl: "https://open.kakao.com/o/example",
     });
     const transaction = {
       courtSlot: {
@@ -368,7 +404,6 @@ describe("match service operation safeguards", () => {
       recruitCount: 2,
       playPurposes: ["RALLY_PRACTICE"],
       partnerPreference: "SIMILAR_LEVEL",
-      contactOpenChatUrl: "https://open.kakao.com/o/example",
     });
     const transaction = {
       courtSlot: {

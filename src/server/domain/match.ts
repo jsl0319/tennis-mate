@@ -25,7 +25,6 @@ const matchCreateCommonSchema = z.object({
   playPurposes: z.array(z.enum(playPurposeValues)).min(1, "원하는 플레이를 선택해 주세요.").max(2).refine((items) => new Set(items).size === items.length, "같은 플레이를 중복 선택할 수 없어요."),
   partnerPreference: z.enum(["COMPLETE_BEGINNER_WELCOME", "SIMILAR_LEVEL", "GAME_CAPABLE"]),
   introduction: z.string().trim().max(300).nullable().optional(),
-  contactOpenChatUrl: z.string().trim().url("카카오 오픈채팅 링크를 확인해 주세요."),
 });
 
 const directMatchTimingSchema = {
@@ -67,12 +66,6 @@ export const matchCreateInputSchema = z.discriminatedUnion("courtSource", [exter
     if (startsAt <= new Date()) context.addIssue({ code: "custom", path: ["startsAt"], message: "시작 시간은 현재보다 미래여야 해요." });
     if (startsAt >= endsAt) context.addIssue({ code: "custom", path: ["endsAt"], message: "종료 시간은 시작 시간보다 늦어야 해요." });
   }
-  try {
-    const url = new URL(input.contactOpenChatUrl);
-    if (url.protocol !== "https:" || url.hostname !== "open.kakao.com" || !url.pathname.startsWith("/o/") || url.pathname.length <= 3) {
-      context.addIssue({ code: "custom", path: ["contactOpenChatUrl"], message: "카카오 오픈채팅방 링크(https://open.kakao.com/o/...)를 입력해 주세요." });
-    }
-  } catch { /* zod URL validation reports this */ }
   if (input.courtSource === "EXTERNAL_RESERVED" && input.externalCourt.courtNumber && /(\d[ -]?){7,}/.test(input.externalCourt.courtNumber)) context.addIssue({ code: "custom", path: ["externalCourt", "courtNumber"], message: "예약번호나 연락처는 코트 번호에 입력하지 마세요." });
 });
 

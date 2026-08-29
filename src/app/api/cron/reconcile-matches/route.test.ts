@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getPrisma, reconcileStartedMatches } = vi.hoisted(() => ({
+const { getPrisma, reconcileStartedMatches, reconcileExpiredConversations } = vi.hoisted(() => ({
   getPrisma: vi.fn(),
   reconcileStartedMatches: vi.fn(),
+  reconcileExpiredConversations: vi.fn(),
 }));
 
 vi.mock("@/server/db/prisma", () => ({ getPrisma }));
 vi.mock("@/server/domain/match-service", () => ({ reconcileStartedMatches }));
+vi.mock("@/server/domain/match-chat-service", () => ({ reconcileExpiredConversations }));
 
 import { GET } from "./route";
 
@@ -14,6 +16,7 @@ describe("match lifecycle cron endpoint", () => {
   beforeEach(() => {
     getPrisma.mockReset();
     reconcileStartedMatches.mockReset();
+    reconcileExpiredConversations.mockReset();
   });
 
   afterEach(() => {
@@ -36,6 +39,7 @@ describe("match lifecycle cron endpoint", () => {
     vi.stubEnv("CRON_SECRET", "test-cron-secret");
     getPrisma.mockReturnValue(prisma);
     reconcileStartedMatches.mockResolvedValue({ checked: 3, closed: 1, expired: 2 });
+    reconcileExpiredConversations.mockResolvedValue({ checked: 4, readOnly: 1 });
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
 
     const response = await GET(new Request("http://localhost/api/cron/reconcile-matches", {
@@ -43,8 +47,9 @@ describe("match lifecycle cron endpoint", () => {
     }));
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ status: "ok", checked: 3, closed: 1, expired: 2 });
+    await expect(response.json()).resolves.toEqual({ status: "ok", checked: 3, closed: 1, expired: 2, conversations: { checked: 4, readOnly: 1 } });
     expect(reconcileStartedMatches).toHaveBeenCalledWith(prisma);
+    expect(reconcileExpiredConversations).toHaveBeenCalledWith(prisma);
     infoSpy.mockRestore();
   });
 
@@ -52,6 +57,7 @@ describe("match lifecycle cron endpoint", () => {
     vi.stubEnv("CRON_SECRET", "test-cron-secret");
     getPrisma.mockReturnValue({ match: {} });
     reconcileStartedMatches.mockRejectedValue(new Error("database password is unavailable"));
+    reconcileExpiredConversations.mockResolvedValue({ checked: 0, readOnly: 0 });
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const response = await GET(new Request("http://localhost/api/cron/reconcile-matches", {

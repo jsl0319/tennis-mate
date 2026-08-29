@@ -38,7 +38,7 @@
 - 한 명 이상 수락된 매칭의 조기 마감
 - 매칭 취소
 - 일정 종료 후 모집자의 매칭 완료 확인
-- 수락된 신청자에게 매칭별 카카오 오픈채팅 링크 공개
+- 수락된 멤버에게 매칭별 서비스 내 채팅방 공개
 
 ### 3.2 Core MVP에서 확정하지 않는 API
 
@@ -403,13 +403,14 @@ NONE | HOST | APPLICANT
 ONBOARDING_REQUIRED | OWN_MATCH | ALREADY_APPLIED | MATCH_NOT_OPEN | MATCH_STARTED | NO_REMAINING_SPOTS
 ```
 
-비로그인 사용자는 이 API를 호출할 수 없다. `contact`는 모집자 또는 연결 Application이 `ACCEPTED`인 신청자에게만 다음 형태로 반환한다.
+비로그인 사용자는 이 API를 호출할 수 없다. `contact`는 모집자 또는 연결 Application이 `ACCEPTED`인 신청자에게만 반환한다. 새 Match는 다음 형태다.
 
 ```json
 {
-  "type": "KAKAO_OPEN_CHAT",
-  "url": "https://open.kakao.com/o/example",
-  "label": "카카오 오픈채팅으로 연락하기"
+  "type": "IN_APP_CHAT",
+  "conversationStatus": "OPEN",
+  "href": "/chats/0198...",
+  "label": "채팅방 열기"
 }
 ```
 
@@ -468,7 +469,7 @@ ONBOARDING_REQUIRED | OWN_MATCH | ALREADY_APPLIED | MATCH_NOT_OPEN | MATCH_START
 
 신청자 프로필은 현재 프로필이 아니라 신청 당시 스냅샷을 사용한다. 닉네임은 현재 User에서 읽으며 연락처는 포함하지 않는다.
 
-본인 신청 응답에서는 `status = ACCEPTED`일 때만 `match.contact`에 카카오 오픈채팅 정보를 포함한다. PENDING·REJECTED·WITHDRAWN·CANCELLED에서는 `null`이다.
+본인 신청 응답에서는 `status = ACCEPTED`일 때만 `match.contact`을 포함한다. 방 진입 경로와 상태를 반환하며 PENDING·REJECTED·WITHDRAWN·CANCELLED에서는 `null`이다.
 
 ## 7. 현재 사용자 API
 
@@ -755,8 +756,7 @@ POST /api/v1/matches
   "partnerPreference": "COMPLETE_BEGINNER_WELCOME",
   "totalCourtFeeKrw": 40000,
   "additionalCostNote": "조명비 포함",
-  "introduction": "빠르지 않게 편하게 쳐요.",
-  "contactOpenChatUrl": "https://open.kakao.com/o/example"
+  "introduction": "빠르지 않게 편하게 쳐요."
 }
 ```
 
@@ -772,8 +772,7 @@ POST /api/v1/matches
   "courtSource": "COURT_TBD",
   "recruitCount": 2,
   "playPurposes": ["RALLY_PRACTICE"],
-  "partnerPreference": "COMPLETE_BEGINNER_WELCOME",
-  "contactOpenChatUrl": "https://open.kakao.com/o/example"
+  "partnerPreference": "COMPLETE_BEGINNER_WELCOME"
 }
 ```
 
@@ -800,7 +799,7 @@ POST /api/v1/matches
 - 플레이 목적 1~2개, 중복 불가
 - 전체 코트 비용 0 이상
 - 추가 비용 안내 최대 200자, 소개 최대 300자
-- `contactOpenChatUrl`은 HTTPS이고 host가 정확히 `open.kakao.com`인 URL
+- 모든 Match는 서비스 내 채팅을 사용하며 외부 오픈채팅 URL을 받거나 저장하지 않는다.
 
 응답 `201 Created`: `MatchDetailView`
 
@@ -1263,7 +1262,6 @@ POST /api/v1/applications/{applicationId}/withdraw
 | `additionalCostNote` | 최대 200자 |
 | `introduction` | 최대 300자 |
 | `clientRequestId` | UUID, 모집자별 유일 |
-| `contactOpenChatUrl` | HTTPS, host `open.kakao.com`, 최대 500자 |
 | Application `message` | 선택, 최대 200자 |
 
 클라이언트와 서버가 같은 Schema 정의를 공유할 수 있더라도 서버 검증을 생략하지 않는다.
@@ -1285,7 +1283,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 
 - 사용자 입력 ID로 권한을 신뢰하지 않고 세션 User와 DB 관계를 확인한다.
 - 다른 사용자의 이메일, 인증 공급자 ID와 전화번호를 API 응답에 포함하지 않는다.
-- 카카오 오픈채팅 링크는 모집자와 ACCEPTED 신청자에게만 반환하고 로그·분석 이벤트·프로필 스냅샷에 넣지 않는다.
+- 메시지·신고 설명은 방 멤버 또는 내부 심사자에게 필요한 범위에서만 반환하고, 오류·로그·분석 이벤트에 넣지 않는다.
 - 신청 프로필 스냅샷에는 인증정보와 연락처를 저장하거나 반환하지 않는다.
 - 외부 코트 예약 번호와 예약 확인 이미지를 받지 않는다.
 - 에러 로그에는 세션·토큰·개인정보와 신청 메시지 원문을 남기지 않는다.
@@ -1529,8 +1527,7 @@ GET    /api/cron/cleanup-operator-court-images
   "title": "편하게 랠리해요",
   "recruitCount": 3,
   "partnerPreference": "SIMILAR_LEVEL",
-  "playPurposes": ["RALLY_PRACTICE"],
-  "contactOpenChatUrl": "https://open.kakao.com/o/example"
+  "playPurposes": ["RALLY_PRACTICE"]
 }
 ```
 
@@ -1627,13 +1624,13 @@ Court Commerce는 설계 완료·미구현 단계다. 일반 사용자의 `Court
 
 `POST /partner-session-checkout-holds`와 결제 초대 생성에는 각각 호출자별 `clientRequestId`가 필수다. 단순 예약 요청이 아니며, 서버는 한 Slot의 유효 홀드를 하나만 만들고 PG 승인 결과가 확인될 때에만 `AVAILABLE → ALLOCATED`, Match와 호스트 결제기록을 하나의 트랜잭션으로 확정한다. 홀드 만료·취소·실패면 Match를 만들지 않는다.
 
-참가자 결제 초대는 기존 `MatchApplication`을 즉시 `ACCEPTED`로 바꾸지 않는다. 승인 확인 전에는 Application이 `PENDING`이고 오픈채팅도 반환하지 않는다. 승인 트랜잭션에서만 결제 초대·출석 결제기록·Application `ACCEPTED`를 함께 확정한다.
+참가자 결제 초대는 기존 `MatchApplication`을 즉시 `ACCEPTED`로 바꾸지 않는다. 승인 확인 전에는 Application이 `PENDING`이고 Match 채팅 입장 권한도 없다. 승인 트랜잭션에서만 결제 초대·출석 결제기록·Application `ACCEPTED`를 함께 확정한다.
 
 웹훅은 제공자 서명, 이벤트 ID, 주문·결제 참조와 금액을 검증한다. 클라이언트 리다이렉트의 성공 값만으로 결제 상태를 변경하지 않으며, 제공자 이벤트와 결제·환불 참조는 DB에서 유일해야 한다. 사용자·운영자 응답에는 카드번호, 계좌번호, PG 원문 오류와 타인의 정산 정보를 반환하지 않는다.
 
 ## 23.1 서비스 내 Match Chat API 확장 방향
 
-Match Chat은 설계 완료·미구현 단계다. 현재 외부 오픈채팅 계약을 즉시 제거하지 않으며, 새 `IN_APP_CHAT` Match로의 전환·보관·신고·운영 게이트는 `08-in-app-match-chat-design.md`를 따른다. 범용 DM·사용자 검색·파일 전송·WebSocket 경로를 만들지 않는다.
+Match Chat MVP는 모든 Match의 유일한 연락 수단이다. 공개 출시는 보관·파기와 신고 운영 게이트를 통과한 뒤에만 진행한다. 기존 외부 연락 링크 열은 migration에서 제거하고, 진행 중이며 수락자가 있는 Match는 방·멤버십으로 전환한다. 범용 DM·사용자 검색·파일 전송·WebSocket 경로를 만들지 않는다.
 
 | 메서드·경로 | 권한 | 계약 목적 |
 | --- | --- | --- |
@@ -1642,14 +1639,15 @@ Match Chat은 설계 완료·미구현 단계다. 현재 외부 오픈채팅 계
 | `POST /api/v1/matches/{matchId}/conversation/messages` | 발신 가능한 방 멤버 | 1~500자 `body`, `clientRequestId`로 텍스트 메시지 생성 |
 | `POST /api/v1/matches/{matchId}/conversation/read` | 방 멤버 | 내 마지막 읽은 커서만 갱신. 타인 읽음 상태는 반환하지 않음 |
 | `POST /api/v1/matches/{matchId}/conversation/messages/{messageId}/reports` | 방 멤버 | 선택형 사유와 짧은 설명으로 메시지 신고 |
-| `GET /api/v1/internal/chat-reports` | `INTERNAL_REVIEWER` | 대기 신고 조회 |
-| `POST /api/v1/internal/chat-reports/{reportId}/actions` | `INTERNAL_REVIEWER` | 메시지 숨김·발신 중지·방 읽기 전용을 감사 이력과 함께 적용 |
+| `GET /api/v1/me/conversations?role=HOST\|PARTICIPANT` | 방 멤버 | 채팅 탭의 내가 만든/신청한 Match 방 목록, 내 미확인 수 조회 |
+| `GET /api/internal/chat-reports` | `INTERNAL_REVIEWER` | 대기 신고 조회 |
+| `POST /api/internal/chat-reports/{reportId}/actions` | `INTERNAL_REVIEWER` | 메시지 숨김·발신 중지·방 읽기 전용을 감사 이력과 함께 적용 |
 
 권한 없는 요청에는 방 존재 여부를 노출하지 않고 `404 MATCH_CONVERSATION_NOT_FOUND`를 반환한다. 주요 오류 코드는 `MATCH_CONVERSATION_NOT_OPEN`, `CHAT_MEMBER_REQUIRED`, `CHAT_SENDING_SUSPENDED`, `CHAT_MESSAGE_INVALID`, `CHAT_MESSAGE_RATE_LIMITED`, `CHAT_MESSAGE_DUPLICATE`, `CHAT_REPORT_DUPLICATE`다. 메시지·신고 원문은 오류 응답, 분석, 로그에 넣지 않는다.
 
 첫 전달 방식은 채팅 화면 전면 상태의 5초 폴링이다. 메시지 발신에는 낙관 표시와 서버 확인을 사용하며, `clientRequestId`로 재시도를 합친다. WebSocket·Redis·새 프로덕션 의존성은 별도 승인 없이 추가하지 않는다.
 
-새 Match 생성·상세·신청 응답은 전환 기간에 `contact`를 식별 가능한 union으로 반환한다. 기존 `KAKAO_OPEN_CHAT`은 현재 URL 계약을 유지하고, `IN_APP_CHAT`은 URL 대신 `conversationStatus`와 안전한 방 진입 경로만 반환한다. 새 Match 생성에서 `IN_APP_CHAT`은 카카오 URL을 받지 않으며, 첫 수락 전에는 `conversationStatus = NOT_CREATED`만 보이고 실제 방 경로·멤버는 반환하지 않는다.
+새 Match 생성·상세·신청 응답은 `contact`로 `conversationStatus`와 안전한 방 진입 경로만 반환한다. 외부 URL과 연락 수단 union은 제공하지 않으며, 첫 수락 전에는 `conversationStatus = NOT_CREATED`만 보이고 실제 방 경로·멤버는 반환하지 않는다.
 
 ## 24. API 테스트 시나리오
 
@@ -1707,7 +1705,7 @@ Match Chat은 설계 완료·미구현 단계다. 현재 외부 오픈채팅 계
 2. 같은 유료 Slot에 대한 동시 홀드·서로 다른 `clientRequestId` 요청·홀드 만료 뒤 재요청
 3. 결제 실패·사용자 취소·홀드 만료 뒤 Match와 `ALLOCATED` Slot이 생기지 않는 경우
 4. 승인 웹훅 재전송·늦은 승인·중복 리다이렉트가 Payment·Match·환불을 중복 만들지 않는 경우
-5. 승인 확인 전 결제 초대 Application이 `ACCEPTED`가 아니고 오픈채팅을 받지 않는 경우
+5. 승인 확인 전 결제 초대 Application이 `ACCEPTED`가 아니고 Match 채팅에 입장할 수 없는 경우
 6. 유효 결제 초대와 `ACCEPTED` 참가자를 합산해 Slot 최대 인원을 넘길 수 없는 경우
 7. 운영자 공급 철회가 결제 완료 출석별 전액 환불을 만들고 대기 결제 초대를 청구 없이 취소하는 경우
 8. 운영자별 첫 성공 유료 승인부터 30일 미만은 플랫폼 수수료 0%, 이후는 5%이며 PG 수수료는 모두 운영자 부담으로 기록되는 경우
@@ -1733,13 +1731,13 @@ Match Chat은 설계 완료·미구현 단계다. 현재 외부 오픈채팅 계
 4. Application 응답에 이메일·연락처·인증 ID가 없는지 확인
 5. 직접 예약 코트가 제휴 코트 세션 문구로 표시되지 않는지 확인
 6. Partner Court Match가 `Tennis Mate에서 준비한 코트예요`와 모집자 참가 신청 안내를 반환하는지 확인
-7. PENDING·REJECTED 사용자가 오픈채팅 링크를 받지 않는지 확인
-8. 모집자와 ACCEPTED 신청자만 오픈채팅 링크를 받는지 확인
+7. PENDING·REJECTED 사용자가 채팅방을 받지 않는지 확인
+8. 모집자와 ACCEPTED 신청자만 채팅방을 받는지 확인
 9. 공급 철회 인앱 안내가 모집자·PENDING·ACCEPTED에게만 반환되고 운영자 원문 사유·연락처가 없는지 확인
 
 ## 25. 확정 정책과 남은 확장 계약
 
-Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 수락자 전용 오픈채팅, 조기 마감, 모집자 완료 확인, clientRequestId 멱등성과 1원 단위 비용 올림을 활성 계약으로 사용한다. 서비스 내 Match Chat은 별도 승인 뒤 새 `IN_APP_CHAT` Match에만 적용한다.
+Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 조기 마감, 모집자 완료 확인, clientRequestId 멱등성과 1원 단위 비용 올림을 활성 계약으로 사용한다. Match Chat MVP는 모든 Match에 적용하며, 외부 오픈채팅 링크 계약은 제공하지 않는다.
 
 | 후속 항목 | Core 처리 | 확장 시 API 영향 |
 | --- | --- | --- |
@@ -1748,7 +1746,7 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 수락�
 | 수락 후 참가 취소 | 운영 문의 | 별도 Application 상태·이력·취소 API 필요 |
 | 철회·거절 후 재신청 | 지원하지 않음 | 유일 제약·재신청 API 정책 변경 |
 | 신고·차단 | 비공개 MVP 운영 문의 | 공개 출시 전 신고 API와 권한 모델 검토 |
-| 서비스 내 Match Chat | 현재 카카오 오픈채팅 | `08-in-app-match-chat-design.md`의 Conversation·Message·Report·Moderation API와 보관 정책 |
+| 서비스 내 Match Chat | 새 `IN_APP_CHAT` Match에 소스 구현, 기존 카카오 링크 호환 및 공개 출시 게이트 유지 | `08-in-app-match-chat-design.md`의 Conversation·Message·Report·Moderation API와 보관 정책 |
 | 플레이 상태 이름 | 응답하지 않음 | 분류 규칙 확정 후 DTO 확장 |
 
 ## 26. 다음 단계

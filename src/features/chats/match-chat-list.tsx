@@ -1,0 +1,86 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+
+import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+
+type ChatRole = "HOST" | "PARTICIPANT";
+
+type ConversationListItem = {
+  match: { id: string; title: string; startsAt: string; status: string };
+  status: "OPEN" | "READ_ONLY" | "ARCHIVED";
+  unreadMessageCount: number;
+  lastMessage: { body: string; type: "USER" | "SYSTEM"; createdAt: string } | null;
+};
+
+function apiMessage(body: unknown, fallback: string) {
+  return typeof body === "object" && body !== null && "error" in body && typeof body.error === "object" && body.error !== null && "message" in body.error && typeof body.error.message === "string" ? body.error.message : fallback;
+}
+
+function schedule(startsAt: string) {
+  return new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(startsAt));
+}
+
+function time(createdAt: string) {
+  return new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(createdAt));
+}
+
+export function MatchChatList() {
+  const [role, setRole] = useState<ChatRole>("HOST");
+  const [items, setItems] = useState<ConversationListItem[] | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async (nextRole = role) => {
+    try {
+      setError("");
+      const response = await fetch(`/api/v1/me/conversations?role=${nextRole}`, { cache: "no-store" });
+      const body: unknown = await response.json();
+      if (!response.ok) throw new Error(apiMessage(body, "채팅 목록을 불러오지 못했어요."));
+      setItems((body as { items: ConversationListItem[] }).items);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "채팅 목록을 불러오지 못했어요.");
+      setItems([]);
+    }
+  }, [role]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  const selectRole = (nextRole: ChatRole) => {
+    setRole(nextRole);
+    setItems(null);
+    void load(nextRole);
+  };
+
+  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
+    <section className="mx-auto max-w-[560px]">
+      <p className="text-sm font-semibold text-[var(--tm-action-primary)]">채팅</p>
+      <h1 className="mt-1 text-2xl font-bold">매칭 채팅</h1>
+      <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">매칭이 성사된 뒤에만 일정과 준비를 함께 조율할 수 있어요.</p>
+      <div aria-label="채팅 목록 구분" className="mt-6 grid grid-cols-2 rounded-3xl bg-white p-1.5 shadow-[0_6px_18px_rgba(49,94,158,0.08)]" role="tablist">
+        <button aria-selected={role === "HOST"} className={`min-h-12 rounded-2xl px-3 text-sm font-semibold transition-colors ${role === "HOST" ? "bg-[var(--tm-action-primary)] text-white" : "text-[var(--tm-text-secondary)]"}`} onClick={() => selectRole("HOST")} role="tab" type="button">내가 만든 매칭</button>
+        <button aria-selected={role === "PARTICIPANT"} className={`min-h-12 rounded-2xl px-3 text-sm font-semibold transition-colors ${role === "PARTICIPANT" ? "bg-[var(--tm-action-primary)] text-white" : "text-[var(--tm-text-secondary)]"}`} onClick={() => selectRole("PARTICIPANT")} role="tab" type="button">내가 신청한 매칭</button>
+      </div>
+      {items === null ? <CourtRallyLoader className="mt-8" label="채팅을 준비하고 있어요." /> : error ? <LoadError error={error} onRetry={() => void load()} /> : items.length === 0 ? <EmptyChatList role={role} /> : <div className="mt-6 space-y-3">{items.map((item) => <ConversationCard item={item} key={item.match.id} />)}</div>}
+    </section>
+    <BottomNavigation />
+  </main>;
+}
+
+function ConversationCard({ item }: { item: ConversationListItem }) {
+  return <Link className="block rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)] transition-colors hover:border-[var(--tm-border-strong)]" href={`/chats/${item.match.id}`}>
+    <div className="flex items-start gap-3"><span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[var(--tm-bg-subtle)] text-xl">🎾</span><div className="min-w-0 flex-1"><div className="flex items-start gap-2"><h2 className="min-w-0 flex-1 truncate font-bold">{item.match.title}</h2>{item.lastMessage ? <time className="shrink-0 text-xs text-[var(--tm-text-secondary)]">{time(item.lastMessage.createdAt)}</time> : null}</div><p className="mt-1 text-xs text-[var(--tm-text-secondary)]">{schedule(item.match.startsAt)}</p><p className="mt-3 truncate text-sm text-[var(--tm-text-muted)]">{item.lastMessage?.body ?? "채팅을 시작해 보세요."}</p><div className="mt-3 flex items-center gap-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${item.status === "OPEN" ? "bg-[var(--tm-bg-highlight)] text-[var(--tm-tennis-ball-muted)]" : "bg-[var(--tm-bg-subtle-muted)] text-[var(--tm-text-secondary)]"}`}>{item.status === "OPEN" ? "대화 가능" : "읽기 전용"}</span>{item.unreadMessageCount > 0 ? <span aria-label={`새 메시지 ${item.unreadMessageCount}개`} className="grid size-5 place-items-center rounded-full bg-[var(--tm-action-primary)] text-[10px] font-bold text-white">{item.unreadMessageCount > 9 ? "9+" : item.unreadMessageCount}</span> : null}</div></div></div>
+  </Link>;
+}
+
+function EmptyChatList({ role }: { role: ChatRole }) {
+  return <section className="mt-16 text-center"><div aria-hidden="true" className="mx-auto grid size-24 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-4xl">💬</div><h2 className="mt-6 text-xl font-bold">아직 채팅할 매칭이 없어요</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{role === "HOST" ? "매칭을 만들고 참가자가 수락되면 여기에서 준비를 조율할 수 있어요." : "신청이 수락되면 여기에서 모집자와 준비를 조율할 수 있어요."}</p><Link className="mt-6 inline-flex min-h-11 items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" href="/">매칭 찾아보기</Link></section>;
+}
+
+function LoadError({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p className="text-sm leading-6">{error}</p><button className="mt-4 min-h-11 rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" onClick={onRetry} type="button">다시 불러오기</button></section>;
+}

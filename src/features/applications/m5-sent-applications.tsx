@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+import { BackButton } from "@/components/navigation/back-button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
 type SentApplication = {
@@ -13,7 +14,7 @@ type SentApplication = {
   statusLabel: string;
   message: string | null;
   match: { id: string; title: string; status: string; startsAt: string; courtSource: "EXTERNAL_RESERVED" | "COURT_TBD" | "PARTNER_COURT"; courtName: string | null; regionName: string; estimatedFeePerPersonKrw: number | null };
-  contact: { type: "KAKAO_OPEN_CHAT"; url: string; label: string } | null;
+  contact: { href: string | null; label: string; conversationStatus: "OPEN" | "READ_ONLY" | "ARCHIVED" | "NOT_CREATED" } | null;
   supplyNotice: { code: "COURT_SUPPLY_WITHDRAWN"; message: string; occurredAt: string; delivery: "IN_APP" } | null;
   createdAt: string;
 };
@@ -41,11 +42,12 @@ function nextStepMessage(status: string, matchStatus: string) {
 }
 
 function acceptedCoordinationMessage(courtSource: SentApplication["match"]["courtSource"]) {
+  const channel = "서비스 내 채팅";
   return courtSource === "COURT_TBD"
-    ? "수락된 참가자끼리 오픈채팅에서 코트와 비용을 조율해요."
+    ? `수락된 참가자끼리 ${channel}에서 코트와 비용을 조율해요.`
     : courtSource === "PARTNER_COURT"
       ? "Tennis Mate에서 준비한 코트예요. 수락된 뒤 당일 준비와 비용 정산 방법을 확인해요."
-    : "수락된 참가자끼리 오픈채팅에서 당일 준비와 비용 정산 방법을 확인해요.";
+    : `수락된 참가자끼리 ${channel}에서 당일 준비와 비용 정산 방법을 확인해요.`;
 }
 
 function getErrorMessage(body: unknown, fallback: string) {
@@ -86,7 +88,8 @@ export function M5SentApplications() {
 
   return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-6 text-[var(--tm-text-primary)]">
     <div className="mx-auto max-w-[560px]">
-      <p className="text-sm font-semibold text-[var(--tm-action-primary)]">활동</p>
+      <BackButton ariaLabel="마이로 돌아가기" className="inline-flex size-11 items-center justify-center rounded-full text-xl" fallbackPath="/my" />
+      <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">내 활동</p>
       <h1 className="mt-1 text-2xl font-bold">보낸 신청</h1>
       <ActivityTabs current="sent" />
       <p className="mt-4 text-sm leading-6 text-[var(--tm-text-secondary)]">신청 결과와 다음 행동을 한눈에 확인해요.</p>
@@ -118,9 +121,13 @@ function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentAppl
       {item.supplyNotice ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--tm-status-error-text)]">{item.supplyNotice.message}</p> : <p className="mt-4 border-t border-[var(--tm-border-subtle)] pt-3 text-sm font-medium leading-6 text-[var(--tm-text-muted)]">{nextStepMessage(item.status, item.match.status)}</p>}
       {item.message ? <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">“{item.message}”</p> : null}
     </Link>
-    {item.contact ? <><p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{acceptedCoordinationMessage(item.match.courtSource)}</p><a className="mt-3 flex min-h-[52px] items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-center text-sm font-semibold text-white" href={item.contact.url} rel="noreferrer" target="_blank">{item.contact.label}</a></> : null}
+    {item.contact ? <><p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{acceptedCoordinationMessage(item.match.courtSource)}</p><ContactButton contact={item.contact} /></> : null}
     {item.status === "PENDING" ? <button className="mt-3 min-h-11 w-full rounded-2xl border border-[var(--tm-border-default)] px-4 text-sm font-semibold text-[var(--tm-text-muted)] disabled:opacity-50" disabled={withdrawing} onClick={onWithdraw} type="button">신청 철회</button> : null}
   </article>;
+}
+
+function ContactButton({ contact }: { contact: NonNullable<SentApplication["contact"]> }) {
+  return contact.href ? <Link className="mt-3 flex min-h-[52px] items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-center text-sm font-semibold text-white" href={contact.href}>{contact.label}</Link> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
 }
 
 function WithdrawalConfirm({ busy, onCancel, onConfirm }: { busy: boolean; onCancel: () => void; onConfirm: () => void }) {

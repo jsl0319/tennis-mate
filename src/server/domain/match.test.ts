@@ -47,7 +47,6 @@ describe("M4 match creation input", () => {
     startsAt: "2030-01-02T01:00:00.000Z", endsAt: "2030-01-02T03:00:00.000Z", regionCode: "SEOUL-001",
     courtSource: "EXTERNAL_RESERVED", externalCourt: { name: "마포 테니스장", address: "서울 마포구" }, recruitCount: 2,
     playPurposes: ["RALLY_PRACTICE"], partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: 40_000,
-    contactOpenChatUrl: "https://open.kakao.com/o/example",
   } as const;
 
   it("accepts an external reserved court and a free court", () => {
@@ -73,7 +72,6 @@ describe("M4 match creation input", () => {
       recruitCount: 2,
       playPurposes: ["RALLY_PRACTICE"],
       partnerPreference: "SIMILAR_LEVEL",
-      contactOpenChatUrl: "https://open.kakao.com/o/example",
     });
 
     expect(partner.courtSource).toBe("PARTNER_COURT");
@@ -85,11 +83,10 @@ describe("M4 match creation input", () => {
     expect(getEstimatedFeePerPerson(null, 2)).toBeNull();
   });
 
-  it("rejects an invalid court source, time range, or open chat link", () => {
+  it("rejects an invalid court source or time range while keeping contact in the Match chat", () => {
     expect(() => matchCreateInputSchema.parse({ ...validInput, courtSource: "PARTNER_COURT" })).toThrow();
     expect(() => matchCreateInputSchema.parse({ ...validInput, endsAt: validInput.startsAt })).toThrow("종료 시간");
-    expect(() => matchCreateInputSchema.parse({ ...validInput, contactOpenChatUrl: "https://example.com/chat" })).toThrow("카카오 오픈채팅");
-    expect(() => matchCreateInputSchema.parse({ ...validInput, contactOpenChatUrl: "https://open.kakao.com" })).toThrow("카카오 오픈채팅방 링크");
+    expect(matchCreateInputSchema.parse(validInput).courtSource).toBe("EXTERNAL_RESERVED");
   });
 });
 
