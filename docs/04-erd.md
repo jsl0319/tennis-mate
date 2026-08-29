@@ -50,7 +50,8 @@ Core MVP의 통화는 KRW로 가정하고 금액을 정수 원 단위로 저장�
 | --- | --- |
 | Core MVP | User, AuthAccount, TennisProfile, Region, TennisProfileRegion, TennisProfilePurpose, Match, MatchPurpose, MatchApplication, CourtImageUpload |
 | Court Partner Pilot | CourtOperatorApplication, CourtOperator, Court, CourtUnit, CourtAmenity, CourtImage, CourtSlot, Match.courtSlotId |
-| Court Commerce | 미정 — 결제 대상·계약 주체·환불 책임 승인 후 별도 설계 |
+| Court Commerce | 설계 완료, 미구현 — `07-court-commerce-design.md`의 구현 게이트 통과 뒤 별도 migration |
+| Match Chat | 설계 완료, 미구현 — `08-in-app-match-chat-design.md`의 보관·신고·운영 게이트 통과 뒤 별도 migration |
 
 ## 4. Core MVP ERD
 
@@ -341,7 +342,7 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `totalCourtFeeKrw` | int | 예약 코트만 O | 0 이상, 코트 미정이면 NULL |
 | `additionalCostNote` | varchar(200) | X | 조명비·볼 비용 등 |
 | `introduction` | varchar(300) | X | 짧은 소개 메시지 |
-| `contactOpenChatUrl` | varchar(500) | O | 매칭별 카카오 오픈채팅 URL, 모집자·수락자에게만 공개 |
+| `contactOpenChatUrl` | varchar(500) | 현재 Core O | 매칭별 카카오 오픈채팅 URL, 모집자·수락자에게만 공개. Match Chat 단계에서 `IN_APP_CHAT`이면 null 허용 |
 | `status` | MatchStatus | O | 기본 `OPEN` |
 | `version` | int | O | 낙관적 잠금용, 기본 1 |
 | `closedAt` | timestamptz | X | 모집 마감 시각 |
@@ -373,10 +374,10 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 #### CourtSource
 
 - `EXTERNAL_RESERVED`: 모집자가 외부에서 직접 예약
-- `COURT_TBD`: 일정과 활동 지역은 정했지만 코트·비용은 수락자와 오픈채팅에서 조율
+- `COURT_TBD`: 일정과 활동 지역은 정했지만 코트·비용은 수락자와 현재 연락 수단(카카오 오픈채팅 또는 이후 Match 채팅)에서 조율
 - `PARTNER_COURT`: Court Partner Pilot에서 운영자가 준비한 Slot에 일반 모집자가 연 Match
 
-Core MVP에서는 첫 두 값만 허용한다. `COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한다. `PARTNER_COURT`의 CourtSlot 연결 규칙은 13.5에서 정의한다. 오픈채팅 링크는 세 상태 모두 필수이며 모집자와 수락자에게만 공개한다.
+Core MVP에서는 첫 두 값만 허용한다. `COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한다. `PARTNER_COURT`의 CourtSlot 연결 규칙은 13.5에서 정의한다. 현재 Core에서 오픈채팅 링크는 세 상태 모두 필수이며 모집자와 수락자에게만 공개한다. Match Chat 단계의 새 `IN_APP_CHAT` Match는 16.1의 `contactMode` 제약을 따른다.
 
 #### PartnerPreference
 
@@ -1102,9 +1103,35 @@ stateDiagram-v2
 
 ## 16. Court Commerce ERD
 
-Court Commerce는 Pilot 범위 밖이며 이 정책은 결제·환불·정산 모델을 아직 정의하지 않는다. 일반 사용자의 코트 예약 모델이 없으므로 과거 `CourtBooking → Payment` 관계도 사용하지 않는다.
+Court Commerce는 Pilot 범위 밖의 다음 단계이며, 일반 사용자의 `CourtBooking` 모델을 만들지 않는다. 상세 역할·수수료·환불·상태 흐름은 `07-court-commerce-design.md`를 기준으로 하며, 아래 모델은 PG 계약·법무/세무·취소 정책 게이트 전에는 migration에 포함하지 않는다.
 
-결제 대상, 계약 주체, 환불·분쟁 책임, 운영자 정산 주기와 개인정보 처리 방식이 사용자 승인으로 확정될 때에만 Payment·Refund·Settlement의 관계와 멱등성 규칙을 별도 문서·마이그레이션으로 설계한다.
+| 모델 | 관계와 역할 |
+| --- | --- |
+| `OperatorCommerceAccount` | `CourtOperatorApplication`과 1:1. PG 온보딩 상태, opaque 판매자 참조, 최초 유료 승인 시각과 30일 수수료 무료 종료 시각만 보관한다. 계좌·카드·PG 키는 저장하지 않는다. |
+| `CourtSlotCommercePolicy` | `CourtSlot`과 1:1. 공개 전 고정한 `participantPriceKrw`, 통화, 결제 기한, 환불 정책 버전을 보관한다. 기존 전체 비용 `priceKrw`와 다르다. |
+| `CourtSlotCheckoutHold` | 유료 Slot으로 세션을 열기 전의 단일 활성 홀드. 만료·취소 때 Match를 만들지 않고, 승인 확인 때만 기존 `AVAILABLE → ALLOCATED`와 Match 생성을 확정한다. |
+| `PartnerSessionAttendance` | Match의 호스트와 참가자의 결제 대기·완료·환불 상태를 표현한다. 결제 대기는 자리만 잡고 Application을 `ACCEPTED`로 바꾸지 않으며, 불변 참가비를 갖는다. |
+| `ParticipantPaymentInvitation` | `PENDING` MatchApplication에 결제 초대와 한 자리 홀드를 연결한다. 결제 승인 전 Application은 `ACCEPTED`가 아니다. |
+| `CommercePayment`, `CommerceRefund` | 결제는 세션 개설 Hold 또는 참가자 결제 초대에서 먼저 PG 주문을 만들고, 승인 때만 Attendance·수수료 스냅샷을 연결한다. 환불은 별도 불변 원장 행으로 남긴다. |
+| `CommerceSettlement`, `CommerceSettlementLine` | PG 지급 결과를 결제·환불 원장과 대사한다. Tennis Mate의 수기 지급 원장이 아니다. |
+| `CommerceWebhookEvent` | 제공자 이벤트의 서명 검증·멱등 처리 결과를 남긴다. 민감 payload 원문은 저장하지 않는다. |
+
+관계의 요점은 `CourtSlot → CheckoutHold → Payment 주문 → (승인 시 Match·Attendance) → Refund/SettlementLine`이다. 참가자 결제는 `PaymentInvitation → Payment 주문 → (승인 시 Attendance·Application ACCEPTED)`를 따른다. PG 승인 결과가 확정될 때만 Match와 Slot 배정을 만들며, 웹훅 재전송·늦은 승인·환불은 공급자 참조의 유일 제약과 DB 트랜잭션으로 멱등 처리한다.
+
+### 16.1 서비스 내 Match Chat ERD
+
+Match Chat은 Core의 외부 카카오 링크를 호환 기간 뒤 대체하는 별도 단계다. 일반 사용자 DM이나 범용 채팅방 모델을 만들지 않으며, `Match` 하나에 방 하나만 둔다. 상세 설계는 `08-in-app-match-chat-design.md`를 기준으로 한다.
+
+| 모델 | 관계와 역할 |
+| --- | --- |
+| `Match` 확장 | `contactMode`를 `KAKAO_OPEN_CHAT` 또는 `IN_APP_CHAT`으로 둔다. 전자는 `contactOpenChatUrl`을 요구하고, 후자는 URL을 `null`로 둔다. 기존 Match는 전자로 backfill한다. |
+| `MatchConversation` | `Match`와 1:1. `OPEN`·`READ_ONLY`·`ARCHIVED` 상태와 보관 시각을 가진다. |
+| `MatchConversationMember` | 방과 User를 연결한다. 모집자 또는 수락 시점의 `ACCEPTED` 신청자만 서버 트랜잭션에서 생성하며, 마지막 읽은 커서는 내부 미확인 수용이다. Match 취소 뒤 기존 수락자는 읽기 전용 멤버십을 보관 기간 동안 유지한다. |
+| `MatchChatMessage` | 텍스트 또는 서버 시스템 메시지. 일반 사용자는 수정·삭제하지 못하며 `clientRequestId`로 중복 발신을 막는다. |
+| `MatchChatReport` | 방 멤버의 특정 메시지 신고와 선택형 사유를 보관한다. |
+| `MatchChatModerationAction` | `INTERNAL_REVIEWER`의 메시지 숨김·발신 중지·방 읽기 전용 조치를 변경 불가 감사 이력으로 남긴다. |
+
+첫 수락·멤버 추가·취소에 따른 읽기 전용 전환은 Match/Application 상태 전이와 같은 트랜잭션에서 처리한다. `PENDING`·거절·철회·수락된 적 없는 취소 신청자, 코트 운영자, 제3자는 방의 존재·멤버·메시지를 조회하지 못한다. Match 취소로 상태가 `CANCELLED`가 된 기존 수락자는 안전한 취소 안내를 보기 위해 방의 읽기 전용 멤버십을 보관 기간 동안 유지한다.
 
 ## 17. 확장 모델 인덱스
 
@@ -1120,6 +1147,17 @@ Court Commerce는 Pilot 범위 밖이며 이 정책은 결제·환불·정산 �
 | CourtSlotStatusHistory | `(courtSlotId, createdAt)` | 공개 상태 변경 이력 조회 |
 | Match | 활성 `courtSlotId` 부분 유일 | 같은 Slot의 활성 Partner Court Match 중복 방지 |
 | Match | `(courtSource, startsAt)` | 제휴 코트 세션 탐색 |
+| CourtSlotCheckoutHold | 활성 `courtSlotId` 부분 유일 | 같은 유료 Slot의 동시 세션 개설 결제 홀드 방지 |
+| ParticipantPaymentInvitation | 활성 `matchApplicationId` 부분 유일 | 같은 신청자의 중복 결제 초대 방지 |
+| CommercePayment | `providerOrderRef` 유일, non-null `providerPaymentRef` 부분 유일 | PG 승인·주문 결과 중복 반영 방지 |
+| CommerceRefund | `providerRefundRef` 유일 | PG 환불 결과 중복 반영 방지 |
+| CommerceWebhookEvent | `(provider, providerEventRef)` 유일 | 웹훅 재전송 멱등 처리 |
+| CommerceSettlement | `(commerceAccountId, providerPayoutRef)` 유일 | 운영자 지급 결과 대사 중복 방지 |
+| MatchConversation | `matchId` 유일 | Match별 텍스트 방 한 개 보장 |
+| MatchConversationMember | `(conversationId, userId)` 유일 | 같은 멤버의 중복 입장 방지 |
+| MatchChatMessage | `(senderUserId, clientRequestId)` non-null 부분 유일 | 네트워크 재시도의 메시지 중복 방지 |
+| MatchChatMessage | `(conversationId, createdAt, id)` | 커서 기반 메시지 조회 |
+| MatchChatReport | `(messageId, reporterUserId)` 유일 | 같은 메시지 중복 신고 방지 |
 
 ## 18. Prisma 및 PostgreSQL 구현 지침
 

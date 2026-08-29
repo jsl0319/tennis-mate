@@ -1607,7 +1607,49 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /
 
 ## 23. Court Commerce API 확장 방향
 
-이 섹션은 구현 대상이 아니며 후보 엔드포인트를 고정하지 않는다. 일반 사용자의 CourtBooking 모델이 없으므로 과거 예약 결제 API를 재사용하지 않는다. 결제 대상·계약 주체·환불과 정산 책임·개인정보 처리가 승인된 뒤에만 별도 API 계약을 작성한다.
+Court Commerce는 설계 완료·미구현 단계다. 일반 사용자의 `CourtBooking` 모델이나 운영자 참가 승인 API를 만들지 않으며, 상세 정책·데이터 모델·구현 게이트는 `07-court-commerce-design.md`를 따른다. 아래 경로는 PG 계약, 법무/세무, 취소·환불 정책과 sandbox 검증이 끝난 뒤에만 활성 계약이 된다.
+
+| 메서드·경로 | 권한 | 계약 목적 |
+| --- | --- | --- |
+| `GET /api/v1/operator/commerce-account` | 본인 운영자 | PG 온보딩·Commerce 활성·30일 수수료 무료 기간 상태 조회 |
+| `POST /api/v1/operator/commerce-account/onboarding-link` | `PUBLISH_APPROVED` 운영자 | PG의 온보딩 시작 URL 요청. 계좌·PG 키를 본문으로 받지 않음 |
+| `GET /api/v1/operator/commerce-settlements` | 본인 운영자 | PG 지급 결과와 대사된 정산 요약 조회 |
+| `PUT /api/v1/operator/slots/{slotId}/commerce-policy` | 해당 Draft Slot 운영자 | 고정 `participantPriceKrw`·정책 버전 설정. 공개 후에는 `409` |
+| `POST /api/v1/partner-session-checkout-holds` | 온보딩 완료 일반 회원 | 유료 `AVAILABLE` Slot의 단일 15분 홀드와 호스트 결제 주문 생성 |
+| `GET /api/v1/partner-session-checkout-holds/{holdId}` | 해당 모집자 | 결제 확인 중·만료·Match 생성 결과 조회 |
+| `DELETE /api/v1/partner-session-checkout-holds/{holdId}` | 해당 모집자 | PG 승인 전 홀드·미결제 주문 취소 |
+| `POST /api/v1/matches/{matchId}/applications/{applicationId}/payment-invitations` | 해당 Match 모집자 | PENDING 신청자에게 한 자리·고정 금액 결제 초대 생성 |
+| `GET /api/v1/payment-invitations/{invitationId}` | 해당 참가자 | 결제 기한·고정 금액·안전한 상태 조회 |
+| `DELETE /api/v1/payment-invitations/{invitationId}` | 해당 Match 모집자 | 승인 전 결제 초대와 자리 홀드 취소 |
+| `POST /api/v1/commerce/payments/{paymentId}/checkout` | 결제 당사자 | 제공자 결제 시작 정보 요청 |
+| `GET /api/v1/commerce/payments/{paymentId}` | 결제 당사자 | 서버가 확인한 승인·환불 상태 조회 |
+| `POST /api/v1/webhooks/{provider}/commerce` | PG 서명 | 승인·취소·환불·지급 결과의 멱등 처리 |
+
+`POST /partner-session-checkout-holds`와 결제 초대 생성에는 각각 호출자별 `clientRequestId`가 필수다. 단순 예약 요청이 아니며, 서버는 한 Slot의 유효 홀드를 하나만 만들고 PG 승인 결과가 확인될 때에만 `AVAILABLE → ALLOCATED`, Match와 호스트 결제기록을 하나의 트랜잭션으로 확정한다. 홀드 만료·취소·실패면 Match를 만들지 않는다.
+
+참가자 결제 초대는 기존 `MatchApplication`을 즉시 `ACCEPTED`로 바꾸지 않는다. 승인 확인 전에는 Application이 `PENDING`이고 오픈채팅도 반환하지 않는다. 승인 트랜잭션에서만 결제 초대·출석 결제기록·Application `ACCEPTED`를 함께 확정한다.
+
+웹훅은 제공자 서명, 이벤트 ID, 주문·결제 참조와 금액을 검증한다. 클라이언트 리다이렉트의 성공 값만으로 결제 상태를 변경하지 않으며, 제공자 이벤트와 결제·환불 참조는 DB에서 유일해야 한다. 사용자·운영자 응답에는 카드번호, 계좌번호, PG 원문 오류와 타인의 정산 정보를 반환하지 않는다.
+
+## 23.1 서비스 내 Match Chat API 확장 방향
+
+Match Chat은 설계 완료·미구현 단계다. 현재 외부 오픈채팅 계약을 즉시 제거하지 않으며, 새 `IN_APP_CHAT` Match로의 전환·보관·신고·운영 게이트는 `08-in-app-match-chat-design.md`를 따른다. 범용 DM·사용자 검색·파일 전송·WebSocket 경로를 만들지 않는다.
+
+| 메서드·경로 | 권한 | 계약 목적 |
+| --- | --- | --- |
+| `GET /api/v1/matches/{matchId}/conversation` | 모집자 또는 `ACCEPTED` 참가자 | 방 상태·안전한 멤버 닉네임·내 미확인 수 조회 |
+| `GET /api/v1/matches/{matchId}/conversation/messages?before=cursor` | 방 멤버 | `(createdAt, id)` 커서 기반 과거 메시지 30개 조회 |
+| `POST /api/v1/matches/{matchId}/conversation/messages` | 발신 가능한 방 멤버 | 1~500자 `body`, `clientRequestId`로 텍스트 메시지 생성 |
+| `POST /api/v1/matches/{matchId}/conversation/read` | 방 멤버 | 내 마지막 읽은 커서만 갱신. 타인 읽음 상태는 반환하지 않음 |
+| `POST /api/v1/matches/{matchId}/conversation/messages/{messageId}/reports` | 방 멤버 | 선택형 사유와 짧은 설명으로 메시지 신고 |
+| `GET /api/v1/internal/chat-reports` | `INTERNAL_REVIEWER` | 대기 신고 조회 |
+| `POST /api/v1/internal/chat-reports/{reportId}/actions` | `INTERNAL_REVIEWER` | 메시지 숨김·발신 중지·방 읽기 전용을 감사 이력과 함께 적용 |
+
+권한 없는 요청에는 방 존재 여부를 노출하지 않고 `404 MATCH_CONVERSATION_NOT_FOUND`를 반환한다. 주요 오류 코드는 `MATCH_CONVERSATION_NOT_OPEN`, `CHAT_MEMBER_REQUIRED`, `CHAT_SENDING_SUSPENDED`, `CHAT_MESSAGE_INVALID`, `CHAT_MESSAGE_RATE_LIMITED`, `CHAT_MESSAGE_DUPLICATE`, `CHAT_REPORT_DUPLICATE`다. 메시지·신고 원문은 오류 응답, 분석, 로그에 넣지 않는다.
+
+첫 전달 방식은 채팅 화면 전면 상태의 5초 폴링이다. 메시지 발신에는 낙관 표시와 서버 확인을 사용하며, `clientRequestId`로 재시도를 합친다. WebSocket·Redis·새 프로덕션 의존성은 별도 승인 없이 추가하지 않는다.
+
+새 Match 생성·상세·신청 응답은 전환 기간에 `contact`를 식별 가능한 union으로 반환한다. 기존 `KAKAO_OPEN_CHAT`은 현재 URL 계약을 유지하고, `IN_APP_CHAT`은 URL 대신 `conversationStatus`와 안전한 방 진입 경로만 반환한다. 새 Match 생성에서 `IN_APP_CHAT`은 카카오 URL을 받지 않으며, 첫 수락 전에는 `conversationStatus = NOT_CREATED`만 보이고 실제 방 경로·멤버는 반환하지 않는다.
 
 ## 24. API 테스트 시나리오
 
@@ -1659,7 +1701,31 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /
 11. 최근 30일 2회 또는 시작 24시간 이내 1회 운영자 귀책 철회 후 새 공개·세션 연결을 거절하는 경우
 12. 세션 모집자 취소 뒤 `ALLOCATED` Slot 자동 재공개를 거절하고, 운영자만 취소된 Match 연결을 확인한 뒤 `BLOCKED`로 중지하는 경우
 
-### 24.5 응답과 개인정보
+### 24.5 Court Commerce
+
+1. `ACTIVE` Commerce 계정이 아닌 운영자의 유료 Slot 공개와 Commerce 정책 설정
+2. 같은 유료 Slot에 대한 동시 홀드·서로 다른 `clientRequestId` 요청·홀드 만료 뒤 재요청
+3. 결제 실패·사용자 취소·홀드 만료 뒤 Match와 `ALLOCATED` Slot이 생기지 않는 경우
+4. 승인 웹훅 재전송·늦은 승인·중복 리다이렉트가 Payment·Match·환불을 중복 만들지 않는 경우
+5. 승인 확인 전 결제 초대 Application이 `ACCEPTED`가 아니고 오픈채팅을 받지 않는 경우
+6. 유효 결제 초대와 `ACCEPTED` 참가자를 합산해 Slot 최대 인원을 넘길 수 없는 경우
+7. 운영자 공급 철회가 결제 완료 출석별 전액 환불을 만들고 대기 결제 초대를 청구 없이 취소하는 경우
+8. 운영자별 첫 성공 유료 승인부터 30일 미만은 플랫폼 수수료 0%, 이후는 5%이며 PG 수수료는 모두 운영자 부담으로 기록되는 경우
+9. 다른 운영자·모집자·참가자가 Commerce 계정, 결제, 정산, webhook 결과를 조회·변경하려는 경우
+10. PG 서명이 없거나 결제 참조·금액이 다른 webhook을 거절하는 경우
+
+### 24.6 서비스 내 Match Chat
+
+1. 첫 `ACCEPTED` 전환과 MatchConversation·모집자/참가자 멤버 생성이 하나의 트랜잭션으로 끝나는 경우
+2. PENDING·거절·철회·취소 신청자, 운영자, 제3자의 방·메시지·멤버 조회와 발신 시도
+3. 동시에 수락된 참가자와 방 멤버가 중복 생성되지 않는 경우
+4. 같은 `clientRequestId` 재전송, 동시 메시지, 커서 페이지 경계의 중복·누락 여부
+5. `READ_ONLY`, 발신 중지, 빈 메시지·501자 메시지·속도 제한의 서버 거절
+6. Match 취소·공급 철회·`endsAt + 24시간`이 시스템 안내와 읽기 전용 전환을 한 작업으로 처리하는 경우
+7. 신고자가 방 멤버가 아닌 경우, 같은 메시지의 중복 신고, 일반 사용자의 내부 조치 API 호출
+8. 메시지·신고 원문이 API 오류, 일반 응답, 로그·분석 이벤트에 없는지 확인
+
+### 24.7 응답과 개인정보
 
 1. 목록·상세의 예상 비용 계산 일치
 2. 목록·상세·수락 응답의 남은 자리 계산 일치
@@ -1673,7 +1739,7 @@ Slot 생성 결과는 항상 `visibility = PRIVATE`, `status = DRAFT`다. `GET /
 
 ## 25. 확정 정책과 남은 확장 계약
 
-Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 수락자 전용 오픈채팅, 조기 마감, 모집자 완료 확인, clientRequestId 멱등성과 1원 단위 비용 올림을 활성 계약으로 사용한다.
+Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 수락자 전용 오픈채팅, 조기 마감, 모집자 완료 확인, clientRequestId 멱등성과 1원 단위 비용 올림을 활성 계약으로 사용한다. 서비스 내 Match Chat은 별도 승인 뒤 새 `IN_APP_CHAT` Match에만 적용한다.
 
 | 후속 항목 | Core 처리 | 확장 시 API 영향 |
 | --- | --- | --- |
@@ -1682,6 +1748,7 @@ Core MVP는 카카오 로그인, 닉네임 확인, 로그인 후 탐색, 수락�
 | 수락 후 참가 취소 | 운영 문의 | 별도 Application 상태·이력·취소 API 필요 |
 | 철회·거절 후 재신청 | 지원하지 않음 | 유일 제약·재신청 API 정책 변경 |
 | 신고·차단 | 비공개 MVP 운영 문의 | 공개 출시 전 신고 API와 권한 모델 검토 |
+| 서비스 내 Match Chat | 현재 카카오 오픈채팅 | `08-in-app-match-chat-design.md`의 Conversation·Message·Report·Moderation API와 보관 정책 |
 | 플레이 상태 이름 | 응답하지 않음 | 분류 규칙 확정 후 DTO 확장 |
 
 ## 26. 다음 단계
