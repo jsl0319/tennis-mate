@@ -26,7 +26,7 @@ Core MVP에는 회원, 테니스 프로필, 지역, 매칭과 신청에 필요�
 ### 2.3 계산 가능한 값은 중복 저장하지 않는다
 
 - 예상 총 참여 인원 = 모집자 1명 + `Match.recruitCount`
-- 예상 1인 비용 = 직접 예약 코트일 때만 `ceil(Match.totalCourtFeeKrw ÷ 예상 총 참여 인원)`, 코트 미정이면 NULL
+- 예상 1인 비용 = 직접 예약 코트와 제휴 코트일 때 `ceil(Match.totalCourtFeeKrw ÷ 예상 총 참여 인원)`, 과거 `COURT_TBD` 기록이면 NULL
 - 남은 자리 = `Match.recruitCount - ACCEPTED 신청 수`
 - 추천 점수 = 프로필, 지역과 플레이 목적을 이용해 조회 시 계산
 
@@ -320,7 +320,7 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 
 ### 5.7 Match
 
-모집자가 외부에서 예약한 코트 또는 코트 미정 상태의 참가 조건을 등록한다.
+모집자가 외부에서 예약한 코트의 참가 조건을 등록한다. 운영자가 준비한 Slot에는 일반 모집자가 별도 `PARTNER_COURT` Match를 연결한다. `COURT_TBD`는 과거 기록을 보존하는 enum 값이다.
 
 | 컬럼 | 타입 | 필수 | 규칙 |
 | --- | --- | ---: | --- |
@@ -331,14 +331,14 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `title` | varchar(80) | O | 짧은 모집 제목 |
 | `startsAt` | timestamptz | O | 시작 시각 |
 | `endsAt` | timestamptz | O | 종료 시각, 시작보다 이후 |
-| `courtSource` | CourtSource | O | `EXTERNAL_RESERVED` 또는 `COURT_TBD` |
+| `courtSource` | CourtSource | O | 신규 생성은 `EXTERNAL_RESERVED` 또는 Pilot의 `PARTNER_COURT`; `COURT_TBD`는 과거 기록 |
 | `externalCourtName` | varchar(100) | 예약 코트만 O | 외부 예약 코트명 |
 | `externalCourtAddress` | varchar(255) | 예약 코트만 O | 상세 장소 |
 | `externalCourtNumber` | varchar(50) | 예약 코트에서 X | 코트 번호, 예약번호 금지 |
 | `externalCourtImageUploadId` | UUID | 예약 코트에서 X | 모집자 본인의 `CourtImageUpload` 1건. 한 Match에만 연결하며 사진 URL을 직접 받지 않음 |
 | `recruitCount` | int | O | 모집자 외 추가 인원, 1 이상 |
 | `partnerPreference` | PartnerPreference | O | 원하는 상대 선택지 |
-| `totalCourtFeeKrw` | int | 예약 코트만 O | 0 이상, 코트 미정이면 NULL |
+| `totalCourtFeeKrw` | int | 직접 예약·제휴 코트에서 O | 0 이상, 과거 `COURT_TBD`면 NULL |
 | `additionalCostNote` | varchar(200) | X | 조명비·볼 비용 등 |
 | `introduction` | varchar(300) | X | 짧은 소개 메시지 |
 | `status` | MatchStatus | O | 기본 `OPEN` |
@@ -372,10 +372,10 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 #### CourtSource
 
 - `EXTERNAL_RESERVED`: 모집자가 외부에서 직접 예약
-- `COURT_TBD`: 일정과 활동 지역은 정했지만 코트·비용은 수락자와 서비스 내 Match 채팅에서 조율
+- `COURT_TBD`: 과거 코트 미정 Match. 신규 생성은 금지하며 이력·기존 참여자 채팅·완료 처리를 위해 유지
 - `PARTNER_COURT`: Court Partner Pilot에서 운영자가 준비한 Slot에 일반 모집자가 연 Match
 
-Core MVP에서는 첫 두 값만 허용한다. `COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한다. `PARTNER_COURT`의 CourtSlot 연결 규칙은 13.5에서 정의한다. 세 출처 모두 첫 수락 뒤 `MatchConversation`을 만들며 외부 연락 링크는 Match에 저장하지 않는다.
+새 일반 매칭 생성은 `EXTERNAL_RESERVED`만 허용하며, `PARTNER_COURT`는 Court Partner Pilot의 Slot 연결 흐름에서만 만든다. `COURT_TBD`에서는 `externalCourtName`, `externalCourtAddress`, `externalCourtNumber`, `totalCourtFeeKrw`, `additionalCostNote`를 NULL로 저장한 기존 행을 보존한다. 이 값은 공개 목록·추천·새 신청에서 제외하고 기존 참여자의 이력·채팅·완료 처리에서만 읽는다. 이 정책은 enum이나 기존 행을 삭제하는 migration을 요구하지 않는다. `PARTNER_COURT`의 CourtSlot 연결 규칙은 13.5에서 정의한다. 세 출처 모두 첫 수락 뒤 `MatchConversation`을 만들며 외부 연락 링크는 Match에 저장하지 않는다.
 
 #### PartnerPreference
 
@@ -460,7 +460,7 @@ Core MVP에서는 `(matchId, applicantUserId)`를 UNIQUE로 두어 한 사용자
 - `Match.startsAt < Match.endsAt`
 - `Match.recruitCount >= 1`
 - `Match.totalCourtFeeKrw IS NULL OR Match.totalCourtFeeKrw >= 0`
-- `Match.courtSource = EXTERNAL_RESERVED`인 경우 외부 코트명·주소·비용 필수, `COURT_TBD`인 경우 해당 값은 NULL
+- `Match.courtSource = EXTERNAL_RESERVED`인 경우 외부 코트명·주소·비용 필수. 기존 `COURT_TBD` 행은 해당 값을 NULL로 유지하며, 신규 생성 API는 이 값을 받지 않음
 - `Match.status = CANCELLED`인 경우 `cancelledAt` 필수
 - `Match.status = COMPLETED`인 경우 `completedAt` 필수
 - `Match.status = EXPIRED`인 경우 `expiredAt` 필수
@@ -1016,7 +1016,7 @@ Court Partner 도입 시 `Match`에 다음 컬럼을 추가한다.
 그리고 다음 CHECK 제약을 추가한다.
 
 - `courtSource = EXTERNAL_RESERVED`이면 `courtSlotId IS NULL`이고 외부 코트 필드 필수
-- `courtSource = COURT_TBD`이면 `courtSlotId IS NULL`이고 외부 코트 필드 NULL
+- `courtSource = COURT_TBD`이면 `courtSlotId IS NULL`이고 외부 코트 필드 NULL이며, 이 조합은 과거 행 보존 전용
 - `courtSource = PARTNER_COURT`이면 `courtSlotId IS NOT NULL`이고 외부 코트 필드 NULL
 - 연결 가능한 CourtSlot은 `AVAILABLE` 상태여야 하며 생성 트랜잭션 안에서 `ALLOCATED`가 됨
 - `PARTNER_COURT` Match의 `recruitCount + 1 <= CourtSlot.maxParticipantCount`를 생성 트랜잭션 안에서 검증

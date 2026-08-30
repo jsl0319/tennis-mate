@@ -2,7 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { matchCreateInputSchema } from "./match";
-import { acceptApplication, cancelMatch, createMatch, getMatchDetail, getMatches, reconcileStartedMatches, rejectApplication } from "./match-service";
+import { acceptApplication, cancelMatch, createApplication, createMatch, getMatchDetail, getMatches, getRecommendedMatches, reconcileStartedMatches, rejectApplication } from "./match-service";
 
 const futureStartsAt = new Date("2030-01-02T01:00:00.000Z");
 const futureEndsAt = new Date("2030-01-02T03:00:00.000Z");
@@ -30,12 +30,12 @@ const input = matchCreateInputSchema.parse({
   startsAt: futureStartsAt.toISOString(),
   endsAt: futureEndsAt.toISOString(),
   regionCode: "SEOUL-001",
-  courtSource: "COURT_TBD",
-  externalCourt: null,
+  courtSource: "EXTERNAL_RESERVED",
+  externalCourt: { name: "마포 테니스장", address: "서울 마포구 월드컵로 00" },
   recruitCount: 1,
   playPurposes: ["RALLY_PRACTICE"],
   partnerPreference: "COMPLETE_BEGINNER_WELCOME",
-  totalCourtFeeKrw: null,
+  totalCourtFeeKrw: 40_000,
   additionalCostNote: null,
   introduction: "처음이라 천천히 랠리하고 싶어요.",
 });
@@ -49,9 +49,9 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
     title: input.title,
     startsAt: futureStartsAt,
     endsAt: futureEndsAt,
-    courtSource: "COURT_TBD",
-    externalCourtName: null,
-    externalCourtAddress: null,
+    courtSource: "EXTERNAL_RESERVED",
+    externalCourtName: "마포 테니스장",
+    externalCourtAddress: "서울 마포구 월드컵로 00",
     externalCourtNumber: null,
     externalCourtImageUploadId: null,
     courtSlotId: null,
@@ -59,7 +59,7 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
     courtSlot: null,
     recruitCount: 1,
     partnerPreference: "COMPLETE_BEGINNER_WELCOME",
-    totalCourtFeeKrw: null,
+    totalCourtFeeKrw: 40_000,
     additionalCostNote: null,
     introduction: input.introduction,
     status: "OPEN",
@@ -103,6 +103,26 @@ describe("match service operation safeguards", () => {
     expect(result).toMatchObject({ created: false, match: { id: existing.id } });
     expect(prisma.match.create).toHaveBeenCalledOnce();
     expect(findUnique).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not let a new user join a historical court-undecided match", async () => {
+    const matchApplicationCreate = vi.fn();
+    const transaction = {
+      match: {
+        findUnique: vi.fn()
+          .mockResolvedValueOnce({ id: "legacy-match-id", status: "OPEN", startsAt: futureStartsAt, applications: [] })
+          .mockResolvedValueOnce({ hostUserId: viewer.id, courtSource: "COURT_TBD", status: "OPEN", startsAt: futureStartsAt, recruitCount: 2, applications: [] }),
+      },
+      matchApplication: { create: matchApplicationCreate },
+    };
+    const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof createApplication>[0];
+    const applicantViewer = { ...viewer, id: "applicant-user-id" } as Parameters<typeof createApplication>[1];
+
+    await expect(createApplication(prisma, applicantViewer, "legacy-match-id", { message: null })).rejects.toMatchObject({
+      code: "LEGACY_MATCH_NOT_JOINABLE",
+      status: 409,
+    });
+    expect(matchApplicationCreate).not.toHaveBeenCalled();
   });
 
   it("does not reject a pending application after its match has started", async () => {
@@ -435,7 +455,7 @@ describe("match service operation safeguards", () => {
     expect(transaction.match.create).not.toHaveBeenCalled();
   });
 
-  it("asks the database to exclude the viewer's matches and prior applications from discovery", async () => {
+  it("asks the database to exclude the viewer's matches, prior applications, and historical court-undecided matches from discovery", async () => {
     const findMany = vi.fn().mockResolvedValue([makeMatch({ id: "other-match-id", hostUserId: "other-user-id", host: { id: "other-user-id", nickname: "다른모집자", tennisProfile: viewer.profile } })]);
     const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];
 
@@ -443,12 +463,48 @@ describe("match service operation safeguards", () => {
 
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
+        courtSource: { not: "COURT_TBD" },
         NOT: [
           { hostUserId: viewer.id },
           { applications: { some: { applicantUserId: viewer.id } } },
         ],
       }),
     }));
+  });
+
+  it("does not recommend a historical court-undecided match", async () => {
+    const legacyMatch = makeMatch({
+      hostUserId: "other-user-id",
+      courtSource: "COURT_TBD",
+      externalCourtName: null,
+      externalCourtAddress: null,
+      totalCourtFeeKrw: null,
+      host: { id: "other-user-id", nickname: "다른모집자", tennisProfile: viewer.profile },
+    });
+    const prisma = { match: { findMany: vi.fn().mockResolvedValue([legacyMatch]) } } as unknown as Parameters<typeof getRecommendedMatches>[0];
+
+    await expect(getRecommendedMatches(prisma, viewer, 20)).resolves.toEqual([]);
+  });
+
+  it("keeps a historical court-undecided match detail private to its existing participants", async () => {
+    const legacyMatch = makeMatch({
+      hostUserId: "other-user-id",
+      courtSource: "COURT_TBD",
+      externalCourtName: null,
+      externalCourtAddress: null,
+      totalCourtFeeKrw: null,
+      host: { id: "other-user-id", nickname: "다른모집자", tennisProfile: viewer.profile },
+    });
+    const transaction = {
+      match: { findUnique: vi.fn().mockResolvedValue({ id: legacyMatch.id, status: "OPEN", startsAt: futureStartsAt, applications: [] }) },
+      matchApplication: { updateMany: vi.fn() },
+    };
+    const prisma = {
+      match: { findUnique: vi.fn().mockResolvedValue(legacyMatch) },
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as Parameters<typeof getMatchDetail>[0];
+
+    await expect(getMatchDetail(prisma, viewer, legacyMatch.id)).rejects.toMatchObject({ code: "MATCH_NOT_FOUND", status: 404 });
   });
 
   it("shows a partner court facility photo through the protected route in match detail", async () => {

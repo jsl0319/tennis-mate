@@ -30,7 +30,7 @@
 - 지역 목록 조회
 - 추천 매칭과 일반 매칭 목록 조회
 - 매칭 상세 조회
-- 예약된 코트 또는 코트 미정 상태의 매칭 등록
+- 이미 예약된 외부 코트의 매칭 등록
 - 같이 치기 신청
 - 받은 신청 조회와 수락·거절
 - 보낸 신청 조회와 대기 신청 철회
@@ -226,7 +226,7 @@ MatchStatus = OPEN | CLOSED | COMPLETED | EXPIRED | CANCELLED
 ApplicationStatus = PENDING | ACCEPTED | REJECTED | WITHDRAWN | CANCELLED
 ```
 
-Core MVP 생성 API는 `EXTERNAL_RESERVED`와 `COURT_TBD`만 허용한다. `PARTNER_COURT`는 Court Partner Pilot에서만 `courtSlotId`와 함께 허용한다. `COURT_TBD`는 코트·비용이 확정되지 않았음을 응답에서 명시한다.
+새 일반 매칭 생성 API는 `EXTERNAL_RESERVED`만 허용한다. `PARTNER_COURT`는 Court Partner Pilot에서만 `courtSlotId`와 함께 허용한다. `COURT_TBD` enum 값은 기존 Match 응답을 호환하기 위한 이력 값이며, 새 `POST /api/v1/matches` 요청에 보내면 `422 VALIDATION_FAILED`를 반환한다.
 
 ### 5.3 Court Partner Pilot 시간 공급
 
@@ -330,13 +330,13 @@ CourtSupplyIncidentStatus = REQUESTED | WITHDRAWN | REVIEWED | REJECTED
 }
 ```
 
-예약 코트와 Partner Court Match의 예상 1인 비용은 `ceil(totalCourtFeeKrw / (recruitCount + 1))`로 계산하고 사용자가 수정할 수 없다. Partner Court Match의 전체 비용은 연결 CourtSlot에서만 읽는다. `COURT_TBD`의 `estimatedFeePerPersonKrw`는 `null`이며, 실제 정산은 서비스 밖에서 참가자들이 확인한다.
+예약 코트와 Partner Court Match의 예상 1인 비용은 `ceil(totalCourtFeeKrw / (recruitCount + 1))`로 계산하고 사용자가 수정할 수 없다. Partner Court Match의 전체 비용은 연결 CourtSlot에서만 읽는다. 과거 `COURT_TBD`의 `estimatedFeePerPersonKrw`는 계속 `null`이며, 기존 참여자의 이력·채팅·완료 처리를 위해 응답을 유지한다.
 
 ### 6.4 MatchDetailView
 
 `MatchCardView`의 모든 필드에 다음 정보를 추가한다.
 
-`COURT_TBD` 응답에서는 `court.name`, `court.address`, `totalCourtFeeKrw`, `additionalCostNote`, `estimatedFeePerPersonKrw`가 모두 `null`이고 `court.sourceLabel`은 `코트와 비용을 함께 정해요`다.
+과거 `COURT_TBD` 응답에서는 `court.name`, `court.address`, `totalCourtFeeKrw`, `additionalCostNote`, `estimatedFeePerPersonKrw`가 모두 `null`이고 `court.sourceLabel`은 `코트와 비용을 함께 정해요`다. 이 표시는 기존 참여자의 이력·채팅·완료 처리에서만 사용하며, 공개 목록·신규 생성·신청 유도에는 사용하지 않는다.
 
 모든 Match 응답의 `court.image`는 `url`, `sourceLabel`, `fallback`을 제공한다. 사진이 없으면 `url`과 `sourceLabel`은 `null`이며 클라이언트는 `TENNIS_COURT_ILLUSTRATION`을 표시한다. `url`은 비공개 객체 URL이 아니라 인증·권한을 확인하는 같은 출처의 사진 읽기 API다. 외부 예약 사진의 `sourceLabel`은 `모집자 제공 사진`, 제휴 코트 사진의 값은 `운영자 제공 사진`이다. 사진은 예약 검증이나 Tennis Mate 보증을 뜻하지 않는다.
 
@@ -760,22 +760,6 @@ POST /api/v1/matches
 }
 ```
 
-코트 미정 매칭은 다음처럼 코트·비용 필드 없이 생성한다.
-
-```json
-{
-  "clientRequestId": "0198d5a2-51f5-7be2-a044-6f68d37e61d2",
-  "title": "주말 코트, 같이 정해요",
-  "startsAt": "2026-08-22T01:00:00.000Z",
-  "endsAt": "2026-08-22T03:00:00.000Z",
-  "regionCode": "SEOUL-MAPO",
-  "courtSource": "COURT_TBD",
-  "recruitCount": 2,
-  "playPurposes": ["RALLY_PRACTICE"],
-  "partnerPreference": "COMPLETE_BEGINNER_WELCOME"
-}
-```
-
 서버 파생 값:
 
 - `hostUserId`: 세션 User
@@ -791,9 +775,9 @@ POST /api/v1/matches
 - `clientRequestId`는 UUID이며 모집자별 유일
 - `startsAt < endsAt`이며 시작은 현재보다 미래
 - 활성 `regionCode`
-- `courtSource = EXTERNAL_RESERVED`이면 코트명 1~100자, 주소 1~255자, 비용 0 이상이 필수이고 코트 번호는 최대 50자다.
+- `courtSource = EXTERNAL_RESERVED`이면 코트명 1~100자, 주소 1~255자, 비용 0 이상이 필수이고 코트 번호는 최대 50자다. 새 일반 매칭에는 이 출처가 필수다.
 - `imageUploadId`는 모집자 본인의 `PENDING` 단일 업로드만 허용하며 Match 생성 트랜잭션 안에서 `ATTACHED`로 전환한다. 다른 사용자의 업로드, 이미 연결·정리 중·삭제된 업로드는 `409 COURT_IMAGE_UPLOAD_UNAVAILABLE`이다.
-- `courtSource = COURT_TBD`이면 `externalCourt`, `totalCourtFeeKrw`, `additionalCostNote`는 `null` 또는 생략한다.
+- `courtSource = COURT_TBD`는 신규 요청에 허용하지 않는다. 과거 `COURT_TBD` Match에는 새 신청을 만들 수 없고, 기존 참여자의 이력·채팅·완료 처리만 허용한다. 코트를 확보하지 못한 사용자는 공개 Partner Slot을 확인하는 `GET /api/v1/partner-session-slots` 흐름을 사용한다.
 - 예약 코트의 코트 번호에 예약번호나 연락처를 넣지 않도록 클라이언트에서 안내하고 서버에서도 명백한 형식을 제한한다.
 - `recruitCount >= 1`
 - 플레이 목적 1~2개, 중복 불가
@@ -987,7 +971,7 @@ GET /api/v1/matches/{matchId}/applications?status=PENDING&cursor=...&limit=20
 {
   "match": {
     "id": "0198...",
-    "title": "천천히 랠리 연습해요",
+    "title": "과거 코트 미정 매칭 예시",
     "status": "OPEN",
     "court": {
       "source": "COURT_TBD",
@@ -1171,6 +1155,7 @@ POST /api/v1/applications/{applicationId}/withdraw
 | `MATCH_NOT_COMPLETABLE` | 완료할 수 없는 상태 또는 시각 |
 | `NO_REMAINING_SPOTS` | 남은 자리 없음 |
 | `UNSUPPORTED_COURT_SOURCE` | Core에서 지원하지 않는 코트 출처 |
+| `LEGACY_MATCH_NOT_JOINABLE` | 과거 코트 미정 Match에는 새로 신청할 수 없음 |
 | `PARTNER_SLOT_NOT_AVAILABLE` | 공개되지 않았거나 세션에 연결할 수 없는 Slot |
 | `PARTNER_SLOT_ALREADY_ALLOCATED` | 다른 Partner Court Match가 먼저 연결한 Slot |
 | `PARTNER_SLOT_CAPACITY_EXCEEDED` | 모집자를 포함한 인원이 해당 코트 시간의 최대 인원을 초과 |

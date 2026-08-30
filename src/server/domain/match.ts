@@ -46,20 +46,12 @@ const externalReservedMatchSchema = matchCreateCommonSchema.extend({
   additionalCostNote: z.string().trim().max(200).nullable().optional(),
 });
 
-const courtTbdMatchSchema = matchCreateCommonSchema.extend({
-  ...directMatchTimingSchema,
-  courtSource: z.literal("COURT_TBD"),
-  externalCourt: z.null().default(null),
-  totalCourtFeeKrw: z.null().default(null),
-  additionalCostNote: z.null().default(null),
-});
-
 const partnerCourtMatchSchema = matchCreateCommonSchema.extend({
   courtSource: z.literal("PARTNER_COURT"),
   courtSlotId: z.string().uuid("제휴 코트 시간대를 다시 선택해 주세요."),
 }).strict();
 
-export const matchCreateInputSchema = z.discriminatedUnion("courtSource", [externalReservedMatchSchema, courtTbdMatchSchema, partnerCourtMatchSchema]).superRefine((input, context) => {
+export const matchCreateInputSchema = z.discriminatedUnion("courtSource", [externalReservedMatchSchema, partnerCourtMatchSchema]).superRefine((input, context) => {
   if (input.courtSource !== "PARTNER_COURT") {
     const startsAt = new Date(input.startsAt);
     const endsAt = new Date(input.endsAt);

@@ -298,7 +298,7 @@ export async function getOnboardedViewer(prisma: PrismaClient, user: { id: strin
 }
 
 function filterDiscoverable(matches: MatchWithRelations[], now: Date) {
-  return matches.filter((match) => isDiscoverableMatch({
+  return matches.filter((match) => match.courtSource !== "COURT_TBD" && isDiscoverableMatch({
     status: match.status,
     startsAt: match.startsAt,
     recruitCount: match.recruitCount,
@@ -339,6 +339,7 @@ export async function getMatches(
     where: {
       status: "OPEN",
       startsAt: { gt: input.startsFrom },
+      courtSource: { not: "COURT_TBD" },
       NOT: [
         { hostUserId: viewer.id },
         { applications: { some: { applicantUserId: viewer.id } } },
@@ -370,7 +371,7 @@ export async function getMatchDetail(prisma: PrismaClient, viewer: Viewer, match
 
   const application = match.applications.find((item) => item.applicantUserId === viewer.id) ?? null;
   const relation = match.hostUserId === viewer.id ? "HOST" : application ? "APPLICANT" : "NONE";
-  if (match.status !== "OPEN" && relation === "NONE") {
+  if ((match.status !== "OPEN" || match.courtSource === "COURT_TBD") && relation === "NONE") {
     throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
   }
 
@@ -447,10 +448,10 @@ function isSameCreateRequest(match: MatchWithRelations, input: MatchCreateInput)
   return match.startsAt.getTime() === new Date(input.startsAt).getTime() &&
     match.endsAt.getTime() === new Date(input.endsAt).getTime() &&
     match.regionCode === input.regionCode &&
-    match.externalCourtName === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null) &&
-    match.externalCourtAddress === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null) &&
-    match.externalCourtNumber === (input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null) &&
-    match.externalCourtImageUploadId === (input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.imageUploadId ?? null : null) &&
+    match.externalCourtName === input.externalCourt.name &&
+    match.externalCourtAddress === input.externalCourt.address &&
+    match.externalCourtNumber === optionalText(input.externalCourt.courtNumber) &&
+    match.externalCourtImageUploadId === (input.externalCourt.imageUploadId ?? null) &&
     match.totalCourtFeeKrw === input.totalCourtFeeKrw &&
     match.additionalCostNote === optionalText(input.additionalCostNote);
 }
@@ -549,7 +550,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
         });
       }
 
-      const imageUploadId = input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.imageUploadId ?? null : null;
+      const imageUploadId = input.externalCourt.imageUploadId ?? null;
       if (imageUploadId) {
         const imageClaimed = await transaction.courtImageUpload.updateMany({
           where: { id: imageUploadId, ownerUserId: viewer.id, status: "PENDING" },
@@ -563,10 +564,10 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
       return transaction.match.create({
         data: {
           hostUserId: viewer.id, clientRequestId: input.clientRequestId, regionCode: input.regionCode, title: input.title,
-          startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), courtSource: input.courtSource,
-          externalCourtName: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.name : null,
-          externalCourtAddress: input.courtSource === "EXTERNAL_RESERVED" ? input.externalCourt.address : null,
-          externalCourtNumber: input.courtSource === "EXTERNAL_RESERVED" ? optionalText(input.externalCourt.courtNumber) : null,
+          startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), courtSource: "EXTERNAL_RESERVED",
+          externalCourtName: input.externalCourt.name,
+          externalCourtAddress: input.externalCourt.address,
+          externalCourtNumber: optionalText(input.externalCourt.courtNumber),
           externalCourtImageUploadId: imageUploadId, courtSlotId: null, recruitCount: input.recruitCount,
           partnerPreference: input.partnerPreference, totalCourtFeeKrw: input.totalCourtFeeKrw,
           additionalCostNote: optionalText(input.additionalCostNote), introduction: optionalText(input.introduction),
@@ -643,6 +644,7 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
         where: { id: matchId },
         select: {
           hostUserId: true,
+          courtSource: true,
           status: true,
           startsAt: true,
           recruitCount: true,
@@ -652,6 +654,7 @@ export async function createApplication(prisma: PrismaClient, viewer: Viewer, ma
 
       if (!match) throw new DomainError("MATCH_NOT_FOUND", 404, "매칭을 찾을 수 없어요.");
       if (match.hostUserId === viewer.id) throw new DomainError("OWN_MATCH_APPLICATION_NOT_ALLOWED", 409, "내가 만든 매칭에는 신청할 수 없어요.");
+      if (match.courtSource === "COURT_TBD") throw new DomainError("LEGACY_MATCH_NOT_JOINABLE", 409, "코트 미정 매칭은 새 신청을 받지 않아요.");
       if (match.status === "CANCELLED") throw new DomainError("MATCH_CANCELLED", 409, "취소된 매칭에는 신청할 수 없어요.");
       if (match.status !== "OPEN") throw new DomainError("MATCH_ALREADY_CLOSED", 409, "모집이 마감된 매칭이에요.");
       if (match.startsAt <= new Date()) throw new DomainError("MATCH_ALREADY_ENDED", 409, "이미 시작된 일정에는 신청할 수 없어요.");

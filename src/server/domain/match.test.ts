@@ -53,14 +53,14 @@ describe("M4 match creation input", () => {
     expect(matchCreateInputSchema.parse({ ...validInput, totalCourtFeeKrw: 0 }).courtSource).toBe("EXTERNAL_RESERVED");
   });
 
-  it("accepts a court-undecided match without court details or a fee", () => {
-    expect(matchCreateInputSchema.parse({
+  it("rejects a new court-undecided match without court details or a fee", () => {
+    expect(() => matchCreateInputSchema.parse({
       ...validInput,
       courtSource: "COURT_TBD",
       externalCourt: null,
       totalCourtFeeKrw: null,
       additionalCostNote: null,
-    }).courtSource).toBe("COURT_TBD");
+    })).toThrow();
   });
 
   it("accepts a partner court match only with the selected public slot", () => {
@@ -79,7 +79,7 @@ describe("M4 match creation input", () => {
     expect(() => matchCreateInputSchema.parse({ ...partner, totalCourtFeeKrw: 40_000 })).toThrow();
   });
 
-  it("does not calculate an estimated fee before the court is decided", () => {
+  it("keeps the null fee calculation for historical court-undecided records", () => {
     expect(getEstimatedFeePerPerson(null, 2)).toBeNull();
   });
 
