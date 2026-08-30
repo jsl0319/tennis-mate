@@ -81,7 +81,7 @@ export function TennisMateHome({ returnTo = "/" }: { returnTo?: string }) {
   if (screen === "loading") return <HomeLoading />;
   if (screen === "entry") return <EntrySelection returnTo={safeReturnTo} />;
   if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
-  if (screen === "error") return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center text-[var(--tm-text-primary)]"><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><button className="mt-6 rounded-2xl bg-[var(--tm-action-primary)] px-5 py-3 font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></div></main>;
+  if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><button className="mt-6 rounded-2xl bg-[var(--tm-action-primary)] px-5 py-3 font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></div></HomeStateFrame>;
 
   const visibleOtherMatches = matches.filter((match) => !recommended.some((item) => item.id === match.id));
   const isRecommendedList = activeList === "recommended";
@@ -143,5 +143,15 @@ function EmptyMatchState() {
 }
 
 function HomeLoading() {
-  return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5"><CourtRallyLoader className="max-w-[560px]" label="매칭을 준비하고 있어요." /></main>;
+  return <HomeStateFrame><CourtRallyLoader className="max-w-[560px]" label="매칭을 준비하고 있어요." /></HomeStateFrame>;
+}
+
+function HomeStateFrame({ children }: { children: React.ReactNode }) {
+  return <main className="min-h-svh bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
+    <header className="border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)]">
+      <div className="mx-auto max-w-[560px] px-5 pb-5 pt-8"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">Tennis Mate</p><h1 className="mt-2 text-2xl font-bold">매칭</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">함께 칠 메이트를 찾고 있어요.</p></div>
+    </header>
+    <section className="mx-auto grid min-h-[calc(100svh-250px)] max-w-[560px] place-items-center px-5 text-center">{children}</section>
+    <BottomNavigation />
+  </main>;
 }
