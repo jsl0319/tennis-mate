@@ -25,6 +25,7 @@
     "check": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@vercel/blob": "^2.8.0",
