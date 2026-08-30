@@ -102,6 +102,13 @@ enum MatchChatMessageVisibility {
   HIDDEN
 }
 
+enum MatchChatImageUploadStatus {
+  PENDING
+  ATTACHED
+  CLEANUP_PENDING
+  DELETED
+}
+
 enum MatchChatReportReason {
   HARASSMENT
   SEXUAL_OR_HATEFUL_CONTENT
@@ -279,6 +286,7 @@ model User {
   clearedSupplyRestrictions OperatorSupplyRestriction[] @relation("OperatorSupplyRestrictionClearedBy")
   matchConversationMemberships MatchConversationMember[]
   sentMatchChatMessages MatchChatMessage[] @relation("MatchChatMessageSender")
+  matchChatImageUploads MatchChatImageUpload[] @relation("MatchChatImageUploadOwner")
   matchChatReports MatchChatReport[] @relation("MatchChatReportReporter")
   matchChatModerationActions MatchChatModerationAction[] @relation("MatchChatModerationReviewer")
 
@@ -484,6 +492,7 @@ model MatchConversation {
   match    Match                     @relation(fields: [matchId], references: [id], onDelete: Restrict)
   members  MatchConversationMember[]
   messages MatchChatMessage[]
+  imageUploads MatchChatImageUpload[]
 
   @@index([status, archiveAt])
   @@map("match_conversations")
@@ -519,11 +528,38 @@ model MatchChatMessage {
 
   conversation MatchConversation   @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   sender       User?               @relation("MatchChatMessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  imageUploads MatchChatImageUpload[]
   reports      MatchChatReport[]
 
   @@unique([senderUserId, clientRequestId])
   @@index([conversationId, createdAt, id])
   @@map("match_chat_messages")
+}
+
+model MatchChatImageUpload {
+  id               String                     @id @default(uuid()) @db.Uuid
+  conversationId   String                     @map("conversation_id") @db.Uuid
+  ownerUserId      String                     @map("owner_user_id") @db.Uuid
+  messageId        String?                    @map("message_id") @db.Uuid
+  position         Int?
+  privateObjectRef String                     @unique @map("private_object_ref") @db.VarChar(500)
+  contentType      String                     @map("content_type") @db.VarChar(100)
+  byteSize         Int                        @map("byte_size")
+  status           MatchChatImageUploadStatus @default(PENDING)
+  attachedAt       DateTime?                  @map("attached_at") @db.Timestamptz(6)
+  cleanupClaimedAt DateTime?                  @map("cleanup_claimed_at") @db.Timestamptz(6)
+  deletedAt        DateTime?                  @map("deleted_at") @db.Timestamptz(6)
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  conversation MatchConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  owner        User              @relation("MatchChatImageUploadOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  message      MatchChatMessage? @relation(fields: [messageId], references: [id], onDelete: Restrict)
+
+  @@unique([messageId, position])
+  @@index([conversationId, ownerUserId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("match_chat_image_uploads")
 }
 
 model MatchChatReport {

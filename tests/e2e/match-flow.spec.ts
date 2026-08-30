@@ -89,6 +89,7 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await expect(applicantPage.getByText("같이 치게 됐어요. 매칭 정보를 확인해 주세요.")).toBeVisible();
   await applicantPage.getByRole("link", { name: "채팅방 열기" }).click();
   await expect(applicantPage.getByRole("heading", { name: fixture.matchTitle })).toBeVisible();
+  await expect(applicantPage.getByRole("button", { name: "사진 추가" })).toBeVisible();
   await applicantPage.getByLabel("메시지").fill("E2E 자동화 메시지");
   const [messageResponse] = await Promise.all([
     applicantPage.waitForResponse((response) => response.url().includes(`/api/v1/matches/${matchId}/conversation/messages`) && response.request().method() === "POST"),
@@ -96,9 +97,11 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   ]);
   expect(messageResponse.ok()).toBeTruthy();
   await expect(applicantPage.getByText("E2E 자동화 메시지")).toBeVisible();
+  await expect(applicantPage.getByLabel("아직 읽지 않은 상대 1명")).toBeVisible();
 
   await hostPage.goto(`/chats/${matchId}`);
   await expect(hostPage.getByText("E2E 자동화 메시지")).toBeVisible();
+  await expect(applicantPage.getByLabel("아직 읽지 않은 상대 1명")).toHaveCount(0, { timeout: 12_000 });
 
   const outsiderContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
   await signInAs(outsiderContext, e2eUsers.outsider.id);

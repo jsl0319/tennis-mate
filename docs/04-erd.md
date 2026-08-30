@@ -1123,8 +1123,9 @@ Match Chat은 모든 Match의 연락을 처리하는 MVP다. 일반 사용자 DM
 | --- | --- |
 | `Match` 확장 | 외부 연락 링크와 연락 수단 enum을 두지 않는다. 첫 수락이 확정된 Match만 `MatchConversation`을 가진다. |
 | `MatchConversation` | `Match`와 1:1. `OPEN`·`READ_ONLY`·`ARCHIVED` 상태와 보관 시각을 가진다. |
-| `MatchConversationMember` | 방과 User를 연결한다. 모집자 또는 수락 시점의 `ACCEPTED` 신청자만 서버 트랜잭션에서 생성하며, 마지막 읽은 커서는 내부 미확인 수용이다. Match 취소 뒤 기존 수락자는 읽기 전용 멤버십을 보관 기간 동안 유지한다. |
-| `MatchChatMessage` | 텍스트 또는 서버 시스템 메시지. 일반 사용자는 수정·삭제하지 못하며 `clientRequestId`로 중복 발신을 막는다. |
+| `MatchConversationMember` | 방과 User를 연결한다. 모집자 또는 수락 시점의 `ACCEPTED` 신청자만 서버 트랜잭션에서 생성하며, 마지막 읽은 커서는 내 미확인 수와 발신자의 최신 일반 메시지를 아직 읽지 않은 다른 현재 멤버 수 계산에만 쓴다. 읽은 시각과 누가 읽었는지는 저장·반환하지 않는다. Match 취소 뒤 기존 수락자는 읽기 전용 멤버십을 보관 기간 동안 유지한다. |
+| `MatchChatMessage` | 텍스트와 최대 3장의 방 멤버 전용 사진 또는 서버 시스템 메시지. 일반 사용자는 수정·삭제하지 못하며 `clientRequestId`로 중복 발신을 막는다. |
+| `MatchChatImageUpload` | 발신자가 해당 방에 올린 JPEG·PNG·WebP 비공개 객체 참조와 `PENDING`·`ATTACHED`·정리 상태를 가진다. `PENDING`은 24시간 뒤 정리하고, `ATTACHED`는 하나의 `MatchChatMessage`에만 순번과 함께 원자적으로 연결한다. |
 | `MatchChatReport` | 방 멤버의 특정 메시지 신고와 선택형 사유를 보관한다. |
 | `MatchChatModerationAction` | `INTERNAL_REVIEWER`의 메시지 숨김·발신 중지·방 읽기 전용 조치를 변경 불가 감사 이력으로 남긴다. |
 
@@ -1150,10 +1151,13 @@ Match Chat은 모든 Match의 연락을 처리하는 MVP다. 일반 사용자 DM
 | CommerceRefund | `providerRefundRef` 유일 | PG 환불 결과 중복 반영 방지 |
 | CommerceWebhookEvent | `(provider, providerEventRef)` 유일 | 웹훅 재전송 멱등 처리 |
 | CommerceSettlement | `(commerceAccountId, providerPayoutRef)` 유일 | 운영자 지급 결과 대사 중복 방지 |
-| MatchConversation | `matchId` 유일 | Match별 텍스트 방 한 개 보장 |
+| MatchConversation | `matchId` 유일 | Match별 채팅방 한 개 보장 |
 | MatchConversationMember | `(conversationId, userId)` 유일 | 같은 멤버의 중복 입장 방지 |
 | MatchChatMessage | `(senderUserId, clientRequestId)` non-null 부분 유일 | 네트워크 재시도의 메시지 중복 방지 |
 | MatchChatMessage | `(conversationId, createdAt, id)` | 커서 기반 메시지 조회 |
+| MatchChatImageUpload | `privateObjectRef` 유일 | 비공개 객체 참조 재사용 방지 |
+| MatchChatImageUpload | `(messageId, position)` 부분 유일 | 한 메시지의 사진 순서 중복 방지 |
+| MatchChatImageUpload | `(conversationId, ownerUserId, status, createdAt)` | 멤버 소유 미연결 사진 정리 후보 조회 |
 | MatchChatReport | `(messageId, reporterUserId)` 유일 | 같은 메시지 중복 신고 방지 |
 
 ## 18. Prisma 및 PostgreSQL 구현 지침
@@ -1200,6 +1204,7 @@ WHERE id = :id AND version = :expectedVersion
 | 연락 수단 | Match 방 상태와 안전한 진입 경로만 모집자와 ACCEPTED 신청자에게 반환, 로그·스냅샷 제외 |
 | 외부 코트 주소 | 매칭 참여 판단에 필요한 범위로 노출 |
 | 코트 사진 | 운영자 또는 모집자가 직접 제공한 사진만 비공개 객체 참조로 저장. 사진 출처와 표시 권한을 안내하고, 인물·연락처·예약번호 노출을 금지 |
+| Match 채팅 사진 | 발신 가능한 방 멤버가 직접 제공한 JPEG·PNG·WebP만 비공개 객체 참조로 저장. 같은 방 멤버의 보호된 읽기 경로 외에 객체 URL·원본 파일명·위치 정보는 반환하지 않으며, 인물·연락처·예약번호·실시간 위치가 보이는 사진은 올리지 않게 안내 |
 | 사업자 증빙 | 비공개 저장, 접근 감사와 보존 기간 필요 |
 | 운영자 연락처 | 일반 참가자에게 공개하지 않음. 운영 연락이 필요하면 별도 정책 승인 후 최소 범위만 사용 |
 | CourtSlot·Match 상태 이력 | 운영상 분쟁 대응에 필요한 기간 보존 후 정책에 따라 삭제·비식별화 |

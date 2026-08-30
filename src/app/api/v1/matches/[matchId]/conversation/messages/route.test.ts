@@ -66,6 +66,6 @@ describe("/api/v1/matches/{matchId}/conversation/messages", () => {
     }), { params: Promise.resolve({ matchId }) });
 
     expect(response.status).toBe(200);
-    expect(sendMatchChatMessage).toHaveBeenCalledWith(prisma, "member-id", matchId, { body: "안녕하세요", clientRequestId });
+    expect(sendMatchChatMessage).toHaveBeenCalledWith(prisma, "member-id", matchId, { body: "안녕하세요", imageUploadIds: [], clientRequestId });
   });
 });

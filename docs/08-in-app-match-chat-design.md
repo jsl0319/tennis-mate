@@ -24,7 +24,7 @@
 
 서비스 내 채팅은 메시지 저장, 권한, 신고·운영 조치, 보관·삭제, 전송 지연과 장애 안내가 함께 필요하므로 Core와 현재 Pilot 범위를 넓힌다. 더 단순한 대안은 외부 연락 수단을 유지하는 것이지만, 외부 이동과 서비스 밖 안전 정책 문제 때문에 채택하지 않는다.
 
-권장 첫 단계는 **Match마다 하나의 텍스트 방**이다. 실시간 개인 메신저, 사진·파일·음성, 읽음 표시, 반응, 메시지 편집·사용자 삭제, 개인 DM, 참여자 검색, 운영자–참가자 대화는 모두 제외한다.
+권장 첫 단계는 **Match마다 하나의 텍스트 중심 방**이다. 발신 가능한 방 멤버는 JPEG·PNG·WebP 사진을 텍스트와 함께 또는 단독으로 한 메시지에 최대 3장, 각 5 MiB까지 보낼 수 있다. 발신자는 최신 일반 메시지를 아직 읽지 않은 다른 현재 멤버 수만 숫자로 보며, 모두 읽으면 숫자는 사라진다. 실시간 개인 메신저, 일반 파일·음성, 읽은 시각·누가 읽었는지, 접속·입력 중 표시, 반응, 메시지 편집·사용자 삭제, 개인 DM, 참여자 검색, 운영자–참가자 대화는 모두 제외한다.
 
 ## 3. 제품 정책과 역할
 
@@ -36,9 +36,9 @@
 | 입장 | 모집자와 해당 Match의 `ACCEPTED` 참가자만. `PENDING`, `REJECTED`, `WITHDRAWN`, 수락된 적 없는 `CANCELLED` 신청자와 운영자는 입장하지 못한다. Match 취소 뒤에는 이미 입장한 멤버만 보관 기간 동안 읽기 전용으로 남는다. |
 | 생성 | 첫 `ACCEPTED`가 확정될 때 서버가 생성하거나 기존 방에 멤버를 원자적으로 추가한다. 빈 방을 미리 만들지 않는다. |
 | 표시 | 사용자는 Match 상세·활동 화면 또는 전역 `채팅` 탭에서 `채팅방 열기`로 들어간다. 전역 탭은 내가 만든 Match와 내가 신청해 수락된 Match를 나누며, 방 생성·사용자 검색은 없다. |
-| 메시지 | 텍스트 1~500자, 줄바꿈 제한, URL 미리보기·파일·사진·위치 공유 없음. |
+| 메시지 | 텍스트 1~500자(줄바꿈 제한)와 방 멤버 전용 사진 0~3장 중 하나 이상. 사진은 JPEG·PNG·WebP, 각 5 MiB 이하만 받고 URL 미리보기·일반 파일·음성·실시간 위치 공유는 제공하지 않는다. |
 | 발신 | 모집자와 현재 수락 참가자만. 서버가 멤버십·방 상태·속도 제한을 모두 검사한다. |
-| 읽음 | 내부의 마지막 읽은 메시지 커서만 저장해 미확인 수를 계산할 수 있다. 다른 사용자에게 읽음·접속 상태를 보여 주지 않는다. |
+| 읽음 | 각 멤버의 마지막 읽은 메시지 커서는 내 미확인 수와 최신 일반 발신 메시지를 아직 읽지 않은 다른 현재 멤버 수 계산에만 쓴다. 발신자는 그 수만 숫자로 보고, 0이면 숫자를 보지 않는다. 읽은 시각·누가 읽었는지, 이전 메시지의 읽음과 접속 상태는 보여 주지 않는다. |
 
 참가 신청을 수락하는 권한은 계속 일반 세션 모집자에게만 있다. 코트 운영자는 시간 공급·정산 상태만 관리하며 채팅방에 입장하거나 메시지를 보낼 수 없다.
 
@@ -82,13 +82,14 @@ stateDiagram-v2
 | 운영 조치 | `INTERNAL_REVIEWER`만 신고를 검토하고 메시지 숨김, 발신 일시 중지, 방 읽기 전용, 조치 없음 중 하나를 선택형 사유·시각과 함께 감사 이력으로 남긴다. |
 | 메시지 불변성 | 일반 사용자는 메시지를 수정·삭제하지 못한다. 검토로 숨긴 메시지는 안전한 안내문으로 대체하고, 원문은 보관 정책에 따라 제한 접근한다. |
 | 속도 제한 | 새 메시지는 사용자·방 단위 속도 제한과 `clientRequestId` 멱등성을 적용한다. 오류 원문·메시지 원문을 로그·분석 이벤트에 넣지 않는다. |
+| 사진 업로드 | 사진 선택만으로 서버에 올리지 않는다. 전송 시 한 장씩 비공개 객체로 저장한 뒤 서버가 같은 방·발신자 소유의 `PENDING` ID 최대 3개만 원자적으로 연결한다. 취소한 로컬 사진은 올리지 않고, 전송 실패 업로드는 즉시 삭제를 시도하며 남은 `PENDING`은 24시간 뒤 정리한다. |
 | 차단 | 첫 단계는 메시지 신고와 운영 발신 중지까지만 제공한다. 사용자 간 영구 차단은 같은 Match의 참여·안전·보관 규칙을 바꾸므로 별도 정책 없이는 추가하지 않는다. |
 
 운영 조치가 MatchApplication, 코트 운영자 권한, 결제·정산, 다른 Match의 멤버십을 자동으로 바꾸지 않는다. 긴급 위험은 제품 UI만으로 해결한다고 약속하지 않고 운영 문의·긴급 신고 절차를 별도 고지한다.
 
 ### 4.2 보관과 개인정보
 
-메시지 본문, 신고 설명, 숨김 사유 원문은 분석 이벤트·일반 서버 로그·클라이언트 상태 저장소에 넣지 않는다. 검색·AI 요약·광고 타기팅·자동 콘텐츠 학습은 제공하지 않는다.
+메시지 본문, 사진 원본 참조·파일명, 신고 설명, 숨김 사유 원문은 분석 이벤트·일반 서버 로그·클라이언트 상태 저장소에 넣지 않는다. 검색·AI 요약·광고 타기팅·자동 콘텐츠 학습은 제공하지 않는다. 사진은 같은 방 멤버만 앱의 권한 확인 읽기 경로로 보고, 비공개 객체 URL을 API·화면에 반환하지 않는다. 인물 얼굴·연락처·예약번호·실시간 위치가 보이는 사진은 올리지 않도록 전송 전 안내한다.
 
 권장안은 Match 종료·취소 뒤 24시간까지 읽기 전용으로 보이고, 일반 메시지는 그 뒤 30일을 넘기지 않고 삭제 또는 비식별화하는 것이다. 신고된 메시지·조치 이력의 보관 기간, 실제 파기 방식, 법적 보존 예외, 이용약관·개인정보 처리 문구는 법무 검토 후 확정한다. 이 결정 전에는 공개 채팅을 출시하지 않는다.
 
@@ -101,6 +102,9 @@ erDiagram
     User ||--o{ MatchConversationMember : joins
     MatchConversation ||--o{ MatchChatMessage : contains
     User ||--o{ MatchChatMessage : sends
+    MatchConversation ||--o{ MatchChatImageUpload : owns
+    User ||--o{ MatchChatImageUpload : uploads
+    MatchChatMessage ||--o{ MatchChatImageUpload : attaches
     MatchChatMessage ||--o{ MatchChatReport : is_reported
     MatchChatReport ||--o{ MatchChatModerationAction : resolved_by
 ```
@@ -109,7 +113,8 @@ erDiagram
 | --- | --- | --- |
 | `MatchConversation` | `matchId`, `status`, `readOnlyAt`, `archiveAt`, `createdAt` | `matchId` 유일. Match를 삭제·재사용하지 않는다. |
 | `MatchConversationMember` | `conversationId`, `userId`, `role`, `joinedAt`, `sendingSuspendedAt?`, `lastReadMessageId?` | `(conversationId, userId)` 유일. 서버가 모집자 또는 수락 시점의 `ACCEPTED` Application에서만 만든다. Match 취소 뒤 기존 멤버는 읽기 전용으로 보관한다. |
-| `MatchChatMessage` | `conversationId`, `senderUserId?`, `type`, `body`, `visibility`, `clientRequestId?`, `createdAt` | 일반 메시지는 활성 발신 멤버만 생성한다. 시스템 메시지는 서버만 만든다. `(senderUserId, clientRequestId)`는 non-null 부분 유일이다. |
+| `MatchChatMessage` | `conversationId`, `senderUserId?`, `type`, `body`, `visibility`, `clientRequestId?`, `createdAt` | 일반 메시지는 활성 발신 멤버만 생성하며 텍스트 또는 사진 1~3장 중 하나를 가져야 한다. 시스템 메시지는 서버만 만든다. `(senderUserId, clientRequestId)`는 non-null 부분 유일이다. |
+| `MatchChatImageUpload` | `conversationId`, `ownerUserId`, `messageId?`, `position?`, `privateObjectRef`, `contentType`, `byteSize`, `status` | 업로드는 해당 방의 발신 가능한 멤버만 만들 수 있다. `PENDING → ATTACHED`는 메시지 생성과 한 트랜잭션으로 전환하며, 타 방·타인·만료·중복 ID 연결은 거절한다. `(messageId, position)` 부분 유일, 미연결 `PENDING`은 24시간 뒤 정리한다. |
 | `MatchChatReport` | `messageId`, `reporterUserId`, `reason`, `description?`, `status`, `createdAt` | 신고자는 해당 방 멤버여야 하며 같은 메시지를 중복 신고하지 않는다. |
 | `MatchChatModerationAction` | `reportId`, `reviewerUserId`, `action`, `reason`, `createdAt` | `INTERNAL_REVIEWER`만 생성하고 수정·삭제하지 않는다. |
 
@@ -122,14 +127,17 @@ erDiagram
 | 메서드·경로 | 권한 | 목적 |
 | --- | --- | --- |
 | `GET /api/v1/matches/{matchId}/conversation` | 모집자 또는 `ACCEPTED` 참가자 | 방 상태·멤버의 안전한 닉네임·내 미확인 수 조회 |
-| `GET /api/v1/matches/{matchId}/conversation/messages?before=cursor` | 방 멤버 | 커서 기반 과거 메시지 30개 조회 |
-| `POST /api/v1/matches/{matchId}/conversation/messages` | 발신 가능한 방 멤버 | `body`, `clientRequestId`로 텍스트 메시지 생성 |
-| `POST /api/v1/matches/{matchId}/conversation/read` | 방 멤버 | 내 마지막 읽은 커서 갱신. 다른 멤버에게 읽음 표시 안 함 |
+| `GET /api/v1/matches/{matchId}/conversation/messages?before=cursor` | 방 멤버 | 커서 기반 과거 메시지 30개와 호출자의 최신 일반 발신 메시지에 대한 제한된 미확인 인원 수 조회 |
+| `POST /api/v1/matches/{matchId}/conversation/image-uploads` | 발신 가능한 방 멤버 | JPEG·PNG·WebP 1장(5 MiB 이하)을 비공개 `PENDING` 업로드로 저장하고 불투명 ID 반환 |
+| `DELETE /api/v1/matches/{matchId}/conversation/image-uploads/{imageUploadId}` | 해당 발신자 | 아직 연결되지 않은 업로드 즉시 삭제 |
+| `POST /api/v1/matches/{matchId}/conversation/messages` | 발신 가능한 방 멤버 | `body` 또는 최대 3개의 `imageUploadIds`, `clientRequestId`로 텍스트·사진 메시지 생성 |
+| `GET /api/v1/matches/{matchId}/conversation/messages/{messageId}/images/{imageUploadId}` | 방 멤버 | 연결되고 가시적인 사진만 권한 확인 뒤 private 스트림으로 반환 |
+| `POST /api/v1/matches/{matchId}/conversation/read` | 방 멤버 | 내 마지막 읽은 커서 갱신. 다른 멤버의 읽은 시각·누가 읽었는지는 반환하지 않음 |
 | `POST /api/v1/matches/{matchId}/conversation/messages/{messageId}/reports` | 방 멤버 | 메시지 신고 생성 |
 | `GET /api/internal/chat-reports` | `INTERNAL_REVIEWER` | 대기 신고 목록 조회 |
 | `POST /api/internal/chat-reports/{reportId}/actions` | `INTERNAL_REVIEWER` | 메시지 숨김·발신 중지·방 읽기 전용 등 감사 가능한 조치 |
 
-주요 오류 코드는 `MATCH_CONVERSATION_NOT_FOUND`, `MATCH_CONVERSATION_NOT_OPEN`, `CHAT_MEMBER_REQUIRED`, `CHAT_SENDING_SUSPENDED`, `CHAT_MESSAGE_INVALID`, `CHAT_MESSAGE_RATE_LIMITED`, `CHAT_MESSAGE_DUPLICATE`, `CHAT_REPORT_DUPLICATE`다. 메시지 본문과 신고 설명은 오류 응답·분석·로그에 되돌려 보내지 않는다.
+주요 오류 코드는 `MATCH_CONVERSATION_NOT_FOUND`, `MATCH_CONVERSATION_NOT_OPEN`, `CHAT_MEMBER_REQUIRED`, `CHAT_SENDING_SUSPENDED`, `CHAT_MESSAGE_INVALID`, `CHAT_IMAGE_TYPE_NOT_ALLOWED`, `CHAT_IMAGE_SIZE_INVALID`, `CHAT_IMAGE_SIGNATURE_INVALID`, `CHAT_IMAGE_UPLOAD_INVALID`, `CHAT_MESSAGE_RATE_LIMITED`, `CHAT_MESSAGE_DUPLICATE`, `CHAT_REPORT_DUPLICATE`다. 메시지 본문과 신고 설명은 오류 응답·분석·로그에 되돌려 보내지 않는다.
 
 ## 7. 전달 방식과 사용자 경험
 
@@ -140,7 +148,7 @@ erDiagram
 - 채팅 화면이 전면·활성 상태일 때만 마지막 커서 이후 메시지를 5초마다 조회한다.
 - 화면을 다시 열거나 앱이 전면으로 돌아오면 즉시 최신 메시지를 조회한다.
 - 발신은 낙관적으로 표시하되 서버 확인 전에는 `보내는 중`으로 두고, 중복 재시도는 `clientRequestId`로 합친다.
-- 알림·읽음·접속·입력 중 표시를 실시간으로 약속하지 않는다. 채팅 화면 밖에서는 활동 화면 재진입·새로고침 시 미확인 수를 갱신한다.
+- 미확인 인원 숫자는 5초 폴링으로만 갱신하며, 발신자의 최신 일반 메시지를 아직 읽지 않은 다른 현재 멤버 수만 표시하고 0이면 숨긴다. 알림·읽은 시각·누가 읽었는지·접속·입력 중 표시는 실시간으로 약속하지 않는다. 채팅 화면 밖에서는 활동 화면 재진입·새로고침 시 내 미확인 수를 갱신한다.
 
 이는 새 외부 서비스·유료 의존성 없이 작은 Pilot에서 권한·보관·신고 모델을 먼저 검증하기 위한 선택이다. Vercel WebSocket 방식은 실험적 API와 외부 공유 상태 저장소가 필요할 수 있으므로, 실시간 전송은 메시지량·지연·비용을 확인한 뒤 별도 승인으로 검토한다.
 
@@ -149,7 +157,7 @@ erDiagram
 | 화면 | 보여 줄 것 | 보여 주지 않을 것 |
 | --- | --- | --- |
 | Match 상세·활동 | `채팅방 열기`, 현재 방 상태, 수락 후 이용 가능 안내 | 외부 오픈채팅 CTA(새 Match), 운영자 연락처 |
-| 채팅방 | Match 제목·일정의 짧은 고정 정보, 텍스트 메시지, 시스템 안내, 신고 | 전화번호·이메일·결제수단·읽음/접속/입력 중 표시 |
+| 채팅방 | Match 제목·일정의 짧은 고정 정보, 텍스트·방 멤버 전용 사진 메시지, 시스템 안내, 신고, 내가 보낸 최신 일반 메시지의 조건부 미확인 인원 숫자 | 전화번호·이메일·결제수단·사진 원본 URL·파일명·읽은 시각·누가 읽었는지·접속/입력 중 표시 |
 | 채팅 목록 | 내가 입장 권한을 가진 Match 방, 호스트·참가자 구분 탭, 안전한 마지막 메시지와 내 미확인 수 | 임의 방 생성, 사용자 검색, 알림 권한 설정 |
 | 읽기 전용 방 | 취소·이용 종료 이유의 안전한 안내, 보관 종료 시각 | 새 메시지 입력·재개 CTA |
 | 신고 | 선택형 사유, 짧은 설명, 접수 완료 안내 | 신고 대상에게 신고자·원문 운영 메모 공개 |
@@ -162,7 +170,7 @@ erDiagram
 
 - 시스템 메시지는 `매칭이 성사됐어요`, `새 참가자가 확정됐어요`, `매칭이 취소됐어요`, `이 채팅방은 읽기 전용이에요` 같은 안전한 상태만 쓴다.
 - 채팅 API 실패·폴링 지연·신고 접수·운영 조치에는 식별자와 상태만 관측한다. 본문·신고 설명·닉네임을 분석 속성에 넣지 않는다.
-- 지표는 `conversation_opened`, `chat_message_sent`, `chat_message_send_failed`, `chat_report_submitted`, `chat_moderation_actioned`, `chat_read_only`를 사용한다.
+- 지표는 `conversation_opened`, `chat_message_sent`, `chat_message_send_failed`, `chat_image_upload_failed`, `chat_report_submitted`, `chat_moderation_actioned`, `chat_read_only`를 사용한다. 사진 자체·파일명·객체 참조는 지표 속성으로 보내지 않는다.
 
 ### 8.2 공개 출시 전 게이트
 
@@ -181,6 +189,7 @@ erDiagram
 - [ ] 메시지 길이·빈 값·속도 제한·권한·읽기 전용·발신 중지·신고 중복을 서버에서 검증한다.
 - [ ] 신고 조치는 일반 사용자에게 메시지 원문을 노출하지 않고, `INTERNAL_REVIEWER`의 제한된 검토 화면에만 필요한 원문을 보이며 감사 이력으로 남는다.
 - [ ] 메시지·신고 원문이 API 오류·로그·분석 이벤트에 포함되지 않는다.
+- [ ] 발신자만 최신 일반 메시지의 미확인 인원 숫자를 받고, 제3자·운영자·수락 전 신청자에게는 방·읽음 상태가 노출되지 않는다. 숫자는 현재 방의 다른 멤버만 세며 0이면 화면에서 숨긴다. 읽은 시각·누가 읽었는지는 어떤 응답에도 포함하지 않는다.
 - [ ] 모바일 키보드·로딩·빈 방·폴링 실패·네트워크 재시도·접근성 상태를 확인한다.
 
 ## 9. 권장 구현 순서

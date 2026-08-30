@@ -1630,22 +1630,27 @@ Court Commerce는 설계 완료·미구현 단계다. 일반 사용자의 `Court
 
 ## 23.1 서비스 내 Match Chat API 확장 방향
 
-Match Chat MVP는 모든 Match의 유일한 연락 수단이다. 공개 출시는 보관·파기와 신고 운영 게이트를 통과한 뒤에만 진행한다. 기존 외부 연락 링크 열은 migration에서 제거하고, 진행 중이며 수락자가 있는 Match는 방·멤버십으로 전환한다. 범용 DM·사용자 검색·파일 전송·WebSocket 경로를 만들지 않는다.
+Match Chat MVP는 모든 Match의 유일한 연락 수단이다. 공개 출시는 보관·파기와 신고 운영 게이트를 통과한 뒤에만 진행한다. 기존 외부 연락 링크 열은 migration에서 제거하고, 진행 중이며 수락자가 있는 Match는 방·멤버십으로 전환한다. 범용 DM·사용자 검색·일반 파일 전송·WebSocket 경로를 만들지 않는다.
 
 | 메서드·경로 | 권한 | 계약 목적 |
 | --- | --- | --- |
 | `GET /api/v1/matches/{matchId}/conversation` | 모집자 또는 `ACCEPTED` 참가자 | 방 상태·안전한 멤버 닉네임·내 미확인 수 조회 |
-| `GET /api/v1/matches/{matchId}/conversation/messages?before=cursor` | 방 멤버 | `(createdAt, id)` 커서 기반 과거 메시지 30개 조회 |
-| `POST /api/v1/matches/{matchId}/conversation/messages` | 발신 가능한 방 멤버 | 1~500자 `body`, `clientRequestId`로 텍스트 메시지 생성 |
-| `POST /api/v1/matches/{matchId}/conversation/read` | 방 멤버 | 내 마지막 읽은 커서만 갱신. 타인 읽음 상태는 반환하지 않음 |
+| `GET /api/v1/matches/{matchId}/conversation/messages?before=cursor` | 방 멤버 | `(createdAt, id)` 커서 기반 과거 메시지 30개와, 호출자 최신 일반 발신 메시지의 제한된 미확인 인원 수 조회 |
+| `POST /api/v1/matches/{matchId}/conversation/image-uploads` | 발신 가능한 방 멤버 | JPEG·PNG·WebP 1장(5 MiB 이하)을 비공개 `PENDING` 객체로 업로드하고 불투명 ID 반환 |
+| `DELETE /api/v1/matches/{matchId}/conversation/image-uploads/{imageUploadId}` | 해당 발신자 | 아직 연결되지 않은 비공개 업로드 즉시 삭제 요청 |
+| `POST /api/v1/matches/{matchId}/conversation/messages` | 발신 가능한 방 멤버 | 1~500자 `body` 또는 최대 3개의 `imageUploadIds`(둘 중 하나 필수), `clientRequestId`로 메시지 생성 |
+| `GET /api/v1/matches/{matchId}/conversation/messages/{messageId}/images/{imageUploadId}` | 방 멤버 | 연결된 가시 사진만 권한 확인 뒤 같은 출처에서 private 스트림으로 반환 |
+| `POST /api/v1/matches/{matchId}/conversation/read` | 방 멤버 | 내 마지막 읽은 커서 갱신. 다른 멤버의 읽은 시각·누가 읽었는지는 반환하지 않음 |
 | `POST /api/v1/matches/{matchId}/conversation/messages/{messageId}/reports` | 방 멤버 | 선택형 사유와 짧은 설명으로 메시지 신고 |
 | `GET /api/v1/me/conversations?role=HOST\|PARTICIPANT` | 방 멤버 | 채팅 탭의 내가 만든/신청한 Match 방 목록, 내 미확인 수 조회 |
 | `GET /api/internal/chat-reports` | `INTERNAL_REVIEWER` | 대기 신고 조회 |
 | `POST /api/internal/chat-reports/{reportId}/actions` | `INTERNAL_REVIEWER` | 메시지 숨김·발신 중지·방 읽기 전용을 감사 이력과 함께 적용 |
 
-권한 없는 요청에는 방 존재 여부를 노출하지 않고 `404 MATCH_CONVERSATION_NOT_FOUND`를 반환한다. 주요 오류 코드는 `MATCH_CONVERSATION_NOT_OPEN`, `CHAT_MEMBER_REQUIRED`, `CHAT_SENDING_SUSPENDED`, `CHAT_MESSAGE_INVALID`, `CHAT_MESSAGE_RATE_LIMITED`, `CHAT_MESSAGE_DUPLICATE`, `CHAT_REPORT_DUPLICATE`다. 메시지·신고 원문은 오류 응답, 분석, 로그에 넣지 않는다.
+권한 없는 요청에는 방 존재 여부를 노출하지 않고 `404 MATCH_CONVERSATION_NOT_FOUND`를 반환한다. 사진 업로드는 선언 MIME 타입·5 MiB·JPEG/PNG/WebP 바이너리 시그니처를 모두 검사하고, 원본 파일명·객체 URL·객체 참조를 반환하지 않는다. `PENDING` 업로드는 전송 실패에서 즉시 삭제를 시도하며 미연결 상태로 남아도 24시간 뒤 정리한다. 연결된 사진은 해당 메시지의 가시성·채팅 보관·파기 정책을 따르고, 메시지 숨김 뒤에는 반환하지 않는다. 주요 오류 코드는 `MATCH_CONVERSATION_NOT_OPEN`, `CHAT_MEMBER_REQUIRED`, `CHAT_SENDING_SUSPENDED`, `CHAT_MESSAGE_INVALID`, `CHAT_IMAGE_TYPE_NOT_ALLOWED`, `CHAT_IMAGE_SIZE_INVALID`, `CHAT_IMAGE_SIGNATURE_INVALID`, `CHAT_IMAGE_UPLOAD_INVALID`, `CHAT_MESSAGE_RATE_LIMITED`, `CHAT_MESSAGE_DUPLICATE`, `CHAT_REPORT_DUPLICATE`다. 메시지·신고 원문은 오류 응답, 분석, 로그에 넣지 않는다.
 
-첫 전달 방식은 채팅 화면 전면 상태의 5초 폴링이다. 메시지 발신에는 낙관 표시와 서버 확인을 사용하며, `clientRequestId`로 재시도를 합친다. WebSocket·Redis·새 프로덕션 의존성은 별도 승인 없이 추가하지 않는다.
+메시지 목록 응답의 `lastSentMessageRead`는 호출자가 보낸 최신 `USER` 메시지에 대해서만 `{ messageId, unreadOtherMemberCount }` 또는 `null`을 반환한다. `unreadOtherMemberCount`는 현재 방의 다른 멤버 중 읽음 커서가 해당 메시지 이후가 아닌 사람 수이며, 0이면 화면은 숫자를 숨긴다. 이 응답은 읽은 시각·누가 읽었는지·다른 메시지의 읽음 상태를 반환하지 않는다.
+
+첫 전달 방식은 채팅 화면 전면 상태의 5초 폴링이다. 메시지 발신에는 낙관 표시와 서버 확인을 사용하며, `clientRequestId`로 재시도를 합친다. 이 폴링은 `lastSentMessageRead`의 미확인 인원 수도 갱신한다. WebSocket·Redis·새 프로덕션 의존성은 별도 승인 없이 추가하지 않는다.
 
 새 Match 생성·상세·신청 응답은 `contact`로 `conversationStatus`와 안전한 방 진입 경로만 반환한다. 외부 URL과 연락 수단 union은 제공하지 않으며, 첫 수락 전에는 `conversationStatus = NOT_CREATED`만 보이고 실제 방 경로·멤버는 반환하지 않는다.
 

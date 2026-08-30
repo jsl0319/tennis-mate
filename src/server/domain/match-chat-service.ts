@@ -11,7 +11,7 @@ import {
 } from "@/server/domain/match-chat";
 import { DomainError } from "@/server/domain/profile-service";
 
-type MatchTransaction = Prisma.TransactionClient;
+export type MatchTransaction = Prisma.TransactionClient;
 
 type MessageWithSender = {
   id: string;
@@ -20,6 +20,7 @@ type MessageWithSender = {
   visibility: "VISIBLE" | "HIDDEN";
   createdAt: Date;
   sender: { id: string; nickname: string } | null;
+  imageUploads?: { id: string; position: number | null }[];
 };
 
 type ConversationMember = {
@@ -31,8 +32,11 @@ type ConversationMember = {
   user: { nickname: string };
 };
 
+type MessageCursor = { id: string; createdAt: Date };
+
 const messageInclude = {
   sender: { select: { id: true, nickname: true } },
+  imageUploads: { where: { status: "ATTACHED" }, select: { id: true, position: true }, orderBy: [{ position: "asc" }, { id: "asc" }] },
 } satisfies Prisma.MatchChatMessageInclude;
 
 const conversationInclude = {
@@ -47,6 +51,7 @@ function toMessageView(message: MessageWithSender, viewerUserId?: string) {
     body: message.visibility === "HIDDEN" ? "운영 검토로 숨겨진 메시지예요." : message.body,
     isHidden: message.visibility === "HIDDEN",
     sender: message.sender ? { nickname: message.sender.nickname } : null,
+    images: message.visibility === "VISIBLE" ? (message.imageUploads ?? []).map((image) => ({ id: image.id })) : [],
     isMine: Boolean(viewerUserId && message.sender?.id === viewerUserId),
     createdAt: message.createdAt.toISOString(),
   };
@@ -86,7 +91,11 @@ function beforeCursorWhere(cursor: { createdAt: Date; id: string }) {
   };
 }
 
-async function findConversationForMember(prisma: PrismaClient | MatchTransaction, matchId: string, userId: string) {
+function isAtOrAfterCursor(candidate: MessageCursor, target: MessageCursor) {
+  return candidate.createdAt > target.createdAt || candidate.createdAt.getTime() === target.createdAt.getTime() && candidate.id >= target.id;
+}
+
+export async function findMatchConversationForMember(prisma: PrismaClient | MatchTransaction, matchId: string, userId: string) {
   const conversation = await prisma.matchConversation.findFirst({
     where: { matchId, members: { some: { userId } } },
     include: conversationInclude,
@@ -99,6 +108,17 @@ async function findConversationForMember(prisma: PrismaClient | MatchTransaction
   return { conversation, member: member as ConversationMember };
 }
 
+export async function requireOpenMatchConversationForSending(transaction: MatchTransaction, userId: string, matchId: string) {
+  const { conversation, member } = await findMatchConversationForMember(transaction, matchId, userId);
+  if (shouldBecomeReadOnlyAfterMatch(conversation)) {
+    await makeConversationReadOnly(transaction, matchId, "이용 시간이 지나 이 채팅방은 읽기 전용이에요.");
+    throw new DomainError("MATCH_CONVERSATION_NOT_OPEN", 409, "읽기 전용 채팅방에는 메시지를 보낼 수 없어요.");
+  }
+  if (conversation.status !== "OPEN") throw new DomainError("MATCH_CONVERSATION_NOT_OPEN", 409, "읽기 전용 채팅방에는 메시지를 보낼 수 없어요.");
+  if (member.sendingSuspendedAt) throw new DomainError("CHAT_SENDING_SUSPENDED", 403, "현재 이 채팅방에서 메시지를 보낼 수 없어요.");
+  return { conversation, member };
+}
+
 async function unreadCount(prisma: PrismaClient | MatchTransaction, conversationId: string, lastReadMessageId: string | null) {
   if (!lastReadMessageId) {
     return prisma.matchChatMessage.count({ where: { conversationId, visibility: "VISIBLE" } });
@@ -106,6 +126,33 @@ async function unreadCount(prisma: PrismaClient | MatchTransaction, conversation
   const lastRead = await prisma.matchChatMessage.findFirst({ where: { id: lastReadMessageId, conversationId }, select: { createdAt: true, id: true } });
   if (!lastRead) return prisma.matchChatMessage.count({ where: { conversationId, visibility: "VISIBLE" } });
   return prisma.matchChatMessage.count({ where: { conversationId, visibility: "VISIBLE", ...afterCursorWhere(lastRead) } });
+}
+
+async function getLastSentMessageRead(prisma: PrismaClient, conversation: { id: string; members: ConversationMember[] }, userId: string) {
+  const latestSentMessage = await prisma.matchChatMessage.findFirst({
+    where: { conversationId: conversation.id, senderUserId: userId, type: "USER", visibility: "VISIBLE" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true, createdAt: true },
+  });
+  if (!latestSentMessage) return null;
+
+  const otherMembers = conversation.members.filter((member) => member.userId !== userId);
+  if (otherMembers.length === 0) return { messageId: latestSentMessage.id, unreadOtherMemberCount: 0 };
+
+  const markerIds = otherMembers.flatMap((member) => member.lastReadMessageId ? [member.lastReadMessageId] : []);
+  if (markerIds.length === 0) return { messageId: latestSentMessage.id, unreadOtherMemberCount: otherMembers.length };
+
+  const markers = await prisma.matchChatMessage.findMany({
+    where: { conversationId: conversation.id, id: { in: markerIds } },
+    select: { id: true, createdAt: true },
+  });
+  const markerById = new Map(markers.map((marker) => [marker.id, marker]));
+  const unreadOtherMemberCount = otherMembers.filter((member) => {
+    const marker = member.lastReadMessageId ? markerById.get(member.lastReadMessageId) : null;
+    return !marker || !isAtOrAfterCursor(marker, latestSentMessage);
+  }).length;
+
+  return { messageId: latestSentMessage.id, unreadOtherMemberCount };
 }
 
 function toConversationView(conversation: Prisma.MatchConversationGetPayload<{ include: typeof conversationInclude }>, member: ConversationMember, unreadMessageCount: number) {
@@ -185,11 +232,11 @@ export async function reconcileExpiredConversations(prisma: PrismaClient, now = 
 }
 
 export async function getMatchConversation(prisma: PrismaClient, userId: string, matchId: string) {
-  const { conversation, member } = await findConversationForMember(prisma, matchId, userId);
+  const { conversation, member } = await findMatchConversationForMember(prisma, matchId, userId);
   if (shouldBecomeReadOnlyAfterMatch(conversation)) {
     return prisma.$transaction(async (transaction) => {
       await makeConversationReadOnly(transaction, matchId, "이용 시간이 지나 이 채팅방은 읽기 전용이에요.");
-      const refreshed = await findConversationForMember(transaction, matchId, userId);
+      const refreshed = await findMatchConversationForMember(transaction, matchId, userId);
       const unreadMessageCount = await unreadCount(transaction, refreshed.conversation.id, refreshed.member.lastReadMessageId);
       return toConversationView(refreshed.conversation, refreshed.member, unreadMessageCount);
     });
@@ -200,7 +247,7 @@ export async function getMatchConversation(prisma: PrismaClient, userId: string,
 
 export async function getMatchConversationMessages(prisma: PrismaClient, userId: string, matchId: string, query: { before?: string; after?: string }) {
   if (query.before && query.after) throw new DomainError("INVALID_REQUEST", 400, "메시지 목록을 다시 불러와 주세요.");
-  const { conversation } = await findConversationForMember(prisma, matchId, userId);
+  const { conversation } = await findMatchConversationForMember(prisma, matchId, userId);
   const cursor = query.before ? parseCursor(query.before) : query.after ? parseCursor(query.after) : null;
   const direction = query.before || !query.after ? "before" : "after";
   const records = await prisma.matchChatMessage.findMany({
@@ -216,6 +263,7 @@ export async function getMatchConversationMessages(prisma: PrismaClient, userId:
   const hasMore = records.length > CHAT_MESSAGE_PAGE_SIZE;
   const visible = hasMore ? records.slice(0, CHAT_MESSAGE_PAGE_SIZE) : records;
   const chronological = direction === "before" ? [...visible].reverse() : visible;
+  const lastSentMessageRead = await getLastSentMessageRead(prisma, conversation, userId);
   return {
     items: chronological.map((message) => toMessageView(message, userId)),
     pageInfo: {
@@ -224,18 +272,13 @@ export async function getMatchConversationMessages(prisma: PrismaClient, userId:
       nextAfter: direction === "after" && hasMore && chronological.at(-1) ? toCursor(chronological.at(-1)!) : null,
       latestCursor: chronological.at(-1) ? toCursor(chronological.at(-1)!) : null,
     },
+    lastSentMessageRead,
   };
 }
 
 export async function sendMatchChatMessage(prisma: PrismaClient, userId: string, matchId: string, input: MatchChatMessageInput) {
   const send = async (transaction: MatchTransaction) => {
-    const { conversation, member } = await findConversationForMember(transaction, matchId, userId);
-    if (shouldBecomeReadOnlyAfterMatch(conversation)) {
-      await makeConversationReadOnly(transaction, matchId, "이용 시간이 지나 이 채팅방은 읽기 전용이에요.");
-      throw new DomainError("MATCH_CONVERSATION_NOT_OPEN", 409, "읽기 전용 채팅방에는 메시지를 보낼 수 없어요.");
-    }
-    if (conversation.status !== "OPEN") throw new DomainError("MATCH_CONVERSATION_NOT_OPEN", 409, "읽기 전용 채팅방에는 메시지를 보낼 수 없어요.");
-    if (member.sendingSuspendedAt) throw new DomainError("CHAT_SENDING_SUSPENDED", 403, "현재 이 채팅방에서 메시지를 보낼 수 없어요.");
+    const { conversation, member } = await requireOpenMatchConversationForSending(transaction, userId, matchId);
 
     const existing = await transaction.matchChatMessage.findUnique({
       where: { senderUserId_clientRequestId: { senderUserId: userId, clientRequestId: input.clientRequestId } },
@@ -250,13 +293,35 @@ export async function sendMatchChatMessage(prisma: PrismaClient, userId: string,
     const recentCount = await transaction.matchChatMessage.count({ where: { conversationId: conversation.id, senderUserId: userId, type: "USER", createdAt: { gte: minuteAgo } } });
     if (recentCount >= CHAT_MESSAGE_RATE_LIMIT_PER_MINUTE) throw new DomainError("CHAT_MESSAGE_RATE_LIMITED", 429, "메시지를 너무 빠르게 보내고 있어요. 잠시 후 다시 시도해 주세요.");
 
+    const imageUploadIds = input.imageUploadIds ?? [];
+    if (imageUploadIds.length > 0) {
+      const pendingUploads = await transaction.matchChatImageUpload.findMany({
+        where: { id: { in: imageUploadIds }, conversationId: conversation.id, ownerUserId: userId, status: "PENDING" },
+        select: { id: true },
+      });
+      if (pendingUploads.length !== imageUploadIds.length) {
+        throw new DomainError("CHAT_IMAGE_UPLOAD_INVALID", 409, "사진을 다시 선택한 뒤 보내 주세요.");
+      }
+    }
+
     const created = await transaction.matchChatMessage.create({
       data: { conversationId: conversation.id, senderUserId: userId, body: input.body, type: "USER", clientRequestId: input.clientRequestId },
-      include: messageInclude,
+      select: { id: true },
     });
+    for (const [position, imageUploadId] of imageUploadIds.entries()) {
+      const attached = await transaction.matchChatImageUpload.updateMany({
+        where: { id: imageUploadId, conversationId: conversation.id, ownerUserId: userId, status: "PENDING" },
+        data: { status: "ATTACHED", messageId: created.id, position, attachedAt: new Date(), cleanupClaimedAt: null },
+      });
+      if (attached.count !== 1) {
+        throw new DomainError("CHAT_IMAGE_UPLOAD_INVALID", 409, "사진을 다시 선택한 뒤 보내 주세요.");
+      }
+    }
+    const createdMessage = await transaction.matchChatMessage.findUnique({ where: { id: created.id }, include: messageInclude });
+    if (!createdMessage) throw new DomainError("MATCH_CONVERSATION_NOT_FOUND", 404, "채팅방을 찾을 수 없어요.");
     await transaction.matchConversationMember.update({ where: { id: member.id }, data: { lastReadMessageId: created.id } });
     await transaction.matchConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
-    return { message: toMessageView(created, userId), created: true };
+    return { message: toMessageView(createdMessage, userId), created: true };
   };
 
   try {
@@ -275,7 +340,7 @@ export async function sendMatchChatMessage(prisma: PrismaClient, userId: string,
 
 export async function markMatchConversationRead(prisma: PrismaClient, userId: string, matchId: string, input: MatchChatReadInput) {
   return prisma.$transaction(async (transaction) => {
-    const { conversation, member } = await findConversationForMember(transaction, matchId, userId);
+    const { conversation, member } = await findMatchConversationForMember(transaction, matchId, userId);
     const message = await transaction.matchChatMessage.findFirst({ where: { id: input.messageId, conversationId: conversation.id, visibility: "VISIBLE" }, select: { id: true } });
     if (!message) throw new DomainError("MATCH_CONVERSATION_NOT_FOUND", 404, "채팅방을 찾을 수 없어요.");
     await transaction.matchConversationMember.update({ where: { id: member.id }, data: { lastReadMessageId: message.id } });
@@ -286,7 +351,7 @@ export async function markMatchConversationRead(prisma: PrismaClient, userId: st
 export async function reportMatchChatMessage(prisma: PrismaClient, userId: string, matchId: string, messageId: string, input: MatchChatReportInput) {
   try {
     return await prisma.$transaction(async (transaction) => {
-      const { conversation } = await findConversationForMember(transaction, matchId, userId);
+      const { conversation } = await findMatchConversationForMember(transaction, matchId, userId);
       const message = await transaction.matchChatMessage.findFirst({ where: { id: messageId, conversationId: conversation.id, visibility: "VISIBLE" }, select: { id: true, senderUserId: true, type: true } });
       if (!message) throw new DomainError("MATCH_CONVERSATION_NOT_FOUND", 404, "채팅방을 찾을 수 없어요.");
       if (message.type !== "USER" || message.senderUserId === userId) throw new DomainError("CHAT_REPORT_NOT_ALLOWED", 422, "상대방이 보낸 메시지만 신고할 수 있어요.");

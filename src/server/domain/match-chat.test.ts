@@ -2,12 +2,13 @@ import { Prisma } from "@/generated/prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { matchChatMessageInputSchema, matchChatReportInputSchema } from "./match-chat";
-import { getMatchConversation, makeConversationReadOnly, reportMatchChatMessage, sendMatchChatMessage } from "./match-chat-service";
+import { getMatchConversation, getMatchConversationMessages, makeConversationReadOnly, reportMatchChatMessage, sendMatchChatMessage } from "./match-chat-service";
 
 const matchId = "10000000-0000-4000-8000-000000000001";
 const userId = "20000000-0000-4000-8000-000000000001";
 const messageId = "30000000-0000-4000-8000-000000000001";
 const clientRequestId = "40000000-0000-4000-8000-000000000001";
+const imageUploadId = "50000000-0000-4000-8000-000000000001";
 
 function conversationFixture() {
   return {
@@ -24,10 +25,12 @@ function conversationFixture() {
 }
 
 describe("Match Chat input and membership guards", () => {
-  it("requires a non-empty, bounded text message and an idempotency key", () => {
+  it("requires a bounded text message or photo and an idempotency key", () => {
     expect(matchChatMessageInputSchema.parse({ body: "  안녕하세요!  ", clientRequestId }).body).toBe("안녕하세요!");
-    expect(() => matchChatMessageInputSchema.parse({ body: "", clientRequestId })).toThrow("메시지를 입력");
+    expect(matchChatMessageInputSchema.parse({ body: "", imageUploadIds: [imageUploadId], clientRequestId }).imageUploadIds).toEqual([imageUploadId]);
+    expect(() => matchChatMessageInputSchema.parse({ body: "", clientRequestId })).toThrow("메시지나 사진");
     expect(() => matchChatMessageInputSchema.parse({ body: "가".repeat(501), clientRequestId })).toThrow("500자");
+    expect(() => matchChatMessageInputSchema.parse({ body: "", imageUploadIds: [imageUploadId, imageUploadId], clientRequestId })).toThrow("같은 사진");
     expect(() => matchChatMessageInputSchema.parse({ body: "안녕하세요" })).toThrow("요청 식별자");
     expect(() => matchChatReportInputSchema.parse({ reason: "OTHER", description: "가".repeat(201) })).toThrow("200자");
   });
@@ -41,6 +44,85 @@ describe("Match Chat input and membership guards", () => {
     const archived = { ...conversationFixture(), status: "ARCHIVED" as const };
     const prisma = { matchConversation: { findFirst: vi.fn().mockResolvedValue(archived) } } as unknown as Parameters<typeof getMatchConversation>[0];
     await expect(getMatchConversation(prisma, userId, matchId)).rejects.toMatchObject({ code: "MATCH_CONVERSATION_NOT_FOUND", status: 404 });
+  });
+
+  it("returns zero unread members only for the viewer's latest sent message after every other member reads it", async () => {
+    const otherUserId = "20000000-0000-4000-8000-000000000002";
+    const readMarkerId = "30000000-0000-4000-8000-000000000002";
+    const sentAt = new Date("2030-01-01T00:00:00.000Z");
+    const readAt = new Date("2030-01-01T00:00:01.000Z");
+    const conversation = {
+      ...conversationFixture(),
+      members: [
+        ...conversationFixture().members,
+        { id: "other-member-id", conversationId: "conversation-id", userId: otherUserId, role: "HOST" as const, joinedAt: new Date(), sendingSuspendedAt: null, lastReadMessageId: readMarkerId, updatedAt: new Date(), user: { nickname: "테스트모집자" } },
+      ],
+    };
+    const sentMessage = { id: messageId, type: "USER" as const, body: "코트 앞에서 만나요", visibility: "VISIBLE" as const, createdAt: sentAt, sender: { id: userId, nickname: "테스트참가자" } };
+    const readMarker = { id: readMarkerId, createdAt: readAt };
+    const prisma = {
+      matchConversation: { findFirst: vi.fn().mockResolvedValue(conversation) },
+      matchChatMessage: {
+        findMany: vi.fn().mockResolvedValueOnce([sentMessage]).mockResolvedValueOnce([readMarker]),
+        findFirst: vi.fn().mockResolvedValue({ id: messageId, createdAt: sentAt }),
+      },
+    } as unknown as Parameters<typeof getMatchConversationMessages>[0];
+
+    await expect(getMatchConversationMessages(prisma, userId, matchId, {})).resolves.toMatchObject({
+      items: [{ id: messageId, isMine: true }],
+      lastSentMessageRead: { messageId, unreadOtherMemberCount: 0 },
+    });
+  });
+
+  it("returns the count of other members who have not read the latest sent message", async () => {
+    const otherUserId = "20000000-0000-4000-8000-000000000002";
+    const unreadUserId = "20000000-0000-4000-8000-000000000003";
+    const readMarkerId = "30000000-0000-4000-8000-000000000002";
+    const sentAt = new Date("2030-01-01T00:00:00.000Z");
+    const conversation = {
+      ...conversationFixture(),
+      members: [
+        ...conversationFixture().members,
+        { id: "other-member-id", conversationId: "conversation-id", userId: otherUserId, role: "HOST" as const, joinedAt: new Date(), sendingSuspendedAt: null, lastReadMessageId: readMarkerId, updatedAt: new Date(), user: { nickname: "테스트모집자" } },
+        { id: "unread-member-id", conversationId: "conversation-id", userId: unreadUserId, role: "PARTICIPANT" as const, joinedAt: new Date(), sendingSuspendedAt: null, lastReadMessageId: null, updatedAt: new Date(), user: { nickname: "테스트참가자2" } },
+      ],
+    };
+    const sentMessage = { id: messageId, type: "USER" as const, body: "코트 앞에서 만나요", visibility: "VISIBLE" as const, createdAt: sentAt, sender: { id: userId, nickname: "테스트참가자" } };
+    const prisma = {
+      matchConversation: { findFirst: vi.fn().mockResolvedValue(conversation) },
+      matchChatMessage: {
+        findMany: vi.fn().mockResolvedValueOnce([sentMessage]).mockResolvedValueOnce([{ id: readMarkerId, createdAt: new Date("2029-12-31T23:59:59.000Z") }]),
+        findFirst: vi.fn().mockResolvedValue({ id: messageId, createdAt: sentAt }),
+      },
+    } as unknown as Parameters<typeof getMatchConversationMessages>[0];
+
+    await expect(getMatchConversationMessages(prisma, userId, matchId, {})).resolves.toMatchObject({
+      lastSentMessageRead: { messageId, unreadOtherMemberCount: 2 },
+    });
+  });
+
+  it("starts at three unread members in a four-person room", async () => {
+    const conversation = {
+      ...conversationFixture(),
+      members: [
+        ...conversationFixture().members,
+        { id: "other-member-id-1", conversationId: "conversation-id", userId: "20000000-0000-4000-8000-000000000002", role: "HOST" as const, joinedAt: new Date(), sendingSuspendedAt: null, lastReadMessageId: null, updatedAt: new Date(), user: { nickname: "테스트모집자" } },
+        { id: "other-member-id-2", conversationId: "conversation-id", userId: "20000000-0000-4000-8000-000000000003", role: "PARTICIPANT" as const, joinedAt: new Date(), sendingSuspendedAt: null, lastReadMessageId: null, updatedAt: new Date(), user: { nickname: "테스트참가자2" } },
+        { id: "other-member-id-3", conversationId: "conversation-id", userId: "20000000-0000-4000-8000-000000000004", role: "PARTICIPANT" as const, joinedAt: new Date(), sendingSuspendedAt: null, lastReadMessageId: null, updatedAt: new Date(), user: { nickname: "테스트참가자3" } },
+      ],
+    };
+    const sentMessage = { id: messageId, type: "USER" as const, body: "코트 앞에서 만나요", visibility: "VISIBLE" as const, createdAt: new Date("2030-01-01T00:00:00.000Z"), sender: { id: userId, nickname: "테스트참가자" } };
+    const prisma = {
+      matchConversation: { findFirst: vi.fn().mockResolvedValue(conversation) },
+      matchChatMessage: {
+        findMany: vi.fn().mockResolvedValueOnce([sentMessage]),
+        findFirst: vi.fn().mockResolvedValue({ id: messageId, createdAt: sentMessage.createdAt }),
+      },
+    } as unknown as Parameters<typeof getMatchConversationMessages>[0];
+
+    await expect(getMatchConversationMessages(prisma, userId, matchId, {})).resolves.toMatchObject({
+      lastSentMessageRead: { messageId, unreadOtherMemberCount: 3 },
+    });
   });
 
   it("allows reports only for another member's normal message", async () => {
@@ -90,6 +172,49 @@ describe("Match Chat idempotency and state transitions", () => {
     };
     const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof sendMatchChatMessage>[0];
     await expect(sendMatchChatMessage(prisma, userId, matchId, { body: "메시지", clientRequestId })).rejects.toMatchObject({ code: "CHAT_MESSAGE_RATE_LIMITED", status: 429 });
+    expect(transaction.matchChatMessage.create).not.toHaveBeenCalled();
+  });
+
+  it("attaches only the sender's pending photos to one idempotent message", async () => {
+    const createdMessage = {
+      id: messageId,
+      conversationId: "conversation-id",
+      senderUserId: userId,
+      type: "USER" as const,
+      body: "코트 입구예요",
+      visibility: "VISIBLE" as const,
+      clientRequestId,
+      createdAt: new Date("2030-01-01T00:00:00.000Z"),
+      sender: { id: userId, nickname: "테스트참가자" },
+      imageUploads: [{ id: imageUploadId, position: 0 }],
+    };
+    const transaction = {
+      matchConversation: { findFirst: vi.fn().mockResolvedValue(conversationFixture()), update: vi.fn() },
+      matchChatMessage: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(createdMessage), count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({ id: messageId }) },
+      matchChatImageUpload: { findMany: vi.fn().mockResolvedValue([{ id: imageUploadId }]), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      matchConversationMember: { update: vi.fn() },
+    };
+    const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof sendMatchChatMessage>[0];
+
+    await expect(sendMatchChatMessage(prisma, userId, matchId, { body: "코트 입구예요", imageUploadIds: [imageUploadId], clientRequestId })).resolves.toMatchObject({
+      created: true,
+      message: { id: messageId, images: [{ id: imageUploadId }] },
+    });
+    expect(transaction.matchChatImageUpload.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: imageUploadId, ownerUserId: userId, status: "PENDING" }),
+      data: expect.objectContaining({ messageId, position: 0, status: "ATTACHED" }),
+    }));
+  });
+
+  it("does not create a message when a photo is pending in another room or for another sender", async () => {
+    const transaction = {
+      matchConversation: { findFirst: vi.fn().mockResolvedValue(conversationFixture()) },
+      matchChatMessage: { findUnique: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0), create: vi.fn() },
+      matchChatImageUpload: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const prisma = { $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)) } as unknown as Parameters<typeof sendMatchChatMessage>[0];
+
+    await expect(sendMatchChatMessage(prisma, userId, matchId, { body: "", imageUploadIds: [imageUploadId], clientRequestId })).rejects.toMatchObject({ code: "CHAT_IMAGE_UPLOAD_INVALID", status: 409 });
     expect(transaction.matchChatMessage.create).not.toHaveBeenCalled();
   });
 
