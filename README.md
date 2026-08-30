@@ -4,7 +4,7 @@
 칠 약속을 잡도록 돕는 모바일 우선 웹앱입니다.
 
 Core MVP에서는 카카오 로그인·온보딩, 추천 매칭 탐색·상세, 코트 예약 여부를 선택하는
-매칭 등록, 신청·수락·거절, 오픈채팅 안내, 모집 마감·취소·완료 처리를 제공합니다.
+매칭 등록, 신청·수락·거절, 서비스 내 Match 채팅, 모집 마감·취소·완료 처리를 제공합니다.
 `COURT_TBD` 매칭은 코트와 비용을 수락된 참가자와 함께 정하는 흐름입니다.
 
 현재는 **M9: 제한된 사용자 테스트 준비** 단계입니다. 참여자 운영 방법과 관찰 양식은
@@ -14,7 +14,7 @@ Core MVP에서는 카카오 로그인·온보딩, 추천 매칭 탐색·상세, 
 
 - Node.js 22.12 이상, npm
 - Next.js 16 App Router, React 19, TypeScript strict, Tailwind CSS 4
-- PostgreSQL 17, Prisma ORM 7, Zod 4, Vitest 4
+- PostgreSQL 17, Prisma ORM 7, Zod 4, Vitest 4, Playwright
 - 배포: Vercel + Neon PostgreSQL
 
 ## 빠른 시작: 로컬 PostgreSQL
@@ -124,6 +124,27 @@ npm run check
 CI도 Node.js 22에서 Prisma Client 생성, 린트, 타입 검사, 테스트, 빌드를
 수행합니다.
 
+### 브라우저 E2E
+
+E2E는 실제 카카오 계정이나 운영 DB를 사용하지 않습니다. 별도 PostgreSQL DB를 만들고
+이름에 반드시 `e2e`를 포함한 뒤 `.env.local`에 설정합니다. 테스트는 이 전용 DB를
+초기화하므로 production·preview·일반 개발 DB URL은 지정할 수 없습니다.
+
+```dotenv
+E2E_DATABASE_URL=postgresql://tennis_mate:tennis_mate@localhost:5432/tennis_mate_e2e?schema=public
+```
+
+먼저 전용 DB에 migration을 적용하고 Chromium을 설치합니다.
+
+```bash
+DATABASE_URL="$E2E_DATABASE_URL" DATABASE_URL_UNPOOLED="$E2E_DATABASE_URL" npm run db:migrate:deploy
+npm run e2e:install
+npm run e2e
+```
+
+`npm run e2e`는 로컬 `127.0.0.1:3100`에서 앱을 실행하고, 390×844 기준의 테스트
+계정 두 개로 신청·수락·채팅 권한과 하단 메뉴 프레임을 확인합니다.
+
 ## 자주 쓰는 DB 명령
 
 ```bash
@@ -153,6 +174,7 @@ docker compose stop
 | `AUTH_KAKAO_SECRET` | 카카오 Client Secret |
 | `CRON_SECRET` | 운영 매칭 상태 보정 Cron의 요청 인증 비밀값 |
 | `APP_BASE_URL` | 로컬 애플리케이션 기준 URL |
+| `E2E_DATABASE_URL` | Playwright 전용 PostgreSQL 연결 문자열. DB 이름에 `e2e` 필수 |
 
 실제 값은 `.env.local` 또는 Vercel 환경 변수로만 관리합니다. `.env.example`은
 필수 키를 알리기 위한 빈 템플릿입니다.
