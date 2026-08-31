@@ -337,6 +337,7 @@ M2에서는 한 프로필에 주 활동 지역이 정확히 한 건만 있어야
 | `externalCourtNumber` | varchar(50) | 예약 코트에서 X | 코트 번호, 예약번호 금지 |
 | `externalCourtImageUploadId` | UUID | 예약 코트에서 X | 모집자 본인의 `CourtImageUpload` 1건. 한 Match에만 연결하며 사진 URL을 직접 받지 않음 |
 | `recruitCount` | int | O | 모집자 외 추가 인원, 1 이상 |
+| `minimumParticipantCount` | int | 유료 `PARTNER_COURT` Commerce에서 O | 모집자를 포함한 진행 최소 인원, 2 이상·`recruitCount + 1` 이하. Pilot·일반 Match에는 NULL |
 | `partnerPreference` | PartnerPreference | O | 원하는 상대 선택지 |
 | `totalCourtFeeKrw` | int | 직접 예약·제휴 코트에서 O | 0 이상, 과거 `COURT_TBD`면 NULL |
 | `additionalCostNote` | varchar(200) | X | 조명비·볼 비용 등 |
@@ -459,6 +460,7 @@ Core MVP에서는 `(matchId, applicantUserId)`를 UNIQUE로 두어 한 사용자
 
 - `Match.startsAt < Match.endsAt`
 - `Match.recruitCount >= 1`
+- `Match.minimumParticipantCount IS NULL OR (Match.minimumParticipantCount >= 2 AND Match.minimumParticipantCount <= Match.recruitCount + 1)`
 - `Match.totalCourtFeeKrw IS NULL OR Match.totalCourtFeeKrw >= 0`
 - `Match.courtSource = EXTERNAL_RESERVED`인 경우 외부 코트명·주소·비용 필수. 기존 `COURT_TBD` 행은 해당 값을 NULL로 유지하며, 신규 생성 API는 이 값을 받지 않음
 - `Match.status = CANCELLED`인 경우 `cancelledAt` 필수
@@ -1104,16 +1106,15 @@ Court Commerce는 Pilot 범위 밖의 다음 단계이며, 일반 사용자의 `
 
 | 모델 | 관계와 역할 |
 | --- | --- |
-| `OperatorCommerceAccount` | `CourtOperatorApplication`과 1:1. PG 온보딩 상태, opaque 판매자 참조, 최초 유료 승인 시각과 30일 수수료 무료 종료 시각만 보관한다. 계좌·카드·PG 키는 저장하지 않는다. |
-| `CourtSlotCommercePolicy` | `CourtSlot`과 1:1. 공개 전 고정한 `participantPriceKrw`, 통화, 결제 기한, 환불 정책 버전을 보관한다. 기존 전체 비용 `priceKrw`와 다르다. |
-| `CourtSlotCheckoutHold` | 유료 Slot으로 세션을 열기 전의 단일 활성 홀드. 만료·취소 때 Match를 만들지 않고, 승인 확인 때만 기존 `AVAILABLE → ALLOCATED`와 Match 생성을 확정한다. |
-| `PartnerSessionAttendance` | Match의 호스트와 참가자의 결제 대기·완료·환불 상태를 표현한다. 결제 대기는 자리만 잡고 Application을 `ACCEPTED`로 바꾸지 않으며, 불변 참가비를 갖는다. |
-| `ParticipantPaymentInvitation` | `PENDING` MatchApplication에 결제 초대와 한 자리 홀드를 연결한다. 결제 승인 전 Application은 `ACCEPTED`가 아니다. |
-| `CommercePayment`, `CommerceRefund` | 결제는 세션 개설 Hold 또는 참가자 결제 초대에서 먼저 PG 주문을 만들고, 승인 때만 Attendance·수수료 스냅샷을 연결한다. 환불은 별도 불변 원장 행으로 남긴다. |
+| `OperatorCommerceAccount` | `CourtOperatorApplication`과 1:1. PG 온보딩 상태, opaque 판매자 참조, 최초 유료 **모집자** 승인 시각과 30일 수수료 무료 종료 시각만 보관한다. 계좌·카드·PG 키는 저장하지 않는다. |
+| `CourtRateCardVersion` | `Court`의 요일·시간대·코트 면별 운영자 요금표 버전. 새 `DRAFT` Slot만 참조하며, 공개·결제된 Slot의 금액을 바꾸지 않는다. |
+| `CourtSlotCommercePolicy` | `CourtSlot`과 1:1. 공개 전 고정한 `courtTotalChargeKrw`, 요금표 버전, `hostCancellationDeadlineAt`, 환불 정책 버전을 보관한다. `hostCancellationDeadlineAt`은 시작 24시간 전이다. |
+| `CourtSlotCheckoutHold` | 유료 Slot으로 세션을 열기 전의 단일 활성 홀드. 만료·취소 때 Match를 만들지 않고, **모집자 코트 이용 총액** 승인 확인 때만 기존 `AVAILABLE → ALLOCATED`와 Match 생성을 확정한다. |
+| `CommercePayment`, `CommerceRefund` | 결제는 Checkout Hold에서만 PG 주문을 만들고, 승인 때만 Match·모집자·수수료 스냅샷을 연결한다. 유료 Match에는 성공한 모집자 결제 한 건만 둔다. 환불은 별도 불변 원장 행으로 남긴다. |
 | `CommerceSettlement`, `CommerceSettlementLine` | PG 지급 결과를 결제·환불 원장과 대사한다. Tennis Mate의 수기 지급 원장이 아니다. |
 | `CommerceWebhookEvent` | 제공자 이벤트의 서명 검증·멱등 처리 결과를 남긴다. 민감 payload 원문은 저장하지 않는다. |
 
-관계의 요점은 `CourtSlot → CheckoutHold → Payment 주문 → (승인 시 Match·Attendance) → Refund/SettlementLine`이다. 참가자 결제는 `PaymentInvitation → Payment 주문 → (승인 시 Attendance·Application ACCEPTED)`를 따른다. PG 승인 결과가 확정될 때만 Match와 Slot 배정을 만들며, 웹훅 재전송·늦은 승인·환불은 공급자 참조의 유일 제약과 DB 트랜잭션으로 멱등 처리한다.
+관계의 요점은 `CourtSlot → CheckoutHold → 모집자 Payment 주문 → (승인 시 Match) → Refund/SettlementLine`이다. 참가자 `MatchApplication`은 기존 수락·거절 흐름을 유지하며 결제 모델과 연결하지 않는다. PG 승인 결과가 확정될 때만 Match와 Slot 배정을 만들며, 웹훅 재전송·늦은 승인·환불은 공급자 참조의 유일 제약과 DB 트랜잭션으로 멱등 처리한다. 참가자별 `PartnerSessionAttendance`, `ParticipantPaymentInvitation`, `participantPriceKrw`는 만들지 않는다.
 
 ### 16.1 서비스 내 Match Chat ERD
 
@@ -1146,8 +1147,9 @@ Match Chat은 모든 Match의 연락을 처리하는 MVP다. 일반 사용자 DM
 | Match | 활성 `courtSlotId` 부분 유일 | 같은 Slot의 활성 Partner Court Match 중복 방지 |
 | Match | `(courtSource, startsAt)` | 제휴 코트 세션 탐색 |
 | CourtSlotCheckoutHold | 활성 `courtSlotId` 부분 유일 | 같은 유료 Slot의 동시 세션 개설 결제 홀드 방지 |
-| ParticipantPaymentInvitation | 활성 `matchApplicationId` 부분 유일 | 같은 신청자의 중복 결제 초대 방지 |
+| CourtRateCardVersion | `(courtId, version)` 유일 | 요금표 버전 이력 중복 방지 |
 | CommercePayment | `providerOrderRef` 유일, non-null `providerPaymentRef` 부분 유일 | PG 승인·주문 결과 중복 반영 방지 |
+| CommercePayment | non-null `matchId` 부분 유일 | 유료 Match당 성공한 모집자 결제 한 건 보장 |
 | CommerceRefund | `providerRefundRef` 유일 | PG 환불 결과 중복 반영 방지 |
 | CommerceWebhookEvent | `(provider, providerEventRef)` 유일 | 웹훅 재전송 멱등 처리 |
 | CommerceSettlement | `(commerceAccountId, providerPayoutRef)` 유일 | 운영자 지급 결과 대사 중복 방지 |

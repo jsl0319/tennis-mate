@@ -48,12 +48,17 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   const hostPage = await hostContext.newPage();
 
   await hostPage.goto("/matches/new");
-  await hostPage.getByRole("button", { name: "코트를 예약했어요" }).click();
+  await expect(hostPage.getByRole("heading", { name: "예약한 코트에서 함께 칠 사람을 찾아요" })).toBeVisible();
+  await expect(hostPage.getByRole("button", { name: "코트를 예약했어요" })).toHaveCount(0);
+  await expect(hostPage.getByRole("button", { name: "코트는 같이 정해요" })).toHaveCount(0);
+  await expect(hostPage.getByRole("link", { name: /코트 매칭 둘러보기/ })).toHaveAttribute("href", "/partner-sessions");
   const startsOn = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10);
   await hostPage.getByLabel("날짜").fill(startsOn);
   await hostPage.getByLabel("시작 시간").fill("10:00");
   await hostPage.getByLabel("시선택").selectOption("E2E-SEOUL");
   await hostPage.getByLabel("구선택").selectOption("E2E-SEOUL-001");
+  await hostPage.getByRole("button", { name: "다음" }).click();
+  await expect(hostPage.getByText("예약한 코트의 이름과 주소를 입력해 주세요.")).toBeVisible();
   await hostPage.getByLabel("코트장 이름").fill("E2E 테니스장");
   await hostPage.getByLabel("주소").fill("서울시 E2E 마포구 1");
   await hostPage.getByRole("button", { name: "다음" }).click();
@@ -63,6 +68,7 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await hostPage.getByRole("button", { name: "다음" }).click();
   await hostPage.getByRole("button", { name: "매칭 공개하기" }).click();
   await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
+  await expect(hostPage.getByText("모집자가 코트를 예약했어요")).toBeVisible();
   const matchId = new URL(hostPage.url()).pathname.split("/").at(-1);
   if (!matchId) throw new Error("생성된 Match ID를 확인하지 못했어요.");
 
@@ -86,8 +92,9 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await expect(hostPage.getByRole("heading", { name: "같이 치기로 했어요" })).toBeVisible();
 
   await applicantPage.goto("/activity/sent");
-  await expect(applicantPage.getByText("같이 치게 됐어요. 매칭 정보를 확인해 주세요.")).toBeVisible();
-  await applicantPage.getByRole("link", { name: "채팅방 열기" }).click();
+  const externalReservedCard = applicantPage.locator("article").filter({ hasText: fixture.matchTitle });
+  await expect(externalReservedCard.getByText("같이 치게 됐어요. 매칭 정보를 확인해 주세요.")).toBeVisible();
+  await externalReservedCard.getByRole("link", { name: "채팅방 열기" }).click();
   await expect(applicantPage.getByRole("heading", { name: fixture.matchTitle })).toBeVisible();
   await expect(applicantPage.getByRole("button", { name: "사진 추가" })).toBeVisible();
   await applicantPage.getByLabel("메시지").fill("E2E 자동화 메시지");
@@ -113,4 +120,99 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await applicantContext.close();
   await hostContext.close();
   await outsiderContext.close();
+});
+
+test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·수락·채팅까지 이어진다", async ({ browser }) => {
+  const hostContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(hostContext, e2eUsers.host.id);
+  const hostPage = await hostContext.newPage();
+
+  await hostPage.goto(`/partner-sessions/${fixture.partnerSlotId}`);
+  await expect(hostPage.getByText("Tennis Mate에서 준비한 코트", { exact: true })).toBeVisible();
+  await expect(hostPage.getByText("E2E 준비된 테니스장")).toBeVisible();
+  await expect(hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" })).toBeVisible();
+  await hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" }).click();
+  await expect(hostPage.getByRole("heading", { name: /함께 칠 메이트를/ })).toBeVisible();
+  await hostPage.getByLabel("매칭 제목").fill(fixture.partnerMatchTitle);
+  await hostPage.getByRole("button", { name: "이 시간으로 코트 매칭 열기" }).click();
+  await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
+  await expect(hostPage.getByText("Tennis Mate에서 준비한 코트예요")).toBeVisible();
+  const matchId = new URL(hostPage.url()).pathname.split("/").at(-1);
+  if (!matchId) throw new Error("생성된 코트 매칭 ID를 확인하지 못했어요.");
+
+  const applicantContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(applicantContext, e2eUsers.applicant.id);
+  const applicantPage = await applicantContext.newPage();
+  await applicantPage.goto(`/matches/${matchId}`);
+  await expect(applicantPage.getByRole("heading", { name: fixture.partnerMatchTitle })).toBeVisible();
+  await expect(applicantPage.getByText("Tennis Mate에서 준비한 코트예요")).toBeVisible();
+  await applicantPage.getByRole("button", { name: "같이 치기" }).click();
+  await applicantPage.getByRole("button", { name: "신청하기", exact: true }).click();
+  await expect(applicantPage.getByRole("heading", { name: "신청을 보냈어요" })).toBeVisible();
+
+  await hostPage.goto(`/activity/received/${matchId}`);
+  await hostPage.getByRole("link", { name: /신청 내용 보기/ }).click();
+  await hostPage.getByRole("button", { name: "수락하기" }).click();
+  await hostPage.getByRole("button", { name: "네, 함께 칠게요" }).click();
+  await expect(hostPage.getByRole("heading", { name: "같이 치기로 했어요" })).toBeVisible();
+
+  await applicantPage.goto("/activity/sent");
+  await applicantPage.locator("article").filter({ hasText: fixture.partnerMatchTitle }).getByRole("link", { name: "채팅방 열기" }).click();
+  await applicantPage.getByLabel("메시지").fill("준비된 코트 E2E 메시지");
+  await applicantPage.getByRole("button", { name: "보내기" }).click();
+  await expect(applicantPage.getByText("준비된 코트 E2E 메시지")).toBeVisible();
+  await hostPage.goto(`/chats/${matchId}`);
+  await expect(hostPage.getByText("준비된 코트 E2E 메시지")).toBeVisible();
+
+  await applicantContext.close();
+  await hostContext.close();
+});
+
+test("과거 코트 미정 매칭은 비공개·신청 불가이지만 기존 참여자의 이력과 채팅·완료 처리는 유지한다", async ({ browser }) => {
+  const applicantContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(applicantContext, e2eUsers.applicant.id);
+  const applicantPage = await applicantContext.newPage();
+
+  await applicantPage.goto("/");
+  await expect(applicantPage.getByText(fixture.legacyMatchTitle)).toHaveCount(0);
+  await applicantPage.goto(`/chats/${fixture.legacyMatchId}`);
+  await expect(applicantPage.getByRole("heading", { name: fixture.legacyMatchTitle })).toBeVisible();
+  await expect(applicantPage.getByText("과거 매칭 기록이에요.")).toBeVisible();
+
+  const outsiderContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(outsiderContext, e2eUsers.outsider.id);
+  const outsiderPage = await outsiderContext.newPage();
+  await outsiderPage.goto("/");
+  const applicationAttempt = await outsiderPage.evaluate(async (matchId) => {
+    const response = await fetch(`/api/v1/matches/${matchId}/applications`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: null }),
+    });
+    const body = await response.json() as { error?: { code?: string } };
+    return { status: response.status, code: body.error?.code ?? null };
+  }, fixture.legacyMatchId);
+  expect(applicationAttempt).toEqual({ status: 409, code: "LEGACY_MATCH_NOT_JOINABLE" });
+  await outsiderPage.goto(`/matches/${fixture.legacyMatchId}`);
+  await expect(outsiderPage.getByText("매칭을 찾을 수 없어요.")).toBeVisible();
+
+  const hostContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  await signInAs(hostContext, e2eUsers.host.id);
+  const hostPage = await hostContext.newPage();
+  await hostPage.goto(`/matches/${fixture.legacyMatchId}`);
+  await expect(hostPage.getByRole("heading", { name: fixture.legacyMatchTitle })).toBeVisible();
+  const completion = await hostPage.evaluate(async (matchId) => {
+    const response = await fetch(`/api/v1/matches/${matchId}/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedVersion: 1 }),
+    });
+    const body = await response.json() as { status?: string };
+    return { status: response.status, matchStatus: body.status ?? null };
+  }, fixture.legacyMatchId);
+  expect(completion).toEqual({ status: 200, matchStatus: "COMPLETED" });
+
+  await applicantContext.close();
+  await outsiderContext.close();
+  await hostContext.close();
 });

@@ -1596,22 +1596,21 @@ Court Commerce는 설계 완료·미구현 단계다. 일반 사용자의 `Court
 | `GET /api/v1/operator/commerce-account` | 본인 운영자 | PG 온보딩·Commerce 활성·30일 수수료 무료 기간 상태 조회 |
 | `POST /api/v1/operator/commerce-account/onboarding-link` | `PUBLISH_APPROVED` 운영자 | PG의 온보딩 시작 URL 요청. 계좌·PG 키를 본문으로 받지 않음 |
 | `GET /api/v1/operator/commerce-settlements` | 본인 운영자 | PG 지급 결과와 대사된 정산 요약 조회 |
-| `PUT /api/v1/operator/slots/{slotId}/commerce-policy` | 해당 Draft Slot 운영자 | 고정 `participantPriceKrw`·정책 버전 설정. 공개 후에는 `409` |
-| `POST /api/v1/partner-session-checkout-holds` | 온보딩 완료 일반 회원 | 유료 `AVAILABLE` Slot의 단일 15분 홀드와 호스트 결제 주문 생성 |
+| `PUT /api/v1/operator/slots/{slotId}/commerce-policy` | 해당 Draft Slot 운영자 | 코트 이용 총액·요금표 버전·24시간 취소 정책 스냅샷 설정. 공개 후에는 `409` |
+| `POST /api/v1/partner-session-checkout-holds` | 온보딩 완료 일반 회원 | 유료 `AVAILABLE` Slot의 단일 15분 홀드와 **모집자 코트 이용 총액** 결제 주문 생성 |
 | `GET /api/v1/partner-session-checkout-holds/{holdId}` | 해당 모집자 | 결제 확인 중·만료·Match 생성 결과 조회 |
 | `DELETE /api/v1/partner-session-checkout-holds/{holdId}` | 해당 모집자 | PG 승인 전 홀드·미결제 주문 취소 |
-| `POST /api/v1/matches/{matchId}/applications/{applicationId}/payment-invitations` | 해당 Match 모집자 | PENDING 신청자에게 한 자리·고정 금액 결제 초대 생성 |
-| `GET /api/v1/payment-invitations/{invitationId}` | 해당 참가자 | 결제 기한·고정 금액·안전한 상태 조회 |
-| `DELETE /api/v1/payment-invitations/{invitationId}` | 해당 Match 모집자 | 승인 전 결제 초대와 자리 홀드 취소 |
-| `POST /api/v1/commerce/payments/{paymentId}/checkout` | 결제 당사자 | 제공자 결제 시작 정보 요청 |
-| `GET /api/v1/commerce/payments/{paymentId}` | 결제 당사자 | 서버가 확인한 승인·환불 상태 조회 |
+| `POST /api/v1/commerce/payments/{paymentId}/checkout` | 해당 모집자 | 코트 이용 총액 결제의 제공자 결제 시작 정보 요청 |
+| `GET /api/v1/matches/{matchId}/commerce-payment` | 해당 모집자 | 서버가 확인한 모집자 결제·환불 상태 조회 |
+| `POST /api/v1/matches/{matchId}/minimum-participant-decision` | 해당 모집자 | 24시간 마감 전 최소 인원 미달 세션을 현재 인원으로 진행하거나 취소 |
+| `POST /api/v1/matches/{matchId}/commerce-cancellations` | 해당 모집자 | 24시간 전 전액 취소 요청. 서버가 결제·마감 시각·권한을 검증 |
 | `POST /api/v1/webhooks/{provider}/commerce` | PG 서명 | 승인·취소·환불·지급 결과의 멱등 처리 |
 
-`POST /partner-session-checkout-holds`와 결제 초대 생성에는 각각 호출자별 `clientRequestId`가 필수다. 단순 예약 요청이 아니며, 서버는 한 Slot의 유효 홀드를 하나만 만들고 PG 승인 결과가 확인될 때에만 `AVAILABLE → ALLOCATED`, Match와 호스트 결제기록을 하나의 트랜잭션으로 확정한다. 홀드 만료·취소·실패면 Match를 만들지 않는다.
+`POST /partner-session-checkout-holds`에는 모집자별 `clientRequestId`가 필수다. 단순 예약 요청이 아니며, 서버는 한 Slot의 유효 홀드를 하나만 만들고 PG 승인 결과가 확인될 때에만 `AVAILABLE → ALLOCATED`, Match와 모집자 결제기록을 하나의 트랜잭션으로 확정한다. 홀드 만료·취소·실패면 Match를 만들지 않는다.
 
-참가자 결제 초대는 기존 `MatchApplication`을 즉시 `ACCEPTED`로 바꾸지 않는다. 승인 확인 전에는 Application이 `PENDING`이고 Match 채팅 입장 권한도 없다. 승인 트랜잭션에서만 결제 초대·출석 결제기록·Application `ACCEPTED`를 함께 확정한다.
+참가자 결제 초대·참가자 비용 수납 API는 제공하지 않는다. 기존 `MatchApplication`은 모집자의 수락·거절만으로 `ACCEPTED`가 되며, 실제 수락 참가자는 기존 규칙에 따라 Match 채팅에 입장한다. 참가자 화면에는 코트 이용 총액, 예상 1인 부담 참고값, `현장에서 함께 정산해요`만 안전하게 반환한다.
 
-웹훅은 제공자 서명, 이벤트 ID, 주문·결제 참조와 금액을 검증한다. 클라이언트 리다이렉트의 성공 값만으로 결제 상태를 변경하지 않으며, 제공자 이벤트와 결제·환불 참조는 DB에서 유일해야 한다. 사용자·운영자 응답에는 카드번호, 계좌번호, PG 원문 오류와 타인의 정산 정보를 반환하지 않는다.
+웹훅은 제공자 서명, 이벤트 ID, 주문·결제 참조와 **모집자 코트 이용 총액**을 검증한다. 클라이언트 리다이렉트의 성공 값만으로 결제 상태를 변경하지 않으며, 제공자 이벤트와 결제·환불 참조는 DB에서 유일해야 한다. 사용자·운영자 응답에는 카드번호, 계좌번호, PG 원문 오류, 참가자 간 현장 정산 정보와 타인의 정산 정보를 반환하지 않는다.
 
 ## 23.1 서비스 내 Match Chat API 확장 방향
 
@@ -1695,12 +1694,13 @@ Match Chat MVP는 모든 Match의 유일한 연락 수단이다. 공개 출시�
 2. 같은 유료 Slot에 대한 동시 홀드·서로 다른 `clientRequestId` 요청·홀드 만료 뒤 재요청
 3. 결제 실패·사용자 취소·홀드 만료 뒤 Match와 `ALLOCATED` Slot이 생기지 않는 경우
 4. 승인 웹훅 재전송·늦은 승인·중복 리다이렉트가 Payment·Match·환불을 중복 만들지 않는 경우
-5. 승인 확인 전 결제 초대 Application이 `ACCEPTED`가 아니고 Match 채팅에 입장할 수 없는 경우
-6. 유효 결제 초대와 `ACCEPTED` 참가자를 합산해 Slot 최대 인원을 넘길 수 없는 경우
-7. 운영자 공급 철회가 결제 완료 출석별 전액 환불을 만들고 대기 결제 초대를 청구 없이 취소하는 경우
-8. 운영자별 첫 성공 유료 승인부터 30일 미만은 플랫폼 수수료 0%, 이후는 5%이며 PG 수수료는 모두 운영자 부담으로 기록되는 경우
-9. 다른 운영자·모집자·참가자가 Commerce 계정, 결제, 정산, webhook 결과를 조회·변경하려는 경우
-10. PG 서명이 없거나 결제 참조·금액이 다른 webhook을 거절하는 경우
+5. 유료 Match에 모집자 외 결제 행·참가자 결제 초대·참가자 비용 수납 API가 생기지 않는 경우
+6. 시작 24시간 전의 정확한 마감 시각까지 모집자 전액 취소를 허용하고, 이후 자동 환불 요청을 거절하는 경우
+7. 최소 인원 미달에서 모집자의 진행·취소 결정과 무응답 자동 취소가 Match·결제·환불을 한 번만 전환하는 경우
+8. 운영자 공급 철회가 모집자 결제 한 건에 전액 환불을 만들고, 참가자에게 안전한 인앱 안내를 남기는 경우
+9. 운영자별 첫 성공 유료 모집자 승인부터 30일 미만은 플랫폼 수수료 0%, 이후는 5%이며 PG 수수료는 모두 운영자 부담으로 기록되는 경우
+10. 다른 운영자·모집자·참가자가 Commerce 계정, 결제, 정산, webhook 결과를 조회·변경하려는 경우
+11. PG 서명이 없거나 결제 참조·금액이 다른 webhook을 거절하는 경우
 
 ### 24.6 서비스 내 Match Chat
 

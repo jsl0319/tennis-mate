@@ -7,11 +7,18 @@ export const e2eUsers = {
   host: { id: "20000000-0000-4000-8000-000000000001", nickname: "E2E모집자" },
   applicant: { id: "20000000-0000-4000-8000-000000000002", nickname: "E2E참가자" },
   outsider: { id: "20000000-0000-4000-8000-000000000003", nickname: "E2E외부인" },
+  operator: { id: "20000000-0000-4000-8000-000000000004", nickname: "E2E운영자" },
 } as const;
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: requireE2eDatabaseUrl() }) });
 
-export type E2eFixture = { matchTitle: string };
+export type E2eFixture = {
+  matchTitle: string;
+  partnerMatchTitle: string;
+  partnerSlotId: string;
+  legacyMatchId: string;
+  legacyMatchTitle: string;
+};
 
 async function createOnboardedUser({ id, nickname }: { id: string; nickname: string }) {
   return prisma.user.create({
@@ -42,9 +49,97 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
   await createOnboardedUser(e2eUsers.host);
   await createOnboardedUser(e2eUsers.applicant);
   await createOnboardedUser(e2eUsers.outsider);
+  await createOnboardedUser(e2eUsers.operator);
 
   const matchTitle = "E2E 주말 랠리 연습";
-  return { matchTitle };
+  const partnerMatchTitle = "E2E 준비된 코트 랠리";
+  const legacyMatchTitle = "E2E 과거 코트 미정 매칭";
+  const now = new Date();
+  const partnerStartsAt = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const partnerEndsAt = new Date(partnerStartsAt.getTime() + 2 * 60 * 60 * 1000);
+
+  const operatorApplication = await prisma.courtOperatorApplication.create({
+    data: {
+      applicantUserId: e2eUsers.operator.id,
+      status: "PUBLISH_APPROVED",
+      businessName: "E2E 테니스 운영",
+      businessRegistrationNumberHash: "e2e-business-registration-hash",
+      businessVerificationStatus: "VERIFIED",
+      venueVerificationStatus: "MATCHED",
+      venueName: "E2E 준비된 테니스장",
+      venueAddress: "서울시 E2E 마포구 2",
+      normalizedVenueKey: "e2e-prepared-tennis-court",
+      submittedAt: now,
+      verifiedAt: now,
+      publishApprovedAt: now,
+    },
+  });
+  const court = await prisma.court.create({
+    data: {
+      operatorApplicationId: operatorApplication.id,
+      regionCode: "E2E-SEOUL-001",
+      name: "E2E 준비된 테니스장",
+      address: "서울시 E2E 마포구 2",
+      normalizedVenueKey: "e2e-prepared-tennis-court",
+    },
+  });
+  const courtUnit = await prisma.courtUnit.create({ data: { courtId: court.id, name: "1번 코트" } });
+  const partnerSlot = await prisma.courtSlot.create({
+    data: {
+      courtUnitId: courtUnit.id,
+      startsAt: partnerStartsAt,
+      endsAt: partnerEndsAt,
+      priceKrw: 36_000,
+      maxParticipantCount: 2,
+      visibility: "PUBLIC",
+      status: "AVAILABLE",
+      publishedAt: now,
+      statusChangedAt: now,
+      usageNote: "테니스공은 모집자와 참가자가 서비스 내 채팅에서 확인해요.",
+    },
+  });
+
+  const legacyStartsAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+  const legacyEndsAt = new Date(now.getTime() - 60 * 60 * 1000);
+  const legacyMatch = await prisma.match.create({
+    data: {
+      hostUserId: e2eUsers.host.id,
+      clientRequestId: "20000000-0000-4000-8000-000000000005",
+      regionCode: "E2E-SEOUL-001",
+      title: legacyMatchTitle,
+      startsAt: legacyStartsAt,
+      endsAt: legacyEndsAt,
+      courtSource: "COURT_TBD",
+      recruitCount: 1,
+      partnerPreference: "COMPLETE_BEGINNER_WELCOME",
+      status: "CLOSED",
+      closedAt: now,
+      purposes: { create: { purpose: "RALLY_PRACTICE" } },
+    },
+  });
+  await prisma.matchApplication.create({
+    data: {
+      matchId: legacyMatch.id,
+      applicantUserId: e2eUsers.applicant.id,
+      status: "ACCEPTED",
+      profileSnapshot: { source: "E2E legacy fixture" },
+      decidedAt: now,
+    },
+  });
+  await prisma.matchConversation.create({
+    data: {
+      matchId: legacyMatch.id,
+      members: {
+        create: [
+          { userId: e2eUsers.host.id, role: "HOST" },
+          { userId: e2eUsers.applicant.id, role: "PARTICIPANT" },
+        ],
+      },
+      messages: { create: { type: "SYSTEM", body: "과거 매칭 기록이에요." } },
+    },
+  });
+
+  return { matchTitle, partnerMatchTitle, partnerSlotId: partnerSlot.id, legacyMatchId: legacyMatch.id, legacyMatchTitle };
 }
 
 export async function disconnectE2eDatabase() {
