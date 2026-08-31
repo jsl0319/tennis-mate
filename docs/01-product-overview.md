@@ -429,6 +429,7 @@ flowchart TD
 - Core MVP 화면 명세: `03-screen-spec.md`
 - Court Partner 확장 화면 명세: `03-1-court-partner-screen-spec.md`
 - Court Commerce 설계: `07-court-commerce-design.md`
+- Court Commerce PG 사전 검증: `09-court-commerce-pg-preflight.md`
 - 서비스 내 Match 채팅 설계: `08-in-app-match-chat-design.md`
 - 다음 설계 단계: `04-erd.md`
 

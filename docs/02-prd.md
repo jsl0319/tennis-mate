@@ -699,6 +699,7 @@ CourtSlot
 - Core MVP 화면: `03-screen-spec.md`
 - Court Partner Pilot 및 Court Commerce 화면: `03-1-court-partner-screen-spec.md`
 - Court Commerce 정책·상태·게이트: `07-court-commerce-design.md`
+- Court Commerce PG 사전 검증·계약 차단 항목: `09-court-commerce-pg-preflight.md`
 - 서비스 내 Match 채팅 정책·보관·게이트: `08-in-app-match-chat-design.md`
 - 다음 설계 단계: `04-erd.md`
 
