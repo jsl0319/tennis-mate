@@ -48,12 +48,18 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   const hostPage = await hostContext.newPage();
 
   await hostPage.goto("/matches/new");
-  await expect(hostPage.getByRole("heading", { name: "예약한 코트에서 함께 칠 사람을 찾아요" })).toBeVisible();
+  await expect(hostPage.getByRole("heading", { name: "매칭 개설" })).toBeVisible();
+  await expect(hostPage.getByRole("heading", { name: "매칭 기본 정보" })).toBeVisible();
   await expect(hostPage.getByRole("progressbar", { name: "매칭 등록 진행" })).toHaveAttribute("aria-valuenow", "1");
   await expect(hostPage.getByRole("button", { name: "코트를 예약했어요" })).toHaveCount(0);
   await expect(hostPage.getByRole("button", { name: "코트는 같이 정해요" })).toHaveCount(0);
   await expect(hostPage.getByRole("link", { name: /코트 매칭 둘러보기/ })).toHaveAttribute("href", "/partner-sessions");
-  await expect(hostPage.getByLabel("테니스장 검색")).toBeVisible();
+  const courtSearchButton = hostPage.getByRole("button", { name: "테니스장 검색" });
+  await expect(courtSearchButton).toBeVisible();
+  await courtSearchButton.click();
+  const courtSearchDialog = hostPage.getByRole("dialog", { name: "테니스장 검색" });
+  await expect(courtSearchDialog.getByRole("button", { name: "테니스장 직접 입력" })).toBeVisible();
+  await courtSearchDialog.getByRole("button", { name: "테니스장 검색 닫기" }).click();
   const startsOn = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10);
   await hostPage.getByLabel("날짜").fill(startsOn);
   await hostPage.getByLabel("시작 시간").fill("10:00");

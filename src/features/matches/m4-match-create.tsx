@@ -10,9 +10,11 @@ import {
   MapPin,
   MagnifyingGlass,
   Minus,
+  PencilSimple,
   Plus,
   TennisBall,
   UsersThree,
+  X,
 } from "@phosphor-icons/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -121,7 +123,8 @@ export function M4MatchCreate() {
   const [courtSearchResults, setCourtSearchResults] = useState<CourtPlaceSearchItem[]>([]);
   const [courtSearchError, setCourtSearchError] = useState("");
   const [courtSearchLoading, setCourtSearchLoading] = useState(false);
-  const [selectedCourtPlace, setSelectedCourtPlace] = useState<CourtPlaceSearchItem | null>(null);
+  const [isCourtSearchOpen, setIsCourtSearchOpen] = useState(false);
+  const [isManualCourtEntry, setIsManualCourtEntry] = useState(false);
   const [form, setForm] = useState<MatchCreateForm>(() => ({
     clientRequestId: crypto.randomUUID(),
     date: "",
@@ -242,10 +245,11 @@ export function M4MatchCreate() {
   const selectCourtPlace = (place: CourtPlaceSearchItem) => {
     set("courtName", place.name);
     set("address", place.address);
-    setSelectedCourtPlace(place);
     setCourtSearchQuery("");
     setCourtSearchResults([]);
     setCourtSearchError("");
+    setIsCourtSearchOpen(false);
+    setIsManualCourtEntry(false);
   };
 
   const updateCourtSearchQuery = (value: string) => {
@@ -253,6 +257,24 @@ export function M4MatchCreate() {
     setCourtSearchResults([]);
     setCourtSearchError("");
     setCourtSearchLoading(false);
+  };
+
+  const openCourtSearch = () => {
+    updateCourtSearchQuery("");
+    setIsManualCourtEntry(false);
+    setIsCourtSearchOpen(true);
+  };
+
+  const openManualCourtEntry = () => {
+    updateCourtSearchQuery("");
+    setIsManualCourtEntry(true);
+    setIsCourtSearchOpen(true);
+  };
+
+  const closeCourtSearch = () => {
+    updateCourtSearchQuery("");
+    setIsCourtSearchOpen(false);
+    setIsManualCourtEntry(false);
   };
 
   const uploadCourtImage = async (file: File | null) => {
@@ -366,10 +388,10 @@ export function M4MatchCreate() {
   const action = step === 1 ? "모집 정보 입력" : step === 2 ? "비용 안내 입력" : step === 3 ? "미리보기" : "매칭 공개하기";
 
   return (
-    <main className="min-h-svh bg-[var(--tm-bg-page)] pb-36 text-[var(--tm-text-primary)]">
+    <main className="min-h-svh bg-[#F4F6FA] pb-36 text-[var(--tm-text-primary)]">
       <section className="mx-auto max-w-[560px]">
-        <header className="sticky top-0 z-20 border-b border-[var(--tm-border-subtle)] bg-[var(--tm-bg-page)]/95 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-20 bg-[#F4F6FA]/95 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
+          <div className="relative flex min-h-11 items-center justify-between">
             <button
               aria-label={step === 1 ? "이전 화면으로 돌아가기" : "이전 단계"}
               className="grid size-11 shrink-0 place-items-center rounded-full text-[var(--tm-text-primary)] transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]"
@@ -378,17 +400,15 @@ export function M4MatchCreate() {
             >
               <ArrowLeft aria-hidden size={25} weight="bold" />
             </button>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-[var(--tm-text-primary)]">매칭 만들기</p>
-              <p className="mt-0.5 text-xs text-[var(--tm-text-secondary)]">{step} / 4 단계</p>
-            </div>
+            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-xl font-bold tracking-[-0.04em]">{step === 1 ? "매칭 개설" : "매칭 만들기"}</h1>
+            <p className="text-xs font-semibold text-[var(--tm-text-secondary)]">{step} / 4</p>
           </div>
           <div aria-label="매칭 등록 진행" aria-valuemax={4} aria-valuemin={1} aria-valuenow={step} className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--tm-border-default)]" role="progressbar">
             <div className="h-full rounded-full bg-[var(--tm-action-primary)] transition-[width] duration-300" style={{ width: `${step * 25}%` }} />
           </div>
         </header>
 
-        <div className="px-5 pt-7">
+        <div className="px-5 pt-6">
           {step === 1 ? (
             <StepOne
               cities={cities}
@@ -398,8 +418,11 @@ export function M4MatchCreate() {
               districts={districts}
               form={form}
               onCourtImageChange={(file) => void uploadCourtImage(file)}
-              onCourtNameChange={(value) => { set("courtName", value); setSelectedCourtPlace(null); }}
-              onCourtAddressChange={(value) => { set("address", value); setSelectedCourtPlace(null); }}
+              onCourtNameChange={(value) => set("courtName", value)}
+              onCourtAddressChange={(value) => set("address", value)}
+              onCourtSearchClose={closeCourtSearch}
+              onCourtSearchOpen={openCourtSearch}
+              onManualCourtEntryOpen={openManualCourtEntry}
               onCourtPlaceQueryChange={updateCourtSearchQuery}
               onCourtPlaceSelect={selectCourtPlace}
               onSelectCity={(code) => void selectCity(code)}
@@ -407,7 +430,8 @@ export function M4MatchCreate() {
               courtSearchLoading={courtSearchLoading}
               courtSearchQuery={courtSearchQuery}
               courtSearchResults={courtSearchResults}
-              selectedCourtPlace={selectedCourtPlace}
+              isCourtSearchOpen={isCourtSearchOpen}
+              isManualCourtEntry={isManualCourtEntry}
               set={set}
             />
           ) : null}
@@ -445,14 +469,18 @@ function StepOne({
   onCourtImageChange,
   onCourtAddressChange,
   onCourtNameChange,
+  onCourtSearchClose,
+  onCourtSearchOpen,
   onCourtPlaceQueryChange,
   onCourtPlaceSelect,
+  onManualCourtEntryOpen,
   onSelectCity,
   courtSearchError,
   courtSearchLoading,
   courtSearchQuery,
   courtSearchResults,
-  selectedCourtPlace,
+  isCourtSearchOpen,
+  isManualCourtEntry,
   set,
 }: {
   cities: Region[];
@@ -464,139 +492,142 @@ function StepOne({
   onCourtImageChange: (file: File | null) => void;
   onCourtAddressChange: (value: string) => void;
   onCourtNameChange: (value: string) => void;
+  onCourtSearchClose: () => void;
+  onCourtSearchOpen: () => void;
   onCourtPlaceQueryChange: (value: string) => void;
   onCourtPlaceSelect: (place: CourtPlaceSearchItem) => void;
+  onManualCourtEntryOpen: () => void;
   onSelectCity: (code: string) => void;
   courtSearchError: string;
   courtSearchLoading: boolean;
   courtSearchQuery: string;
   courtSearchResults: CourtPlaceSearchItem[];
-  selectedCourtPlace: CourtPlaceSearchItem | null;
+  isCourtSearchOpen: boolean;
+  isManualCourtEntry: boolean;
   set: FormSetter;
 }) {
   return (
     <div>
-      <StepIntro eyebrow="외부 예약 코트" title={<>예약한 코트에서<br />함께 칠 사람을 찾아요</>} description="코트 정보와 시간을 먼저 알려 주세요. 같이 칠 분이 일정을 쉽게 확인할 수 있어요." />
-
-      <section className="mt-6 rounded-3xl border border-[var(--tm-border-default)] bg-[var(--tm-bg-subtle)] p-5">
-        <div className="flex gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-[var(--tm-action-primary)] shadow-sm">
-            <TennisBall aria-hidden size={24} weight="fill" />
-          </span>
-          <div>
-            <h2 className="font-bold text-[var(--tm-action-primary)]">아직 코트를 예약하지 않았나요?</h2>
-            <p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">운영자가 준비한 시간으로 코트 매칭을 열 수 있어요.</p>
-            <Link className="mt-3 inline-flex min-h-10 items-center gap-1 rounded-xl bg-white px-3 text-sm font-semibold text-[var(--tm-action-primary)] ring-1 ring-inset ring-[var(--tm-border-default)]" href="/partner-sessions">
-              코트 매칭 둘러보기 <ArrowRight aria-hidden size={15} weight="bold" />
-            </Link>
+      <FormPanel description="언제, 어디서 함께 칠지 먼저 정해 주세요." title="매칭 기본 정보">
+        <label>
+          <FieldTitle required>테니스장</FieldTitle>
+          <CourtPlaceTrigger address={form.address} courtName={form.courtName} onClick={onCourtSearchOpen} />
+        </label>
+        <label className="mt-6 block">
+          <FieldTitle required>매칭 날짜</FieldTitle>
+          <input className={controlClassName} min={getTodayDate()} onChange={(event) => set("date", event.target.value)} type="date" value={form.date} />
+        </label>
+        <div className="mt-6">
+          <FieldTitle required>매칭 시간</FieldTitle>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <label>
+              <span className="mb-2 block text-sm font-semibold text-[var(--tm-text-secondary)]">시작 시간</span>
+              <input aria-label="시작 시간" className="h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-3 text-base outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)]" onChange={(event) => set("startTime", event.target.value)} type="time" value={form.startTime} />
+            </label>
+            <label>
+              <span className="mb-2 block text-sm font-semibold text-[var(--tm-text-secondary)]">종료 시간</span>
+              <input aria-label="종료 시간" className="h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-3 text-base outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)]" min={form.startTime || undefined} onChange={(event) => set("endTime", event.target.value)} type="time" value={form.endTime} />
+            </label>
           </div>
+          <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">2시간을 넘는 일정도 등록할 수 있어요. 자정을 넘는 일정은 현재 등록할 수 없어요.</p>
         </div>
-      </section>
-
-      <FormPanel description="예약한 시작·종료 시간을 그대로 선택해 주세요. 2시간을 넘는 일정도 등록할 수 있어요." icon={<CalendarBlank aria-hidden size={23} weight="fill" />} title="언제 칠까요?">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label>
-            <FieldTitle required>매칭 날짜</FieldTitle>
-            <input className={controlClassName} min={getTodayDate()} onChange={(event) => set("date", event.target.value)} type="date" value={form.date} />
-          </label>
-          <label>
-            <FieldTitle required>시작 시간</FieldTitle>
-            <input className={controlClassName} onChange={(event) => set("startTime", event.target.value)} type="time" value={form.startTime} />
-          </label>
-          <label>
-            <FieldTitle required>종료 시간</FieldTitle>
-            <input className={controlClassName} min={form.startTime || undefined} onChange={(event) => set("endTime", event.target.value)} type="time" value={form.endTime} />
-          </label>
-        </div>
-        <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">종료 시간은 시작 시간보다 늦게 선택해 주세요. 자정을 넘는 일정은 현재 등록할 수 없어요.</p>
-      </FormPanel>
-
-      <FormPanel description="참가자가 이동 거리를 가늠할 수 있도록 활동 지역을 선택해 주세요." icon={<MapPin aria-hidden size={23} weight="fill" />} title="어디에서 칠까요?">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label>
-            <FieldTitle required>시·도</FieldTitle>
-            <select aria-label="시·도 선택" className={controlClassName} onChange={(event) => onSelectCity(event.target.value)} value={form.cityCode}>
-              <option value="">선택</option>
+        <div className="mt-6 border-t border-[var(--tm-border-subtle)] pt-5">
+          <FieldTitle required>활동 지역</FieldTitle>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <select aria-label="시·도 선택" className="h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-3 text-sm outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)]" onChange={(event) => onSelectCity(event.target.value)} value={form.cityCode}>
+              <option value="">시·도 선택</option>
               {cities.map((city) => <option key={city.code} value={city.code}>{city.shortName ?? city.name}</option>)}
             </select>
-          </label>
-          <label>
-            <FieldTitle required>시·군·구</FieldTitle>
-            <select aria-label="시·군·구 선택" className={controlClassName} disabled={!form.cityCode} onChange={(event) => set("regionCode", event.target.value)} value={form.regionCode}>
-              <option value="">선택</option>
+            <select aria-label="시·군·구 선택" className="h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-3 text-sm outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)] disabled:bg-[var(--tm-bg-subtle)]" disabled={!form.cityCode} onChange={(event) => set("regionCode", event.target.value)} value={form.regionCode}>
+              <option value="">시·군·구 선택</option>
               {districts.map((district) => <option key={district.code} value={district.code}>{district.name}</option>)}
             </select>
-          </label>
+          </div>
         </div>
-        <CourtPlaceSearch
-          error={courtSearchError}
-          isLoading={courtSearchLoading}
-          onQueryChange={onCourtPlaceQueryChange}
-          onSelect={onCourtPlaceSelect}
-          query={courtSearchQuery}
-          results={courtSearchResults}
-          selectedPlace={selectedCourtPlace}
-        />
-        <p className="mt-5 text-sm font-bold text-[var(--tm-text-secondary)]">또는 직접 입력</p>
-        <label className="mt-4 block">
-          <FieldTitle required>코트장 이름</FieldTitle>
-          <input className={controlClassName} maxLength={100} onChange={(event) => onCourtNameChange(event.target.value)} placeholder="예: 한강 테니스장" value={form.courtName} />
-        </label>
-        <label className="mt-4 block">
-          <FieldTitle required>코트장 주소</FieldTitle>
-          <input className={controlClassName} maxLength={255} onChange={(event) => onCourtAddressChange(event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} />
-        </label>
-        <label className="mt-4 block">
-          <FieldTitle>코트 번호 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FieldTitle>
-          <input className={controlClassName} maxLength={50} onChange={(event) => set("courtNumber", event.target.value)} placeholder="예: 3번 코트" value={form.courtNumber} />
-        </label>
-        <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">예약번호와 연락처는 입력하지 마세요. 코트 번호만 간단히 알려 주세요.</p>
       </FormPanel>
 
+      <section className="mt-5 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5">
+        <p className="text-sm font-bold">아직 코트를 예약하지 않았나요?</p>
+        <p className="mt-1 text-sm leading-6 text-[var(--tm-text-secondary)]">운영자가 준비한 시간으로 코트 매칭을 열 수 있어요.</p>
+        <Link className="mt-3 inline-flex min-h-10 items-center gap-1 rounded-xl bg-[var(--tm-bg-subtle)] px-3 text-sm font-semibold text-[var(--tm-action-primary)]" href="/partner-sessions">
+          코트 매칭 둘러보기 <ArrowRight aria-hidden size={15} weight="bold" />
+        </Link>
+      </section>
+
       <CourtImageUpload courtImage={courtImage} error={courtImageError} isUploading={courtImageUploading} onChange={onCourtImageChange} />
+      <CourtPlaceDialog
+        error={courtSearchError}
+        form={form}
+        isLoading={courtSearchLoading}
+        isManualEntry={isManualCourtEntry}
+        isOpen={isCourtSearchOpen}
+        onClose={onCourtSearchClose}
+        onManualEntryOpen={onManualCourtEntryOpen}
+        onNameChange={onCourtNameChange}
+        onAddressChange={onCourtAddressChange}
+        onQueryChange={onCourtPlaceQueryChange}
+        onSelect={onCourtPlaceSelect}
+        query={courtSearchQuery}
+        results={courtSearchResults}
+        set={set}
+      />
     </div>
   );
 }
 
-function CourtPlaceSearch({ error, isLoading, onQueryChange, onSelect, query, results, selectedPlace }: { error: string; isLoading: boolean; onQueryChange: (value: string) => void; onSelect: (place: CourtPlaceSearchItem) => void; query: string; results: CourtPlaceSearchItem[]; selectedPlace: CourtPlaceSearchItem | null }) {
-  const isQueryReady = query.trim().length >= 2;
+function CourtPlaceTrigger({ address, courtName, onClick }: { address: string; courtName: string; onClick: () => void }) {
+  const hasCourt = Boolean(courtName.trim() || address.trim());
 
   return (
-    <section className="mt-5 rounded-2xl border border-[var(--tm-border-default)] bg-[var(--tm-bg-subtle)] p-4">
-      <div className="flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-[var(--tm-action-primary)]">
-          <MagnifyingGlass aria-hidden size={20} weight="bold" />
-        </span>
-        <div>
-          <h3 className="text-sm font-bold">테니스장 검색 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></h3>
-          <p className="mt-1 text-xs leading-5 text-[var(--tm-text-secondary)]">이름이나 동네를 두 글자 이상 입력하면 실제 장소를 찾아드려요.</p>
-        </div>
-      </div>
+    <button aria-label={hasCourt ? "테니스장 변경" : "테니스장 검색"} className="mt-2 flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-left transition hover:border-[var(--tm-action-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]" onClick={onClick} type="button">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]"><MagnifyingGlass aria-hidden size={22} weight="bold" /></span>
+      <span className="min-w-0 flex-1">
+        {hasCourt ? <><strong className="block truncate text-sm">{courtName || "테니스장 이름을 입력해 주세요"}</strong><span className="mt-1 block truncate text-xs text-[var(--tm-text-secondary)]">{address || "주소를 입력해 주세요"}</span></> : <span className="text-base text-[var(--tm-text-secondary)]">테니스장을 검색해 주세요</span>}
+      </span>
+      <span className="text-sm font-bold text-[var(--tm-action-primary)]">{hasCourt ? "변경" : "검색"}</span>
+    </button>
+  );
+}
 
-      <label className="mt-4 block">
-        <span className="sr-only">테니스장 검색</span>
-        <div className="relative">
-          <MagnifyingGlass aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--tm-text-secondary)]" size={19} />
-          <input aria-label="테니스장 검색" className="h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white py-2 pl-11 pr-4 text-sm outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-white" maxLength={80} onChange={(event) => onQueryChange(event.target.value)} placeholder="예: 마포 테니스장, 잠실" value={query} />
-        </div>
-      </label>
+function CourtPlaceDialog({ error, form, isLoading, isManualEntry, isOpen, onAddressChange, onClose, onManualEntryOpen, onNameChange, onQueryChange, onSelect, query, results, set }: { error: string; form: MatchCreateForm; isLoading: boolean; isManualEntry: boolean; isOpen: boolean; onAddressChange: (value: string) => void; onClose: () => void; onManualEntryOpen: () => void; onNameChange: (value: string) => void; onQueryChange: (value: string) => void; onSelect: (place: CourtPlaceSearchItem) => void; query: string; results: CourtPlaceSearchItem[]; set: FormSetter }) {
+  const isQueryReady = query.trim().length >= 2;
+  const canFinishManualEntry = Boolean(form.courtName.trim() && form.address.trim());
 
-      {isLoading ? <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">테니스장을 찾고 있어요…</p> : null}
-      {error ? <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
-      {isQueryReady && !isLoading && !error && results.length === 0 ? <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-[var(--tm-text-secondary)]">찾는 테니스장이 없나요? 아래에 이름과 주소를 직접 입력해 주세요.</p> : null}
-      {results.length ? (
-        <div aria-label="테니스장 검색 결과" className="mt-3 grid gap-2">
-          {results.map((place, index) => (
-            <button aria-label={`${place.name} 선택`} className="rounded-xl bg-white px-3 py-3 text-left shadow-sm ring-1 ring-inset ring-[var(--tm-border-default)] transition hover:ring-[var(--tm-action-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]" key={`${place.name}-${place.address}-${index}`} onClick={() => onSelect(place)} type="button">
-              <strong className="block text-sm">{place.name}</strong>
-              <span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{place.roadAddress ?? place.address}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {selectedPlace ? <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-[var(--tm-action-primary)]"><CheckCircle aria-hidden className="mr-1 inline-block align-text-bottom" size={15} weight="fill" />검색한 장소 정보를 입력했어요. 필요하면 직접 수정할 수 있어요.</p> : null}
-      <p className="mt-3 text-[11px] leading-5 text-[var(--tm-text-secondary)]">장소 정보 제공: Kakao · 검색 결과는 코트 예약 여부나 운영 상태를 보증하지 않아요.</p>
-    </section>
+  if (!isOpen) return null;
+
+  return (
+    <div aria-hidden={false} className="fixed inset-0 z-50 flex items-end bg-black/45 p-3 sm:items-center sm:justify-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section aria-labelledby="court-search-dialog-title" aria-modal="true" className="max-h-[min(760px,calc(100svh-1.5rem))] w-full max-w-[460px] overflow-y-auto rounded-[28px] bg-white px-5 pb-6 pt-5 shadow-2xl" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} role="dialog">
+        <header className="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="court-search-dialog-title" className="text-2xl font-bold tracking-[-0.04em]">{isManualEntry ? "테니스장 직접 입력" : "테니스장 검색"}</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{isManualEntry ? "예약한 코트의 이름과 주소를 입력해 주세요." : "지역명 또는 테니스장 이름으로 검색해 주세요."}</p>
+          </div>
+          <button aria-label="테니스장 검색 닫기" className="grid size-10 shrink-0 place-items-center rounded-full text-[var(--tm-text-secondary)] hover:bg-[var(--tm-bg-subtle)]" onClick={onClose} type="button"><X aria-hidden size={22} weight="bold" /></button>
+        </header>
+
+        {isManualEntry ? (
+          <div className="mt-7">
+            <label className="block"><FieldTitle required>코트장 이름</FieldTitle><input autoFocus className={controlClassName} maxLength={100} onChange={(event) => onNameChange(event.target.value)} placeholder="예: 한강 테니스장" value={form.courtName} /></label>
+            <label className="mt-5 block"><FieldTitle required>코트장 주소</FieldTitle><input className={controlClassName} maxLength={255} onChange={(event) => onAddressChange(event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} /></label>
+            <label className="mt-5 block"><FieldTitle>코트 번호 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FieldTitle><input className={controlClassName} maxLength={50} onChange={(event) => set("courtNumber", event.target.value)} placeholder="예: 3번 코트" value={form.courtNumber} /></label>
+            <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">예약번호와 연락처는 입력하지 마세요. 코트 번호만 간단히 알려 주세요.</p>
+            <button className="mt-6 min-h-[54px] w-full rounded-2xl bg-[var(--tm-action-primary)] px-5 text-sm font-bold text-white disabled:opacity-45" disabled={!canFinishManualEntry} onClick={onClose} type="button">입력 완료</button>
+          </div>
+        ) : (
+          <div className="mt-7">
+            <label className="block"><span className="sr-only">테니스장 검색</span><div className="relative"><MagnifyingGlass aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--tm-action-primary)]" size={23} weight="bold" /><input autoFocus aria-label="테니스장 검색" className="h-15 w-full rounded-2xl border-2 border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] py-3 pl-12 pr-4 text-base outline-none" maxLength={80} onChange={(event) => onQueryChange(event.target.value)} placeholder="테니스장 이름을 입력…" value={query} /></div></label>
+            <button className="mt-4 flex min-h-[54px] w-full items-center justify-between rounded-2xl border border-[var(--tm-border-default)] px-4 text-sm font-bold text-[var(--tm-text-primary)]" onClick={onManualEntryOpen} type="button"><span className="inline-flex items-center gap-3"><PencilSimple aria-hidden size={21} weight="bold" />테니스장 직접 입력</span><ArrowRight aria-hidden size={18} weight="bold" /></button>
+            {isLoading ? <p className="mt-4 text-center text-sm text-[var(--tm-text-secondary)]">테니스장을 찾고 있어요…</p> : null}
+            {error ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
+            {results.length ? <div aria-label="테니스장 검색 결과" className="mt-4 grid gap-2">{results.map((place, index) => <button aria-label={`${place.name} 선택`} className="rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 py-4 text-left transition hover:border-[var(--tm-action-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]" key={`${place.name}-${place.address}-${index}`} onClick={() => onSelect(place)} type="button"><strong className="block text-sm">{place.name}</strong><span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{place.roadAddress ?? place.address}</span></button>)}</div> : null}
+            {isQueryReady && !isLoading && !error && results.length === 0 ? <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-4 text-center text-sm leading-6 text-[var(--tm-text-secondary)]">찾는 테니스장이 없나요?<br />직접 입력으로 계속 진행할 수 있어요.</p> : null}
+            {!isQueryReady ? <div className="px-4 pb-5 pt-18 text-center text-[var(--tm-text-secondary)]"><span className="mx-auto grid size-18 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]"><MagnifyingGlass aria-hidden size={36} weight="light" /></span><p className="mt-5 text-base">테니스장을 검색해 주세요</p></div> : null}
+            <p className="mt-5 text-center text-[11px] leading-5 text-[var(--tm-text-secondary)]">장소 정보 제공: Kakao · 검색 결과는 예약 여부를 보증하지 않아요.</p>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 
