@@ -61,8 +61,8 @@ function PublicSlotCard({ slot }: { slot: PublicCourtSlot }) {
 
   return <article className="overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white shadow-sm">
     <Link className="block p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]" href={`/partner-sessions/${slot.id}`}>
-      <CourtMedia alt={`${slot.court.name} 코트 이미지`} className="aspect-[7/3] w-full" fallbackLabel="Tennis Mate 기본 코트 이미지" image={slot.court.image} />
-      <div className="mt-4 flex flex-wrap items-center gap-2"><span className="rounded-full bg-[var(--tm-bg-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--tm-action-primary)]">Tennis Mate에서 준비한 코트</span><span className="text-xs font-semibold text-[var(--tm-text-secondary)]">{slot.statusLabel}</span></div>
+      <CourtMedia alt={`${slot.court.name} 코트 이미지`} className="aspect-[7/3] w-full" fallbackLabel="Rally On 기본 코트 이미지" image={slot.court.image} />
+      <div className="mt-4 flex flex-wrap items-center gap-2"><span className="rounded-full bg-[var(--tm-bg-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--tm-action-primary)]">Rally On에서 준비한 코트</span><span className="text-xs font-semibold text-[var(--tm-text-secondary)]">{slot.statusLabel}</span></div>
       <h3 className="mt-3 text-lg font-bold">{stateText}</h3>
       <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">🗓 {formatPartnerSchedule(slot.startsAt, slot.endsAt)}<br />📍 {slot.court.name} · {slot.court.courtNumber}<br />💳 전체 {slot.totalCourtFeeKrw.toLocaleString("ko-KR")}원 · 현장 최대 {slot.maxParticipantCount}명</p>
       {slot.usageNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-sm leading-5 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}

@@ -15,7 +15,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
   return (
     <main className="flex min-h-svh items-center justify-center px-5 py-12">
       <section className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-sm">
-        <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Tennis Mate</p>
+        <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On</p>
         <h1 className="mt-3 text-2xl font-bold text-[var(--tm-text-primary)]">
           잠시 문제가 생겼어요.
         </h1>

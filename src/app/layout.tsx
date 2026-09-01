@@ -12,7 +12,7 @@ const notoSansKr = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "Tennis Mate",
+  title: "Rally On",
   description: "테니스 초보자를 위한 부담 없는 매칭 서비스",
 };
 

@@ -22,7 +22,7 @@ export function EntrySelection({ returnTo = "/" }: EntrySelectionProps) {
   return (
     <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-11 text-[var(--tm-text-primary)]">
       <section className="mx-auto max-w-[350px]">
-        <p className="text-sm font-semibold text-[var(--tm-action-primary)]">● Tennis Mate</p>
+        <p className="text-sm font-semibold text-[var(--tm-action-primary)]">● Rally On</p>
 
         <header className="mt-[72px]">
           <h1 className="text-2xl font-bold leading-[34px]">어떻게 시작할까요?</h1>

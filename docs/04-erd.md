@@ -1,10 +1,10 @@
-# Tennis Mate 데이터 모델 및 ERD
+# Rally On 데이터 모델 및 ERD
 
 ## 1. 문서 정보
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서명 | Tennis Mate Data Model & ERD |
+| 문서명 | Rally On Data Model & ERD |
 | 문서 상태 | Draft v0.1 |
 | 기준 문서 | `02-prd.md`, `03-screen-spec.md`, `03-1-court-partner-screen-spec.md` |
 | 데이터베이스 후보 | PostgreSQL |
@@ -1111,7 +1111,7 @@ Court Commerce는 Pilot 범위 밖의 다음 단계이며, 일반 사용자의 `
 | `CourtSlotCommercePolicy` | `CourtSlot`과 1:1. 공개 전 고정한 `courtTotalChargeKrw`, 요금표 버전, `hostCancellationDeadlineAt`, 환불 정책 버전을 보관한다. `hostCancellationDeadlineAt`은 시작 24시간 전이다. |
 | `CourtSlotCheckoutHold` | 유료 Slot으로 세션을 열기 전의 단일 활성 홀드. 만료·취소 때 Match를 만들지 않고, **모집자 코트 이용 총액** 승인 확인 때만 기존 `AVAILABLE → ALLOCATED`와 Match 생성을 확정한다. |
 | `CommercePayment`, `CommerceRefund` | 결제는 Checkout Hold에서만 PG 주문을 만들고, 승인 때만 Match·모집자·수수료 스냅샷을 연결한다. 유료 Match에는 성공한 모집자 결제 한 건만 둔다. 환불은 별도 불변 원장 행으로 남긴다. |
-| `CommerceSettlement`, `CommerceSettlementLine` | PG 지급 결과를 결제·환불 원장과 대사한다. Tennis Mate의 수기 지급 원장이 아니다. |
+| `CommerceSettlement`, `CommerceSettlementLine` | PG 지급 결과를 결제·환불 원장과 대사한다. Rally On의 수기 지급 원장이 아니다. |
 | `CommerceWebhookEvent` | 제공자 이벤트의 서명 검증·멱등 처리 결과를 남긴다. 민감 payload 원문은 저장하지 않는다. |
 
 관계의 요점은 `CourtSlot → CheckoutHold → 모집자 Payment 주문 → (승인 시 Match) → Refund/SettlementLine`이다. 참가자 `MatchApplication`은 기존 수락·거절 흐름을 유지하며 결제 모델과 연결하지 않는다. PG 승인 결과가 확정될 때만 Match와 Slot 배정을 만들며, 웹훅 재전송·늦은 승인·환불은 공급자 참조의 유일 제약과 DB 트랜잭션으로 멱등 처리한다. 참가자별 `PartnerSessionAttendance`, `ParticipantPaymentInvitation`, `participantPriceKrw`는 만들지 않는다.

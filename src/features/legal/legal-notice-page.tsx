@@ -20,7 +20,7 @@ export function LegalNoticePage({ title, summary, sections, notice }: LegalNotic
           ← 로그인 화면으로
         </Link>
         <header className="mt-6 border-b border-[var(--tm-border-default)] pb-6">
-          <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Tennis Mate 비공개 MVP 안내</p>
+          <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On 비공개 MVP 안내</p>
           <h1 className="mt-2 text-2xl font-bold leading-tight">{title}</h1>
           <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{summary}</p>
           <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">시행일 · 2026년 8월 23일</p>

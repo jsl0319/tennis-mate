@@ -1,16 +1,16 @@
-# Tennis Mate API 명세
+# Rally On API 명세
 
 ## 1. 문서 정보
 
 | 항목 | 내용 |
 | --- | --- |
-| 문서명 | Tennis Mate API Specification |
+| 문서명 | Rally On API Specification |
 | 문서 상태 | Draft v0.1 |
 | 구현 범위 | Core MVP |
 | 기준 문서 | `02-prd.md`, `03-screen-spec.md`, `04-erd.md` |
 | 후속 문서 | `06-development-plan.md` |
 
-이 문서는 Tennis Mate Core MVP의 클라이언트와 서버 사이 HTTP 계약을 정의한다. Court Partner Pilot과 Court Commerce API는 별도 섹션으로 구분한다. Court Partner Pilot은 필수 후속 단계지만, 해당 구현이 시작되기 전까지 엔드포인트를 활성화하지 않는다.
+이 문서는 Rally On Core MVP의 클라이언트와 서버 사이 HTTP 계약을 정의한다. Court Partner Pilot과 Court Commerce API는 별도 섹션으로 구분한다. Court Partner Pilot은 필수 후속 단계지만, 해당 구현이 시작되기 전까지 엔드포인트를 활성화하지 않는다.
 
 ## 2. 설계 목표
 
@@ -338,9 +338,9 @@ CourtSupplyIncidentStatus = REQUESTED | WITHDRAWN | REVIEWED | REJECTED
 
 과거 `COURT_TBD` 응답에서는 `court.name`, `court.address`, `totalCourtFeeKrw`, `additionalCostNote`, `estimatedFeePerPersonKrw`가 모두 `null`이고 `court.sourceLabel`은 `코트와 비용을 함께 정해요`다. 이 표시는 기존 참여자의 이력·채팅·완료 처리에서만 사용하며, 공개 목록·신규 생성·신청 유도에는 사용하지 않는다.
 
-모든 Match 응답의 `court.image`는 `url`, `sourceLabel`, `fallback`을 제공한다. 사진이 없으면 `url`과 `sourceLabel`은 `null`이며 클라이언트는 `TENNIS_COURT_ILLUSTRATION`을 표시한다. `url`은 비공개 객체 URL이 아니라 인증·권한을 확인하는 같은 출처의 사진 읽기 API다. 외부 예약 사진의 `sourceLabel`은 `모집자 제공 사진`, 제휴 코트 사진의 값은 `운영자 제공 사진`이다. 사진은 예약 검증이나 Tennis Mate 보증을 뜻하지 않는다.
+모든 Match 응답의 `court.image`는 `url`, `sourceLabel`, `fallback`을 제공한다. 사진이 없으면 `url`과 `sourceLabel`은 `null`이며 클라이언트는 `TENNIS_COURT_ILLUSTRATION`을 표시한다. `url`은 비공개 객체 URL이 아니라 인증·권한을 확인하는 같은 출처의 사진 읽기 API다. 외부 예약 사진의 `sourceLabel`은 `모집자 제공 사진`, 제휴 코트 사진의 값은 `운영자 제공 사진`이다. 사진은 예약 검증이나 Rally On 보증을 뜻하지 않는다.
 
-`PARTNER_COURT` 응답에서는 `court.sourceLabel`이 `Tennis Mate에서 준비한 코트예요`이고, `court.participationNote`가 `참가 신청은 세션을 연 모집자에게 보내요.`다. Match 응답에는 `courtSlotId`와 운영자 내부 식별자를 응답하지 않으며 코트명·주소·시각·전체 비용은 연결 Slot에서 서버가 조합한다. 공개 Slot 목록 응답은 별도 `PublicCourtSlotView`만 사용한다.
+`PARTNER_COURT` 응답에서는 `court.sourceLabel`이 `Rally On에서 준비한 코트예요`이고, `court.participationNote`가 `참가 신청은 세션을 연 모집자에게 보내요.`다. Match 응답에는 `courtSlotId`와 운영자 내부 식별자를 응답하지 않으며 코트명·주소·시각·전체 비용은 연결 Slot에서 서버가 조합한다. 공개 Slot 목록 응답은 별도 `PublicCourtSlotView`만 사용한다.
 
 ```json
 {
@@ -1484,7 +1484,7 @@ POST /api/v1/matches  (courtSource=PARTNER_COURT, courtSlotId)
 
 `GET /partner-session-slots/available`은 온보딩 완료 일반 회원이 세션을 열 때만 사용한다. `visibility = PUBLIC`, `status = AVAILABLE`, 시작 전인 Slot의 코트·시간·비용·현장 최대 인원·이용 안내만 반환하며, 응답의 행동 문구는 `이 시간으로 세션 열기`다. 참가자에게 보이는 코트 예약 탐색 API가 아니다.
 
-저장된 대표 사진이 있으면 `PublicCourtSlotView.court.image.url`은 `/api/v1/partner-courts/{courtId}/image`, `sourceLabel`은 `운영자 제공 사진`이다. 이 URL은 비공개 객체 URL이 아니라 인증·온보딩을 확인하는 같은 출처의 읽기 API이며, 사진이 없으면 두 값은 `null`이고 클라이언트는 `fallback = TENNIS_COURT_ILLUSTRATION`을 표시한다. 사진 없음과 사진 자체는 공급 상태, 예약 가능 여부 또는 Tennis Mate의 예약 보증을 의미하지 않는다.
+저장된 대표 사진이 있으면 `PublicCourtSlotView.court.image.url`은 `/api/v1/partner-courts/{courtId}/image`, `sourceLabel`은 `운영자 제공 사진`이다. 이 URL은 비공개 객체 URL이 아니라 인증·온보딩을 확인하는 같은 출처의 읽기 API이며, 사진이 없으면 두 값은 `null`이고 클라이언트는 `fallback = TENNIS_COURT_ILLUSTRATION`을 표시한다. 사진 없음과 사진 자체는 공급 상태, 예약 가능 여부 또는 Rally On의 예약 보증을 의미하지 않는다.
 
 ### 22.0.1 운영자 대표 코트 사진 API
 
@@ -1720,7 +1720,7 @@ Match Chat MVP는 모든 Match의 유일한 연락 수단이다. 공개 출시�
 3. 프로필 수정 후 받은 신청에서 신청 당시 스냅샷 유지
 4. Application 응답에 이메일·연락처·인증 ID가 없는지 확인
 5. 직접 예약 코트가 제휴 코트 세션 문구로 표시되지 않는지 확인
-6. Partner Court Match가 `Tennis Mate에서 준비한 코트예요`와 모집자 참가 신청 안내를 반환하는지 확인
+6. Partner Court Match가 `Rally On에서 준비한 코트예요`와 모집자 참가 신청 안내를 반환하는지 확인
 7. PENDING·REJECTED 사용자가 채팅방을 받지 않는지 확인
 8. 모집자와 ACCEPTED 신청자만 채팅방을 받는지 확인
 9. 공급 철회 인앱 안내가 모집자·PENDING·ACCEPTED에게만 반환되고 운영자 원문 사유·연락처가 없는지 확인

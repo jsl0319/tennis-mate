@@ -1,4 +1,4 @@
-# Tennis Mate
+# Rally On
 
 테니스 초보자가 실력 차이에 대한 부담을 덜고, 자신과 비슷한 사람을 찾아 함께
 칠 약속을 잡도록 돕는 모바일 우선 웹앱입니다.
@@ -29,8 +29,8 @@ Core MVP에서는 카카오 로그인·온보딩, 추천 매칭 탐색·상세, 
 ### 2. 저장소 복제와 의존성 설치
 
 ```bash
-git clone https://github.com/jsl0319/tennis-mate.git
-cd tennis-mate
+git clone https://github.com/jsl0319/rally-on.git
+cd rally-on
 npm ci
 ```
 

@@ -533,7 +533,7 @@ describe("match service operation safeguards", () => {
     await expect(getMatchDetail(prisma, viewer, "match-id")).resolves.toMatchObject({
       court: {
         source: "PARTNER_COURT",
-        sourceLabel: "Tennis Mate에서 준비한 코트예요",
+        sourceLabel: "Rally On에서 준비한 코트예요",
         image: {
           url: "/api/v1/partner-courts/court-id/image",
           sourceLabel: "운영자 제공 사진",

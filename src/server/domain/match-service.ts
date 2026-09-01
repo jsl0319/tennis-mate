@@ -157,7 +157,7 @@ function getCourtView(match: Pick<MatchWithRelations, "id" | "courtSource" | "ex
       : null;
     return {
       source: match.courtSource,
-      sourceLabel: "Tennis Mate에서 준비한 코트예요",
+      sourceLabel: "Rally On에서 준비한 코트예요",
       participationNote: "참가 신청은 세션을 연 모집자에게 보내요.",
       name: court?.name ?? null,
       address: court?.address ?? null,

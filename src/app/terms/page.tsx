@@ -4,11 +4,11 @@ export default function TermsPage() {
   return (
     <LegalNoticePage
       title="서비스 이용약관"
-      summary="Tennis Mate는 테니스 초보자가 함께 칠 사람을 찾고 약속을 조율하도록 돕는 비공개 MVP 서비스예요."
+      summary="Rally On은 테니스 초보자가 함께 칠 사람을 찾고 약속을 조율하도록 돕는 비공개 MVP 서비스예요."
       sections={[
         {
           title: "서비스의 역할",
-          body: "Tennis Mate는 매칭 정보를 보여주고 신청·수락을 돕습니다. 이용자 사이의 약속, 실제 플레이, 안전과 분쟁을 대신 보증하거나 중재하지는 않습니다.",
+          body: "Rally On은 매칭 정보를 보여주고 신청·수락을 돕습니다. 이용자 사이의 약속, 실제 플레이, 안전과 분쟁을 대신 보증하거나 중재하지는 않습니다.",
         },
         {
           title: "코트와 비용",

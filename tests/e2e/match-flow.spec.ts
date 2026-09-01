@@ -128,7 +128,7 @@ test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·�
   const hostPage = await hostContext.newPage();
 
   await hostPage.goto(`/partner-sessions/${fixture.partnerSlotId}`);
-  await expect(hostPage.getByText("Tennis Mate에서 준비한 코트", { exact: true })).toBeVisible();
+  await expect(hostPage.getByText("Rally On에서 준비한 코트", { exact: true })).toBeVisible();
   await expect(hostPage.getByText("E2E 준비된 테니스장")).toBeVisible();
   await expect(hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" })).toBeVisible();
   await hostPage.getByRole("link", { name: "이 시간으로 코트 매칭 열기" }).click();
@@ -136,7 +136,7 @@ test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·�
   await hostPage.getByLabel("매칭 제목").fill(fixture.partnerMatchTitle);
   await hostPage.getByRole("button", { name: "이 시간으로 코트 매칭 열기" }).click();
   await expect(hostPage).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
-  await expect(hostPage.getByText("Tennis Mate에서 준비한 코트예요")).toBeVisible();
+  await expect(hostPage.getByText("Rally On에서 준비한 코트예요")).toBeVisible();
   const matchId = new URL(hostPage.url()).pathname.split("/").at(-1);
   if (!matchId) throw new Error("생성된 코트 매칭 ID를 확인하지 못했어요.");
 
@@ -145,7 +145,7 @@ test("공개된 코트 시간은 하나의 코트 매칭으로 열고 신청·�
   const applicantPage = await applicantContext.newPage();
   await applicantPage.goto(`/matches/${matchId}`);
   await expect(applicantPage.getByRole("heading", { name: fixture.partnerMatchTitle })).toBeVisible();
-  await expect(applicantPage.getByText("Tennis Mate에서 준비한 코트예요")).toBeVisible();
+  await expect(applicantPage.getByText("Rally On에서 준비한 코트예요")).toBeVisible();
   await applicantPage.getByRole("button", { name: "같이 치기" }).click();
   await applicantPage.getByRole("button", { name: "신청하기", exact: true }).click();
   await expect(applicantPage.getByRole("heading", { name: "신청을 보냈어요" })).toBeVisible();
