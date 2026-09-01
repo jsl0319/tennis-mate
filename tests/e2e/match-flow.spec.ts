@@ -53,9 +53,11 @@ test("참가 신청과 수락 뒤 채팅은 멤버에게만 열리고 제3자는
   await expect(hostPage.getByRole("button", { name: "코트를 예약했어요" })).toHaveCount(0);
   await expect(hostPage.getByRole("button", { name: "코트는 같이 정해요" })).toHaveCount(0);
   await expect(hostPage.getByRole("link", { name: /코트 매칭 둘러보기/ })).toHaveAttribute("href", "/partner-sessions");
+  await expect(hostPage.getByLabel("테니스장 검색")).toBeVisible();
   const startsOn = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString().slice(0, 10);
   await hostPage.getByLabel("날짜").fill(startsOn);
   await hostPage.getByLabel("시작 시간").fill("10:00");
+  await hostPage.getByLabel("종료 시간").fill("13:30");
   await hostPage.getByLabel("시·도 선택").selectOption("E2E-SEOUL");
   await hostPage.getByLabel("시·군·구 선택").selectOption("E2E-SEOUL-001");
   await hostPage.getByRole("button", { name: "모집 정보 입력" }).click();

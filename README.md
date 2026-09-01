@@ -173,6 +173,7 @@ docker compose stop
 | `AUTH_SECRET` | Auth.js 세션 서명 비밀값 |
 | `AUTH_KAKAO_ID` | 카카오 REST API 키 |
 | `AUTH_KAKAO_SECRET` | 카카오 Client Secret |
+| `KAKAO_REST_API_KEY` | 카카오맵 장소 검색용 서버 전용 REST API 키(선택). 기본적으로 `AUTH_KAKAO_ID`를 재사용하며, 다른 카카오 앱 키를 쓸 때만 설정 |
 | `CRON_SECRET` | 운영 매칭 상태 보정 Cron의 요청 인증 비밀값 |
 | `APP_BASE_URL` | 로컬 애플리케이션 기준 URL |
 | `E2E_DATABASE_URL` | Playwright 전용 PostgreSQL 연결 문자열. DB 이름에 `e2e` 필수 |

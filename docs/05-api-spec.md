@@ -727,7 +727,36 @@ Content-Type: multipart/form-data
 - 연결되지 않은 업로드는 24시간 뒤 정리한다. 업로드 경로·비공개 객체 URL·파일명은 응답하지 않는다.
 - 사진 내용에 인물 얼굴·연락처·예약번호·예약 확인서가 보이지 않도록 업로드 전에 안내한다. 이 첫 단계는 실행 파일 형식을 허용하지 않는 파일 형식·크기·시그니처 검사이며, 별도 유료 악성코드 검사 서비스는 활성화하지 않는다.
 
-### 11.1 매칭 등록
+### 11.1 외부 예약 코트 장소 검색
+
+```http
+GET /api/v1/court-place-search?q={query}
+```
+
+인증 및 온보딩: 필수
+
+`q`는 공백 제거 후 2~80자다. 서버는 기본적으로 로그인에 쓰는 `AUTH_KAKAO_ID` REST API 키(필요하면 `KAKAO_REST_API_KEY`로 별도 지정)를 사용해 카카오맵 키워드 장소 검색을 호출하고, 최대 5개 결과만 반환한다. REST API 키와 카카오 원본 응답(전화번호·좌표·장소 URL 포함)은 브라우저에 반환하거나 저장하지 않는다.
+
+응답 `200 OK`:
+
+```json
+{
+  "items": [
+    {
+      "name": "마포 테니스장",
+      "address": "서울특별시 마포구 ...",
+      "roadAddress": "서울특별시 마포구 ..."
+    }
+  ]
+}
+```
+
+- 검색 결과 선택은 매칭 생성 폼의 코트명·주소를 채우는 보조 수단일 뿐이며, 코트 예약·운영 여부를 검증하거나 저장하지 않는다. 사용자는 언제든 직접 수정할 수 있다.
+- 검색 결과가 없으면 빈 `items`를 반환한다.
+- 사용할 카카오 REST API 키가 설정되지 않았거나 카카오맵 조회가 실패하면 `503 COURT_PLACE_SEARCH_UNAVAILABLE`을 반환한다. 클라이언트는 직접 입력을 계속 제공한다.
+- 사용자별 API rate limit과 300 ms 클라이언트 입력 지연을 적용하고, 응답에는 `Cache-Control: private, no-store`를 설정한다.
+
+### 11.2 매칭 등록
 
 ```http
 POST /api/v1/matches
@@ -791,7 +820,7 @@ POST /api/v1/matches
 
 같은 모집자가 동일한 `clientRequestId`로 재요청하면 요청 내용이 같을 때 기존 Match를 `200 OK`로 반환한다. 내용이 다르면 `409 IDEMPOTENCY_KEY_REUSED`를 반환한다.
 
-### 11.2 내가 만든 매칭 목록
+### 11.3 내가 만든 매칭 목록
 
 ```http
 GET /api/v1/me/hosted-matches?status=OPEN&cursor=...&limit=20
@@ -818,7 +847,7 @@ GET /api/v1/me/hosted-matches?status=OPEN&cursor=...&limit=20
 
 각 그룹 안에서는 가까운 일정 우선이다.
 
-### 11.3 매칭 취소
+### 11.4 매칭 취소
 
 ```http
 POST /api/v1/matches/{matchId}/cancel
@@ -861,7 +890,7 @@ Core MVP에서 취소 사유를 필수로 받지 않는다. 서버는 한 트랜
 - `409 MATCH_STATE_CONFLICT`
 - `409 VERSION_CONFLICT`
 
-### 11.4 조기 모집 마감
+### 11.5 조기 모집 마감
 
 ```http
 POST /api/v1/matches/{matchId}/close
@@ -885,7 +914,7 @@ POST /api/v1/matches/{matchId}/close
 - 남은 PENDING 신청을 `CANCELLED`로 바꾸고 사용자에게 `모집이 마감됐어요`라고 표시한다.
 - CLOSED Match를 다시 OPEN으로 바꾸는 API는 제공하지 않는다.
 
-### 11.5 매칭 완료
+### 11.6 매칭 완료
 
 ```http
 POST /api/v1/matches/{matchId}/complete
@@ -905,7 +934,7 @@ POST /api/v1/matches/{matchId}/complete
 - 성공 시 `COMPLETED`, `completedAt`과 증가한 version을 반환한다.
 - OPEN·EXPIRED·CANCELLED 또는 일정 종료 전 요청은 `409 MATCH_NOT_COMPLETABLE`이다.
 
-### 11.6 매칭 수정·모집 재개
+### 11.7 매칭 수정·모집 재개
 
 공개 후 일정·코트 수정과 CLOSED Match의 모집 재개는 참가자에게 미치는 영향이 크므로 Core MVP에서 범용 `PATCH /matches/{id}` 또는 `/reopen` API를 만들지 않는다.
 

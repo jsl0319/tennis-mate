@@ -6,9 +6,9 @@ import {
   CalendarBlank,
   Camera,
   CheckCircle,
-  Clock,
   CurrencyKrw,
   MapPin,
+  MagnifyingGlass,
   Minus,
   Plus,
   TennisBall,
@@ -22,12 +22,13 @@ import { CourtMedia } from "./court-media";
 
 type Region = { code: string; name: string; shortName: string | null };
 type CourtImageDraft = { fileName: string; previewUrl: string; uploadId: string };
+type CourtPlaceSearchItem = { name: string; address: string; roadAddress: string | null };
 
 type MatchCreateForm = {
   clientRequestId: string;
   date: string;
-  time: string;
-  duration: number;
+  startTime: string;
+  endTime: string;
   cityCode: string;
   regionCode: string;
   courtName: string;
@@ -88,25 +89,22 @@ function getTodayDate() {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
-function getScheduleEnd(date: string, time: string, duration: number) {
-  if (!date || !time) return "";
-
-  const start = new Date(`${date}T${time}`);
-  if (Number.isNaN(start.getTime())) return "";
-
-  return new Date(start.getTime() + duration * 60_000).toTimeString().slice(0, 5);
-}
-
-function formatSchedule(date: string, time: string, duration: number) {
-  if (!date || !time) return "일시를 선택해 주세요";
-  const endTime = getScheduleEnd(date, time, duration);
+function formatSchedule(date: string, startTime: string, endTime: string) {
+  if (!date || !startTime || !endTime) return "일시를 선택해 주세요";
   const [year, month, day] = date.split("-");
 
-  return `${year}년 ${Number(month)}월 ${Number(day)}일 · ${time}~${endTime}`;
+  return `${year}년 ${Number(month)}월 ${Number(day)}일 · ${startTime}~${endTime}`;
 }
 
 function getLabel<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
   return items.find(([item]) => item === value)?.[1] ?? value;
+}
+
+function isCourtPlaceSearchItem(value: unknown): value is CourtPlaceSearchItem {
+  return typeof value === "object" && value !== null &&
+    "name" in value && typeof value.name === "string" &&
+    "address" in value && typeof value.address === "string" &&
+    "roadAddress" in value && (typeof value.roadAddress === "string" || value.roadAddress === null);
 }
 
 export function M4MatchCreate() {
@@ -119,11 +117,16 @@ export function M4MatchCreate() {
   const [courtImage, setCourtImage] = useState<CourtImageDraft | null>(null);
   const [courtImageError, setCourtImageError] = useState("");
   const [courtImageUploading, setCourtImageUploading] = useState(false);
+  const [courtSearchQuery, setCourtSearchQuery] = useState("");
+  const [courtSearchResults, setCourtSearchResults] = useState<CourtPlaceSearchItem[]>([]);
+  const [courtSearchError, setCourtSearchError] = useState("");
+  const [courtSearchLoading, setCourtSearchLoading] = useState(false);
+  const [selectedCourtPlace, setSelectedCourtPlace] = useState<CourtPlaceSearchItem | null>(null);
   const [form, setForm] = useState<MatchCreateForm>(() => ({
     clientRequestId: crypto.randomUUID(),
     date: "",
-    time: "",
-    duration: 120,
+    startTime: "",
+    endTime: "",
     cityCode: "",
     regionCode: "",
     courtName: "",
@@ -162,6 +165,40 @@ export function M4MatchCreate() {
   useEffect(() => () => {
     if (courtImage) URL.revokeObjectURL(courtImage.previewUrl);
   }, [courtImage]);
+
+  useEffect(() => {
+    const query = courtSearchQuery.trim();
+    if (query.length < 2) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setCourtSearchLoading(true);
+        setCourtSearchError("");
+        try {
+          const response = await fetch(`/api/v1/court-place-search?q=${encodeURIComponent(query)}`, { cache: "no-store", signal: controller.signal });
+          const body: unknown = await response.json();
+          if (!response.ok) throw new Error(apiMessage(body));
+          if (typeof body !== "object" || body === null || !("items" in body) || !Array.isArray(body.items)) {
+            throw new Error("코트 검색 결과를 다시 불러와 주세요.");
+          }
+          if (controller.signal.aborted) return;
+          setCourtSearchResults(body.items.filter(isCourtPlaceSearchItem));
+        } catch (caught) {
+          if (controller.signal.aborted) return;
+          setCourtSearchResults([]);
+          setCourtSearchError(caught instanceof Error ? caught.message : "코트를 검색하지 못했어요. 직접 입력해 주세요.");
+        } finally {
+          if (!controller.signal.aborted) setCourtSearchLoading(false);
+        }
+      })();
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [courtSearchQuery]);
 
   const set: FormSetter = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const expectedPeople = form.recruitCount + 1;
@@ -202,6 +239,22 @@ export function M4MatchCreate() {
     setForm((current) => ({ ...current, recruitCount: Math.max(1, current.recruitCount + change) }));
   };
 
+  const selectCourtPlace = (place: CourtPlaceSearchItem) => {
+    set("courtName", place.name);
+    set("address", place.address);
+    setSelectedCourtPlace(place);
+    setCourtSearchQuery("");
+    setCourtSearchResults([]);
+    setCourtSearchError("");
+  };
+
+  const updateCourtSearchQuery = (value: string) => {
+    setCourtSearchQuery(value);
+    setCourtSearchResults([]);
+    setCourtSearchError("");
+    setCourtSearchLoading(false);
+  };
+
   const uploadCourtImage = async (file: File | null) => {
     if (!file) return;
     setCourtImageError("");
@@ -239,8 +292,12 @@ export function M4MatchCreate() {
 
   const next = () => {
     setError("");
-    if (step === 1 && (!form.date || !form.time || !form.regionCode)) {
-      setError("날짜, 시작 시간, 활동 지역을 모두 선택해 주세요.");
+    if (step === 1 && (!form.date || !form.startTime || !form.endTime || !form.regionCode)) {
+      setError("날짜, 시작 시간, 종료 시간, 활동 지역을 모두 선택해 주세요.");
+      return;
+    }
+    if (step === 1 && form.endTime <= form.startTime) {
+      setError("종료 시간은 시작 시간보다 늦어야 해요.");
       return;
     }
     if (step === 1 && (!form.courtName.trim() || !form.address.trim())) {
@@ -267,8 +324,8 @@ export function M4MatchCreate() {
     setSaving(true);
     setError("");
     try {
-      const startsAt = new Date(`${form.date}T${form.time}`).toISOString();
-      const endsAt = new Date(new Date(startsAt).getTime() + form.duration * 60_000).toISOString();
+      const startsAt = new Date(`${form.date}T${form.startTime}`).toISOString();
+      const endsAt = new Date(`${form.date}T${form.endTime}`).toISOString();
       const response = await fetch("/api/v1/matches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -341,7 +398,16 @@ export function M4MatchCreate() {
               districts={districts}
               form={form}
               onCourtImageChange={(file) => void uploadCourtImage(file)}
+              onCourtNameChange={(value) => { set("courtName", value); setSelectedCourtPlace(null); }}
+              onCourtAddressChange={(value) => { set("address", value); setSelectedCourtPlace(null); }}
+              onCourtPlaceQueryChange={updateCourtSearchQuery}
+              onCourtPlaceSelect={selectCourtPlace}
               onSelectCity={(code) => void selectCity(code)}
+              courtSearchError={courtSearchError}
+              courtSearchLoading={courtSearchLoading}
+              courtSearchQuery={courtSearchQuery}
+              courtSearchResults={courtSearchResults}
+              selectedCourtPlace={selectedCourtPlace}
               set={set}
             />
           ) : null}
@@ -377,7 +443,16 @@ function StepOne({
   districts,
   form,
   onCourtImageChange,
+  onCourtAddressChange,
+  onCourtNameChange,
+  onCourtPlaceQueryChange,
+  onCourtPlaceSelect,
   onSelectCity,
+  courtSearchError,
+  courtSearchLoading,
+  courtSearchQuery,
+  courtSearchResults,
+  selectedCourtPlace,
   set,
 }: {
   cities: Region[];
@@ -387,11 +462,18 @@ function StepOne({
   districts: Region[];
   form: MatchCreateForm;
   onCourtImageChange: (file: File | null) => void;
+  onCourtAddressChange: (value: string) => void;
+  onCourtNameChange: (value: string) => void;
+  onCourtPlaceQueryChange: (value: string) => void;
+  onCourtPlaceSelect: (place: CourtPlaceSearchItem) => void;
   onSelectCity: (code: string) => void;
+  courtSearchError: string;
+  courtSearchLoading: boolean;
+  courtSearchQuery: string;
+  courtSearchResults: CourtPlaceSearchItem[];
+  selectedCourtPlace: CourtPlaceSearchItem | null;
   set: FormSetter;
 }) {
-  const scheduleEnd = getScheduleEnd(form.date, form.time, form.duration);
-
   return (
     <div>
       <StepIntro eyebrow="외부 예약 코트" title={<>예약한 코트에서<br />함께 칠 사람을 찾아요</>} description="코트 정보와 시간을 먼저 알려 주세요. 같이 칠 분이 일정을 쉽게 확인할 수 있어요." />
@@ -411,7 +493,7 @@ function StepOne({
         </div>
       </section>
 
-      <FormPanel description="날짜와 시간을 선택하면 종료 시간도 함께 보여드려요." icon={<CalendarBlank aria-hidden size={23} weight="fill" />} title="언제 칠까요?">
+      <FormPanel description="예약한 시작·종료 시간을 그대로 선택해 주세요. 2시간을 넘는 일정도 등록할 수 있어요." icon={<CalendarBlank aria-hidden size={23} weight="fill" />} title="언제 칠까요?">
         <div className="grid gap-4 sm:grid-cols-2">
           <label>
             <FieldTitle required>매칭 날짜</FieldTitle>
@@ -419,22 +501,14 @@ function StepOne({
           </label>
           <label>
             <FieldTitle required>시작 시간</FieldTitle>
-            <input className={controlClassName} onChange={(event) => set("time", event.target.value)} type="time" value={form.time} />
+            <input className={controlClassName} onChange={(event) => set("startTime", event.target.value)} type="time" value={form.startTime} />
+          </label>
+          <label>
+            <FieldTitle required>종료 시간</FieldTitle>
+            <input className={controlClassName} min={form.startTime || undefined} onChange={(event) => set("endTime", event.target.value)} type="time" value={form.endTime} />
           </label>
         </div>
-        <label className="mt-4 block">
-          <FieldTitle required>이용 시간</FieldTitle>
-          <select className={controlClassName} onChange={(event) => set("duration", Number(event.target.value))} value={form.duration}>
-            <option value={60}>1시간</option>
-            <option value={90}>1시간 30분</option>
-            <option value={120}>2시간</option>
-          </select>
-        </label>
-        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm">
-          <Clock aria-hidden className="shrink-0 text-[var(--tm-action-primary)]" size={20} weight="fill" />
-          <span className="text-[var(--tm-text-secondary)]">예상 종료 시간</span>
-          <strong className="ml-auto">{scheduleEnd || "시작 시간을 선택해 주세요"}</strong>
-        </div>
+        <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">종료 시간은 시작 시간보다 늦게 선택해 주세요. 자정을 넘는 일정은 현재 등록할 수 없어요.</p>
       </FormPanel>
 
       <FormPanel description="참가자가 이동 거리를 가늠할 수 있도록 활동 지역을 선택해 주세요." icon={<MapPin aria-hidden size={23} weight="fill" />} title="어디에서 칠까요?">
@@ -454,13 +528,23 @@ function StepOne({
             </select>
           </label>
         </div>
+        <CourtPlaceSearch
+          error={courtSearchError}
+          isLoading={courtSearchLoading}
+          onQueryChange={onCourtPlaceQueryChange}
+          onSelect={onCourtPlaceSelect}
+          query={courtSearchQuery}
+          results={courtSearchResults}
+          selectedPlace={selectedCourtPlace}
+        />
+        <p className="mt-5 text-sm font-bold text-[var(--tm-text-secondary)]">또는 직접 입력</p>
         <label className="mt-4 block">
           <FieldTitle required>코트장 이름</FieldTitle>
-          <input className={controlClassName} maxLength={100} onChange={(event) => set("courtName", event.target.value)} placeholder="예: 한강 테니스장" value={form.courtName} />
+          <input className={controlClassName} maxLength={100} onChange={(event) => onCourtNameChange(event.target.value)} placeholder="예: 한강 테니스장" value={form.courtName} />
         </label>
         <label className="mt-4 block">
           <FieldTitle required>코트장 주소</FieldTitle>
-          <input className={controlClassName} maxLength={255} onChange={(event) => set("address", event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} />
+          <input className={controlClassName} maxLength={255} onChange={(event) => onCourtAddressChange(event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} />
         </label>
         <label className="mt-4 block">
           <FieldTitle>코트 번호 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FieldTitle>
@@ -471,6 +555,48 @@ function StepOne({
 
       <CourtImageUpload courtImage={courtImage} error={courtImageError} isUploading={courtImageUploading} onChange={onCourtImageChange} />
     </div>
+  );
+}
+
+function CourtPlaceSearch({ error, isLoading, onQueryChange, onSelect, query, results, selectedPlace }: { error: string; isLoading: boolean; onQueryChange: (value: string) => void; onSelect: (place: CourtPlaceSearchItem) => void; query: string; results: CourtPlaceSearchItem[]; selectedPlace: CourtPlaceSearchItem | null }) {
+  const isQueryReady = query.trim().length >= 2;
+
+  return (
+    <section className="mt-5 rounded-2xl border border-[var(--tm-border-default)] bg-[var(--tm-bg-subtle)] p-4">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-[var(--tm-action-primary)]">
+          <MagnifyingGlass aria-hidden size={20} weight="bold" />
+        </span>
+        <div>
+          <h3 className="text-sm font-bold">테니스장 검색 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></h3>
+          <p className="mt-1 text-xs leading-5 text-[var(--tm-text-secondary)]">이름이나 동네를 두 글자 이상 입력하면 실제 장소를 찾아드려요.</p>
+        </div>
+      </div>
+
+      <label className="mt-4 block">
+        <span className="sr-only">테니스장 검색</span>
+        <div className="relative">
+          <MagnifyingGlass aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--tm-text-secondary)]" size={19} />
+          <input aria-label="테니스장 검색" className="h-12 w-full rounded-xl border border-[var(--tm-border-default)] bg-white py-2 pl-11 pr-4 text-sm outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-white" maxLength={80} onChange={(event) => onQueryChange(event.target.value)} placeholder="예: 마포 테니스장, 잠실" value={query} />
+        </div>
+      </label>
+
+      {isLoading ? <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">테니스장을 찾고 있어요…</p> : null}
+      {error ? <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
+      {isQueryReady && !isLoading && !error && results.length === 0 ? <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-[var(--tm-text-secondary)]">찾는 테니스장이 없나요? 아래에 이름과 주소를 직접 입력해 주세요.</p> : null}
+      {results.length ? (
+        <div aria-label="테니스장 검색 결과" className="mt-3 grid gap-2">
+          {results.map((place, index) => (
+            <button aria-label={`${place.name} 선택`} className="rounded-xl bg-white px-3 py-3 text-left shadow-sm ring-1 ring-inset ring-[var(--tm-border-default)] transition hover:ring-[var(--tm-action-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]" key={`${place.name}-${place.address}-${index}`} onClick={() => onSelect(place)} type="button">
+              <strong className="block text-sm">{place.name}</strong>
+              <span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{place.roadAddress ?? place.address}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {selectedPlace ? <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-[var(--tm-action-primary)]"><CheckCircle aria-hidden className="mr-1 inline-block align-text-bottom" size={15} weight="fill" />검색한 장소 정보를 입력했어요. 필요하면 직접 수정할 수 있어요.</p> : null}
+      <p className="mt-3 text-[11px] leading-5 text-[var(--tm-text-secondary)]">장소 정보 제공: Kakao · 검색 결과는 코트 예약 여부나 운영 상태를 보증하지 않아요.</p>
+    </section>
   );
 }
 
@@ -594,7 +720,7 @@ function StepFour({ courtImage, expectedPeople, fee, form }: { courtImage: Court
           <p className="inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">모집자가 코트를 예약했어요</p>
           <h2 className="mt-3 text-xl font-bold leading-7">{form.title}</h2>
           <dl className="mt-5 grid gap-4">
-            <PreviewItem icon={<CalendarBlank aria-hidden size={19} weight="fill" />} label="일시" value={formatSchedule(form.date, form.time, form.duration)} />
+            <PreviewItem icon={<CalendarBlank aria-hidden size={19} weight="fill" />} label="일시" value={formatSchedule(form.date, form.startTime, form.endTime)} />
             <PreviewItem icon={<MapPin aria-hidden size={19} weight="fill" />} label="코트" value={regionText || "코트 정보를 입력해 주세요"} />
             <PreviewItem icon={<UsersThree aria-hidden size={19} weight="fill" />} label="모집" value={`추가 ${form.recruitCount}명 · 총 ${expectedPeople}명 예정`} />
             <PreviewItem icon={<CurrencyKrw aria-hidden size={19} weight="bold" />} label="예상 1인 비용" value={`약 ${fee.toLocaleString("ko-KR")}원`} />
