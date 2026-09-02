@@ -37,7 +37,11 @@
     "pg": "^8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@emotion/server": "^11.11.0",
+    "@wanteddev/wds": "3.12.0",
+    "@wanteddev/wds-icon": "3.12.0",
+    "@wanteddev/wds-nextjs": "3.12.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
