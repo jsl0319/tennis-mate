@@ -8,7 +8,7 @@
 | 문서 상태 | Draft v0.1 (조사만, 코드 변경 없음) |
 | 기준 커밋 | `53399ad` (feat: set up Montage(WDS) design system integration foundation) |
 | 작성 목적 | 화면 단위 WDS 컴포넌트 교체를 시작하기 전, 현재 UI 구현 방식과 WDS 컴포넌트 카탈로그를 매핑해 우선순위·리스크를 파악 |
-| 다음 단계 | 공용 컴포넌트 3개 + CTA 버튼 80곳 + 인라인 모달 6곳 교체 완료(9·10·11번 참고) → "6. 제안 순서"의 5번(폼이 몰린 화면의 입력 컴포넌트)부터 착수 |
+| 다음 단계 | 공용 컴포넌트 3개 + CTA 버튼 80곳 + 인라인 모달 6곳 + 폼 3개 화면 입력 컴포넌트 교체 완료(9·10·11·12번 참고) → "6. 제안 순서"의 항목 소진, 12번 말미의 남은 과제 중 결정 필요 |
 
 foundation(Provider, 전역 CSS, 패키지 설치)만 구성된 상태이며, 화면·컴포넌트는 아직 하나도 WDS로 교체되지 않았다. 이 문서는 그 착수 전 조사 결과다.
 
@@ -168,3 +168,28 @@ Rally On은 별도 UI 라이브러리(Radix, shadcn 등) 없이 **Tailwind CSS v
 - `npm run dev`는 이번에도 이 작업 환경(디바이스 브릿지 셸)의 네트워크 제약으로 기동 확인을 하지 못했다 — 특히 Modal은 애니메이션·포커스 트랩·반응형 동작이 코드만으로 완전히 검증되지 않으므로, 로컬에서 실제 화면을 열어 확인하는 게 이번 단계에서는 더 중요하다.
 
 다음 단계는 "6. 제안 순서"의 5번(폼이 몰려 있는 화면인 `m4-match-create.tsx`, `m2-onboarding-flow.tsx`, `operator-time-management.tsx`의 `<input>`/`<textarea>`/`<select>` 등을 WDS 폼 컴포넌트로 교체)이다.
+
+## 12. 진행: 폼이 몰린 화면 3곳의 입력 컴포넌트 교체 완료 (2026-09-03)
+
+"6. 제안 순서"의 5번을 완료했다. `m4-match-create.tsx`, `m2-onboarding-flow.tsx`, `operator-time-management.tsx`의 `<input>`/`<textarea>`/`<select>`/체크박스를 WDS 입력 컴포넌트로 교체했다. (나머지 파일들에 흩어져 있는 소수의 입력 요소는 이번 범위에 포함하지 않았다 — 필요하면 별도로 진행.)
+
+**구조 매핑**
+
+- `FormField`(세로 flex 컨테이너, 컨텍스트 제공) > `FormLabel`(라벨, `required` prop으로 빨간 `*` 표시) > `FormControl`(Radix Slot으로 자식에 `id`/`aria-describedby`/`aria-labelledby` 자동 연결) > 실제 입력 컴포넌트, 순서로 감쌌다. `FormLabel`은 `FormField` 컨텍스트 밖에서는 쓸 수 없다(내부적으로 Radix Context를 사용해 벗어나면 에러) — 그래서 단일 필드에 1:1로 대응하지 않는 그룹 헤딩(예: m4의 "테니스장"/"매칭 시간"/"활동 지역")은 계속 화면 자체의 `FieldTitle` 컴포넌트를 사용했다.
+- `<input type="text">` 계열은 `TextField`로, `<textarea>`는 `TextArea`로 교체 — 둘 다 실제 `<input>`/`<textarea>` DOM 엘리먼트를 렌더링하므로 `value`/`onChange`/`maxLength`/`disabled`/`type`/`min`/`inputMode` 같은 표준 속성을 그대로 넘길 수 있다.
+- 돋보기 아이콘이 붙은 검색용 입력(온보딩 지역 검색, 매칭 생성의 테니스장 검색, 운영자 시·군·구 검색)은 `SearchField`로 교체했다 — 검색 아이콘이 내장돼 있어 기존에 손으로 넣던 `MagnifyingGlass` 아이콘과 절대 위치 스타일을 제거할 수 있었고, `onReset`으로 지우기 동작도 함께 얻었다.
+- 시·도/시·군·구 `<select>` 2곳은 WDS `Select`+`Option`으로 교체했다. WDS `Select`는 네이티브 select가 아니라 팝오버 기반 커스텀 컴포넌트라 `<option>` 대신 `<Option value="...">` children으로 목록을 구성하고, `onChange`가 이벤트가 아니라 선택된 문자열 값을 직접 준다. 원래 네이티브 select에 있던 빈 문자열 placeholder `<option>`(다시 선택해서 초기화하는 용도)은 WDS Select 목록엔 없다 — `placeholder` prop은 값이 비어 있을 때 트리거에 보여주는 문구일 뿐 목록 항목이 아니어서, 한번 선택한 뒤 드롭다운에서 직접 "선택 안 함"으로 되돌리는 경로는 사라졌다(다른 시·도를 다시 고르는 것은 그대로 가능).
+- 체크박스(온보딩의 "가까운 지역도 괜찮아요")는 WDS `Checkbox`로 교체했다 — `checked`/`onCheckedChange`(불리언 값을 직접 줌) 방식이라 기존 `onChange`+`event.target.checked` 패턴에서 바뀌었다.
+- 전체 코트 비용 입력의 "원" 단위 표시는 기존에 입력 위에 절대 위치로 겹쳐 그리던 `<span>`을 `TextField`의 `trailingContent={<TextFieldContent variant="text">원</TextFieldContent>}`로 교체했다.
+- `m4-match-create.tsx`에서 모든 입력에 공통으로 쓰이던 `controlClassName` 문자열 상수는 사용처가 전부 교체되어 삭제했다.
+
+**네이티브로 남긴 것**
+
+- 사진 업로드용 `<input type="file">`(sr-only + 커스텀 트리거 라벨) — WDS에 대응하는 파일 선택 컴포넌트가 없어 그대로 유지.
+- 라디오 버튼(채팅 신고 사유), 이미 앞선 단계에서 "선택 카드/토글 chip" 패턴으로 판단해 네이티브로 남긴 아이템들(코트 검색 결과 리스트, 옵션 선택 카드 등)은 이번에도 손대지 않았다.
+
+**검증**
+
+- 3개 파일 각각 `npm run typecheck`, `npm run lint` 통과 후 개별 커밋. `npm run dev`는 이 작업 환경(디바이스 브릿지 셸)의 네트워크 제약으로 여전히 기동 확인을 하지 못했다 — 특히 `Select`(팝오버 목록)와 `SearchField`(reset 버튼)는 실제 클릭 상호작용을 코드만으로 완전히 검증할 수 없으므로 로컬에서 직접 확인이 필요하다.
+
+다음 단계는 "6. 제안 순서"에 남은 항목이 없다 — 이 문서의 4번 섹션에서 언급했던 나머지 화면들(chip/badge, snackbar/toast, date-picker/time-picker, avatar 등 아직 활용하지 않은 WDS 컴포넌트)을 어디에 도입할지, 그리고 이번에 범위 밖으로 남긴 소수의 입력 요소(라디오, 나머지 파일들의 개별 input/textarea)를 이어서 정리할지 결정이 필요하다.
