@@ -1,5 +1,6 @@
 "use client";
 
+import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
@@ -165,7 +166,21 @@ function HostedContactButton({ contact }: { contact: HostedMatch["contact"] }) {
 
 function LifecycleConfirm({ action, busy, onCancel, onConfirm }: { action: "close" | "cancel" | "complete"; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
   const copy = action === "complete" ? { title: "플레이를 완료할까요?", body: "완료하면 수락된 참가자에게도 ‘완료’로 표시돼요.", confirm: "네, 완료할게요" } : action === "close" ? { title: "모집을 마감할까요?", body: "남은 대기 신청은 ‘모집이 마감됐어요’로 표시돼요.", confirm: "네, 마감할게요" } : { title: "매칭을 취소할까요?", body: "수락된 참가자와 대기 신청자에게 취소로 표시돼요.", confirm: "네, 취소할게요" };
-  return <div className="fixed inset-0 z-20 flex items-end bg-black/35 px-5 pb-[max(20px,env(safe-area-inset-bottom))]" role="presentation"><section aria-label={copy.title} aria-modal="true" className="mx-auto w-full max-w-[560px] rounded-[28px] bg-[var(--tm-bg-page)] p-5" role="dialog"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">한 번만 확인해요</p><h2 className="mt-2 text-xl font-bold">{copy.title}</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{copy.body}</p><div className="mt-6 space-y-3"><Button disabled={busy} fullWidth loading={busy} onClick={onConfirm} size="large">{copy.confirm}</Button><Button disabled={busy} fullWidth onClick={onCancel} size="large" variant="neutral">돌아가기</Button></div></section></div>;
+  return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}>
+    <ModalContainer variant="bottom">
+      <ModalContent>
+        <ModalContentItem>
+          <ModalSummary>한 번만 확인해요</ModalSummary>
+          <ModalHeading>{copy.title}</ModalHeading>
+          <ModalDescription>{copy.body}</ModalDescription>
+        </ModalContentItem>
+      </ModalContent>
+      <ActionArea variant="strong">
+        <ActionAreaButton disabled={busy} loading={busy} onClick={onConfirm} variant="main">{copy.confirm}</ActionAreaButton>
+        <ActionAreaButton buttonColor="assistive" disabled={busy} onClick={onCancel} variant="alternative">돌아가기</ActionAreaButton>
+      </ActionArea>
+    </ModalContainer>
+  </Modal>;
 }
 
 export function M6ReceivedMatch({ params }: { params: Promise<{ matchId: string }> }) {
@@ -225,7 +240,21 @@ function ApplicantReviewContent({ application, data, decisionError, onDecision }
 function DecisionConfirm({ application, decision, error, submitting, remainingSpots, onCancel, onConfirm }: { application: ReceivedApplication | null; decision: "ACCEPT" | "REJECT"; error: string; submitting: boolean; remainingSpots: number; onCancel: () => void; onConfirm: () => void }) {
   if (!application) return null;
   const accepting = decision === "ACCEPT";
-  return <div className="fixed inset-0 z-10 flex items-end bg-black/35" onMouseDown={onCancel} role="presentation"><section aria-modal="true" className="w-full rounded-t-[28px] bg-[var(--tm-bg-page)] px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-3" onMouseDown={(event) => event.stopPropagation()} role="dialog"><div className="mx-auto h-1.5 w-10 rounded-full bg-[var(--tm-border-default)]" /><div className="mx-auto max-w-[560px]"><h2 className="mt-6 text-xl font-bold">{accepting ? `${application.applicant.nickname}님과 함께 치기로 할까요?` : "이번 신청을 정중하게 마무리할까요?"}</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{accepting ? `수락하면 남은 자리가 ${Math.max(remainingSpots - 1, 0)}자리예요.${remainingSpots === 1 ? " 마지막 자리라면 다른 대기 신청은 자동으로 마감돼요." : ""}` : "상대방에게는 ‘이번에는 함께하기 어려워요’라고 표시돼요."}</p>{error ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}<div className="mt-6 grid grid-cols-2 gap-3"><Button disabled={submitting} fullWidth onClick={onCancel} size="large" variant="neutral">취소</Button><Button disabled={submitting} fullWidth loading={submitting} onClick={onConfirm} size="large">{accepting ? "네, 함께 칠게요" : "이번에는 어려워요"}</Button></div></div></section></div>;
+  return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}>
+    <ModalContainer variant="bottom">
+      <ModalContent>
+        <ModalContentItem>
+          <ModalHeading>{accepting ? `${application.applicant.nickname}님과 함께 치기로 할까요?` : "이번 신청을 정중하게 마무리할까요?"}</ModalHeading>
+          <ModalDescription>{accepting ? `수락하면 남은 자리가 ${Math.max(remainingSpots - 1, 0)}자리예요.${remainingSpots === 1 ? " 마지막 자리라면 다른 대기 신청은 자동으로 마감돼요." : ""}` : "상대방에게는 ‘이번에는 함께하기 어려워요’라고 표시돼요."}</ModalDescription>
+          {error ? <p className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
+        </ModalContentItem>
+      </ModalContent>
+      <ActionArea variant="strong">
+        <ActionAreaButton disabled={submitting} loading={submitting} onClick={onConfirm} variant="main">{accepting ? "네, 함께 칠게요" : "이번에는 어려워요"}</ActionAreaButton>
+        <ActionAreaButton buttonColor="assistive" disabled={submitting} onClick={onCancel} variant="alternative">취소</ActionAreaButton>
+      </ActionArea>
+    </ModalContainer>
+  </Modal>;
 }
 
 function DecisionSuccess({ matchId, result }: { matchId: string; result: { type: "ACCEPT" | "REJECT"; remainingSpots?: number; isFull?: boolean } }) {
