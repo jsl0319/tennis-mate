@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { BackButton } from "@/components/navigation/back-button";
+import { Button } from "@/components/ui/button";
 import { CourtMedia } from "@/features/matches/court-media";
 
 import { apiMessage, formatPartnerSchedule, type PublicCourtSlot } from "./partner-session";
@@ -97,7 +98,7 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     }
   };
 
-  if (!slot) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center text-[var(--tm-text-primary)]">{loadError ? <div><p className="text-lg font-bold">이 시간으로는 세션을 열 수 없어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{loadError}</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-[var(--tm-action-primary)] px-4 font-semibold text-white" href="/partner-sessions">다른 시간 보기</Link></div> : <CourtRallyLoader label="선택한 코트 시간을 확인하고 있어요." />}</main>;
+  if (!slot) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center text-[var(--tm-text-primary)]">{loadError ? <div><p className="text-lg font-bold">이 시간으로는 세션을 열 수 없어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{loadError}</p><Button as={Link} className="mt-5" href="/partner-sessions" size="medium">다른 시간 보기</Button></div> : <CourtRallyLoader label="선택한 코트 시간을 확인하고 있어요." />}</main>;
 
   const estimatedFee = Math.ceil(slot.totalCourtFeeKrw / (form.recruitCount + 1));
   const maxRecruitCount = Math.max(slot.maxParticipantCount - 1, 1);
@@ -113,7 +114,7 @@ export function PartnerSessionCreate({ slotId }: { slotId: string }) {
     <FormFields><label>소개 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span><textarea maxLength={300} onChange={(event) => update("introduction", event.target.value)} value={form.introduction} /></label><p className="rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">수락된 참가자와 서비스 내 채팅에서 당일 준비를 조율해요.</p></FormFields>
     <section className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] p-4 text-sm leading-6"><p className="font-semibold">예상 1인 비용 약 {estimatedFee.toLocaleString("ko-KR")}원</p><p className="mt-1 text-[var(--tm-text-secondary)]">모집자를 포함한 예상 {form.recruitCount + 1}명 기준이에요. Rally On에서 결제하지 않아요.</p></section>
     {submitError ? <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]">{submitError}</p> : null}
-    <button className="mt-6 min-h-[52px] w-full rounded-2xl bg-[var(--tm-action-primary)] font-semibold text-white shadow-[0_8px_20px_rgba(49,94,158,0.18)] disabled:opacity-50" disabled={saving} onClick={() => void submit()} type="button">{saving ? "코트 매칭 여는 중…" : "이 시간으로 코트 매칭 열기"}</button>
+    <Button className="mt-6" disabled={saving} fullWidth loading={saving} onClick={() => void submit()}>이 시간으로 코트 매칭 열기</Button>
   </section></main>;
 }
 
