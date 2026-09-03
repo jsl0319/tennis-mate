@@ -19,7 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { ActionArea, ActionAreaButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, Option, SearchField, Select, TextArea, TextField, TextFieldContent } from "@wanteddev/wds";
 
 import { Button } from "@/components/ui/button";
 
@@ -63,8 +63,6 @@ const preferences = [
   ["SIMILAR_LEVEL", "비슷한 수준이면 좋아요", "비슷한 속도로 연습하고 싶어요"],
   ["GAME_CAPABLE", "게임 가능한 분을 찾아요", "기본 게임 진행이 가능한 분과 쳐요"],
 ] as const;
-
-const controlClassName = "mt-2 h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-base text-[var(--tm-text-primary)] outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)]";
 
 function apiMessage(body: unknown) {
   if (
@@ -516,35 +514,39 @@ function StepOne({
           <FieldTitle required>테니스장</FieldTitle>
           <CourtPlaceTrigger address={form.address} courtName={form.courtName} onClick={onCourtSearchOpen} />
         </label>
-        <label className="mt-6 block">
-          <FieldTitle required>매칭 날짜</FieldTitle>
-          <input className={controlClassName} min={getTodayDate()} onChange={(event) => set("date", event.target.value)} type="date" value={form.date} />
-        </label>
+        <FormField className="mt-6">
+          <FormLabel required>매칭 날짜</FormLabel>
+          <FormControl>
+            <TextField min={getTodayDate()} onChange={(event) => set("date", event.target.value)} type="date" value={form.date} />
+          </FormControl>
+        </FormField>
         <div className="mt-6">
           <FieldTitle required>매칭 시간</FieldTitle>
           <div className="mt-2 grid grid-cols-2 gap-3">
-            <label>
-              <span className="mb-2 block text-sm font-semibold text-[var(--tm-text-secondary)]">시작 시간</span>
-              <input aria-label="시작 시간" className="h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-3 text-base outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)]" onChange={(event) => set("startTime", event.target.value)} type="time" value={form.startTime} />
-            </label>
-            <label>
-              <span className="mb-2 block text-sm font-semibold text-[var(--tm-text-secondary)]">종료 시간</span>
-              <input aria-label="종료 시간" className="h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-3 text-base outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)]" min={form.startTime || undefined} onChange={(event) => set("endTime", event.target.value)} type="time" value={form.endTime} />
-            </label>
+            <FormField>
+              <FormLabel>시작 시간</FormLabel>
+              <FormControl>
+                <TextField onChange={(event) => set("startTime", event.target.value)} type="time" value={form.startTime} />
+              </FormControl>
+            </FormField>
+            <FormField>
+              <FormLabel>종료 시간</FormLabel>
+              <FormControl>
+                <TextField min={form.startTime || undefined} onChange={(event) => set("endTime", event.target.value)} type="time" value={form.endTime} />
+              </FormControl>
+            </FormField>
           </div>
           <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">2시간을 넘는 일정도 등록할 수 있어요. 자정을 넘는 일정은 현재 등록할 수 없어요.</p>
         </div>
         <div className="mt-6 border-t border-[var(--tm-border-subtle)] pt-5">
           <FieldTitle required>활동 지역</FieldTitle>
           <div className="mt-2 grid grid-cols-2 gap-3">
-            <select aria-label="시·도 선택" className="h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-3 text-sm outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)]" onChange={(event) => onSelectCity(event.target.value)} value={form.cityCode}>
-              <option value="">시·도 선택</option>
-              {cities.map((city) => <option key={city.code} value={city.code}>{city.shortName ?? city.name}</option>)}
-            </select>
-            <select aria-label="시·군·구 선택" className="h-13 w-full rounded-2xl border border-[var(--tm-border-default)] bg-white px-3 text-sm outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)] disabled:bg-[var(--tm-bg-subtle)]" disabled={!form.cityCode} onChange={(event) => set("regionCode", event.target.value)} value={form.regionCode}>
-              <option value="">시·군·구 선택</option>
-              {districts.map((district) => <option key={district.code} value={district.code}>{district.name}</option>)}
-            </select>
+            <Select aria-label="시·도 선택" onChange={onSelectCity} placeholder="시·도 선택" value={form.cityCode}>
+              {cities.map((city) => <Option key={city.code} value={city.code}>{city.shortName ?? city.name}</Option>)}
+            </Select>
+            <Select aria-label="시·군·구 선택" disabled={!form.cityCode} onChange={(value) => set("regionCode", value)} placeholder="시·군·구 선택" value={form.regionCode}>
+              {districts.map((district) => <Option key={district.code} value={district.code}>{district.name}</Option>)}
+            </Select>
           </div>
         </div>
       </FormPanel>
@@ -611,14 +613,14 @@ function CourtPlaceDialog({ error, form, isLoading, isManualEntry, isOpen, onAdd
 
           {isManualEntry ? (
             <ModalContentItem>
-              <label className="block"><FieldTitle required>코트장 이름</FieldTitle><input autoFocus className={controlClassName} maxLength={100} onChange={(event) => onNameChange(event.target.value)} placeholder="예: 한강 테니스장" value={form.courtName} /></label>
-              <label className="mt-5 block"><FieldTitle required>코트장 주소</FieldTitle><input className={controlClassName} maxLength={255} onChange={(event) => onAddressChange(event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} /></label>
-              <label className="mt-5 block"><FieldTitle>코트 번호 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FieldTitle><input className={controlClassName} maxLength={50} onChange={(event) => set("courtNumber", event.target.value)} placeholder="예: 3번 코트" value={form.courtNumber} /></label>
+              <FormField><FormLabel required>코트장 이름</FormLabel><FormControl><TextField autoFocus maxLength={100} onChange={(event) => onNameChange(event.target.value)} placeholder="예: 한강 테니스장" value={form.courtName} /></FormControl></FormField>
+              <FormField className="mt-5"><FormLabel required>코트장 주소</FormLabel><FormControl><TextField maxLength={255} onChange={(event) => onAddressChange(event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} /></FormControl></FormField>
+              <FormField className="mt-5"><FormLabel>코트 번호 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FormLabel><FormControl><TextField maxLength={50} onChange={(event) => set("courtNumber", event.target.value)} placeholder="예: 3번 코트" value={form.courtNumber} /></FormControl></FormField>
               <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">예약번호와 연락처는 입력하지 마세요. 코트 번호만 간단히 알려 주세요.</p>
             </ModalContentItem>
           ) : (
             <ModalContentItem>
-              <label className="block"><span className="sr-only">테니스장 검색</span><div className="relative"><MagnifyingGlass aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--tm-action-primary)]" size={23} weight="bold" /><input autoFocus aria-label="테니스장 검색" className="h-15 w-full rounded-2xl border-2 border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] py-3 pl-12 pr-4 text-base outline-none" maxLength={80} onChange={(event) => onQueryChange(event.target.value)} placeholder="테니스장 이름을 입력…" value={query} /></div></label>
+              <SearchField aria-label="테니스장 검색" autoFocus maxLength={80} onChange={(event) => onQueryChange(event.target.value)} onReset={() => onQueryChange("")} placeholder="테니스장 이름을 입력…" value={query} />
               <button className="mt-4 flex min-h-[54px] w-full items-center justify-between rounded-2xl border border-[var(--tm-border-default)] px-4 text-sm font-bold text-[var(--tm-text-primary)]" onClick={onManualEntryOpen} type="button"><span className="inline-flex items-center gap-3"><PencilSimple aria-hidden size={21} weight="bold" />테니스장 직접 입력</span><ArrowRight aria-hidden size={18} weight="bold" /></button>
               {isLoading ? <p className="mt-4 text-center text-sm text-[var(--tm-text-secondary)]">테니스장을 찾고 있어요…</p> : null}
               {error ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
@@ -670,11 +672,13 @@ function StepTwo({ form, onRecruitChange, onTogglePurpose, set }: { form: MatchC
       <StepIntro eyebrow="모집 정보" title="어떤 테니스를 함께할까요?" description="플레이 방식과 모집 인원을 알려 주면, 신청할 분이 더 편하게 판단할 수 있어요." />
 
       <FormPanel description="짧고 자연스러운 제목이 좋아요." icon={<TennisBall aria-hidden size={23} weight="fill" />} title="매칭 제목">
-        <label>
-          <FieldTitle required>제목</FieldTitle>
-          <input className={controlClassName} maxLength={80} onChange={(event) => set("title", event.target.value)} placeholder="예: 주말에 편하게 공 주고받아요" value={form.title} />
-          <span className="mt-2 block text-right text-xs text-[var(--tm-text-secondary)]">{form.title.length} / 80</span>
-        </label>
+        <FormField>
+          <FormLabel required>제목</FormLabel>
+          <FormControl>
+            <TextField maxLength={80} onChange={(event) => set("title", event.target.value)} placeholder="예: 주말에 편하게 공 주고받아요" value={form.title} />
+          </FormControl>
+          <p className="text-right text-xs text-[var(--tm-text-secondary)]">{form.title.length} / 80</p>
+        </FormField>
       </FormPanel>
 
       <FormPanel description="모집자를 제외하고 함께 칠 인원을 정해 주세요." icon={<UsersThree aria-hidden size={23} weight="fill" />} title="몇 명과 함께할까요?">
@@ -712,13 +716,12 @@ function StepThree({ expectedPeople, fee, form, set }: { expectedPeople: number;
       <StepIntro eyebrow="비용과 안내" title="참가자가 궁금할 내용을 알려주세요" description="비용은 예상 금액으로 안내돼요. Rally On에서 결제하거나 나누어 받지는 않아요." />
 
       <FormPanel description="예약할 때 확인한 전체 코트 이용료를 입력해 주세요." icon={<CurrencyKrw aria-hidden size={23} weight="bold" />} title="코트 비용">
-        <label>
-          <FieldTitle required>전체 코트 비용</FieldTitle>
-          <div className="relative">
-            <input className={`${controlClassName} pr-12`} inputMode="numeric" min="0" onChange={(event) => set("totalCourtFeeKrw", event.target.value)} placeholder="예: 24,000" type="number" value={form.totalCourtFeeKrw} />
-            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-bold text-[var(--tm-text-secondary)]">원</span>
-          </div>
-        </label>
+        <FormField>
+          <FormLabel required>전체 코트 비용</FormLabel>
+          <FormControl>
+            <TextField inputMode="numeric" min="0" onChange={(event) => set("totalCourtFeeKrw", event.target.value)} placeholder="예: 24,000" trailingContent={<TextFieldContent variant="text">원</TextFieldContent>} type="number" value={form.totalCourtFeeKrw} />
+          </FormControl>
+        </FormField>
         <div className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] p-4">
           <p className="text-sm text-[var(--tm-text-secondary)]">예상 1인 비용</p>
           <p className="mt-1 text-xl font-bold text-[var(--tm-action-primary)]">약 {fee.toLocaleString("ko-KR")}원</p>
@@ -728,19 +731,23 @@ function StepThree({ expectedPeople, fee, form, set }: { expectedPeople: number;
       </FormPanel>
 
       <FormPanel description="준비물이나 별도 비용이 있다면 짧게 알려 주세요." title={<>추가 비용 안내 <span className="text-base font-normal text-[var(--tm-text-secondary)]">(선택)</span></>}>
-        <label>
-          <FieldTitle>안내</FieldTitle>
-          <input className={controlClassName} maxLength={200} onChange={(event) => set("additionalCostNote", event.target.value)} placeholder="예: 테니스공은 각자 준비해요" value={form.additionalCostNote} />
-          <span className="mt-2 block text-right text-xs text-[var(--tm-text-secondary)]">{form.additionalCostNote.length} / 200</span>
-        </label>
+        <FormField>
+          <FormLabel>안내</FormLabel>
+          <FormControl>
+            <TextField maxLength={200} onChange={(event) => set("additionalCostNote", event.target.value)} placeholder="예: 테니스공은 각자 준비해요" value={form.additionalCostNote} />
+          </FormControl>
+          <p className="text-right text-xs text-[var(--tm-text-secondary)]">{form.additionalCostNote.length} / 200</p>
+        </FormField>
       </FormPanel>
 
       <FormPanel description="처음 신청하는 분도 편하게 알 수 있도록 적어 주세요." title={<>소개 <span className="text-base font-normal text-[var(--tm-text-secondary)]">(선택)</span></>}>
-        <label>
-          <FieldTitle>소개</FieldTitle>
-          <textarea className="mt-2 min-h-32 w-full resize-y rounded-2xl border border-[var(--tm-border-default)] bg-white p-4 text-base outline-none transition focus:border-[var(--tm-action-primary)] focus:ring-4 focus:ring-[color:var(--tm-bg-subtle)]" maxLength={300} onChange={(event) => set("introduction", event.target.value)} placeholder="예: 천천히 랠리하면서 즐겁게 연습할 분을 찾아요. 처음 게임을 해봐도 괜찮아요!" value={form.introduction} />
-          <span className="mt-2 block text-right text-xs text-[var(--tm-text-secondary)]">{form.introduction.length} / 300</span>
-        </label>
+        <FormField>
+          <FormLabel>소개</FormLabel>
+          <FormControl>
+            <TextArea maxLength={300} onChange={(event) => set("introduction", event.target.value)} placeholder="예: 천천히 랠리하면서 즐겁게 연습할 분을 찾아요. 처음 게임을 해봐도 괜찮아요!" value={form.introduction} />
+          </FormControl>
+          <p className="text-right text-xs text-[var(--tm-text-secondary)]">{form.introduction.length} / 300</p>
+        </FormField>
         <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">수락된 참가자와 서비스 내 채팅에서 당일 준비를 조율해요.</p>
       </FormPanel>
     </div>
