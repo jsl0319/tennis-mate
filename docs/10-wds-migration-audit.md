@@ -101,3 +101,13 @@ Rally On은 별도 UI 라이브러리(Radix, shadcn 등) 없이 **Tailwind CSS v
 `--tm-bg-surface`, `--tm-text-secondary`, `--tm-text-muted`, `--tm-text-placeholder`, `--tm-tennis-ball`, `--tm-tennis-ball-muted`, `--tm-bg-highlight`, `--tm-status-error-bg`, `--tm-status-error-text`는 이미 충분히 쿨톤이거나(텍스트류), 의도적인 포인트 컬러(테니스볼)이거나, 가독성이 우선인 상태색(에러)이라 변경하지 않았다.
 
 이로써 "5. 중요 리스크"에서 지적한 브랜드 컬러 결정이 완료되었다. 다음 단계는 "6. 제안 순서"의 2번(공용 컴포넌트 3개 교체)부터 진행한다.
+
+## 9. 진행: 공용 컴포넌트 3개 교체 (2026-09-03)
+
+"6. 제안 순서"의 2번을 완료했다. `src/components/navigation/`의 `back-button.tsx`, `bottom-navigation.tsx`, `activity-tabs.tsx`를 각각 WDS `IconButton`, `BottomNavigation`/`BottomNavigationItem`, `Tab`/`TabList`/`TabListItem`으로 교체했다 (커밋 `3e3fd2f`). `court-rally-loader.tsx`는 계획대로 유지.
+
+- 세 컴포넌트 모두 공개 props(예: `BackButton`의 `ariaLabel`/`className`/`fallbackPath`)를 그대로 유지해서 호출부 코드는 수정하지 않았다.
+- `bottom-navigation.tsx`, `activity-tabs.tsx`는 `BottomNavigationItem`/`TabListItem`을 `as={Link}`로 렌더링해 라우팅은 그대로 next/link가 담당하고, 활성 상태(`aria-current`, 밑줄/색상)는 WDS 컴포넌트가 `value` prop 비교로 자동 처리하도록 바꿨다 (기존엔 pathname을 직접 비교해서 className을 분기했음).
+- `npm run typecheck`, `npm run lint` 통과 확인. `npm run dev`는 이 작업 환경(디바이스 브릿지 셸)의 네트워크 제약으로 SWC 바이너리를 받지 못해 기동 확인을 못 했다 — 로컬에서 눈으로 한 번 확인 필요.
+
+다음 단계는 "6. 제안 순서"의 3번(반복도 높은 CTA 버튼 80곳을 공용 `Button`으로 추출)이다.
