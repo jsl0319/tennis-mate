@@ -1,7 +1,6 @@
 "use client";
 
-import { IconButton } from "@wanteddev/wds";
-import { IconClose } from "@wanteddev/wds-icon";
+import { ActionArea, ActionAreaButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalHeading, ModalNavigation, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -150,12 +149,30 @@ function ContactAction({ contact }: { contact: NonNullable<Detail["contact"]> })
 
 function ApplicationSheet({ detail, message, applyError, alreadyApplied, isSubmitting, onClose, onMessageChange, onSubmit }: { detail: Detail; message: string; applyError: string; alreadyApplied: boolean; isSubmitting: boolean; onClose: () => void; onMessageChange: (value: string) => void; onSubmit: () => void }) {
   const profile = detail.viewer.tennisProfile;
-  return <div className="fixed inset-0 z-10 flex items-end bg-black/35" onMouseDown={onClose} role="presentation"><section aria-label="같이 치기 신청" aria-modal="true" className="max-h-[88svh] w-full overflow-y-auto rounded-t-[28px] bg-[var(--tm-bg-page)] px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-3" onMouseDown={(event) => event.stopPropagation()} role="dialog"><div className="mx-auto h-1.5 w-10 rounded-full bg-[var(--tm-border-default)]" /><div className="mx-auto max-w-[560px]"><div className="mt-5 flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-[var(--tm-action-primary)]">같이 치기 신청</p><h2 className="mt-1 text-xl font-bold">신청 전에 한 번만 확인해요</h2></div><IconButton aria-label="신청 창 닫기" onClick={onClose}><IconClose /></IconButton></div>
-    <div className="mt-5 space-y-3"><SummaryCard title="일정과 장소"><p>{schedule(detail.startsAt, detail.endsAt)}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{detail.court.name ?? "코트는 함께 정해요"} · {detail.region.name}</p></SummaryCard><SummaryCard title="예상 비용"><p>{detail.estimatedFeePerPersonKrw === null ? "코트를 정한 뒤 함께 확인해요" : `약 ${detail.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">비용은 참가자끼리 별도로 정산해요.</p></SummaryCard><SummaryCard title="내 테니스 프로필"><p>{profile?.experienceLabel ?? "테니스 프로필"} · {profile?.rallyLevelLabel ?? ""}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{profile?.playPurposes.map((purpose) => purpose.label).join(" · ") ?? ""}</p></SummaryCard></div>
-    <label className="mt-5 block text-sm font-semibold" htmlFor="application-message">모집자에게 한마디 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></label><textarea className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-[var(--tm-border-default)] bg-white p-3 text-sm leading-6 outline-none placeholder:text-[var(--tm-text-placeholder)] focus:border-[var(--tm-action-primary)] focus:ring-2 focus:ring-[var(--tm-action-primary)]" id="application-message" maxLength={200} onChange={(event) => onMessageChange(event.target.value)} placeholder="예: 천천히 랠리하며 같이 연습하고 싶어요." value={message} /><p className="mt-1 text-right text-xs text-[var(--tm-text-secondary)]">{message.length}/200</p>
-    {applyError ? <div className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]"><p>{applyError}</p>{alreadyApplied ? <Link className="mt-2 inline-block font-semibold underline" href="/activity/sent">신청 내역 보기</Link> : null}</div> : null}
-    <div className="mt-5 flex gap-3"><Button className="flex-1" disabled={isSubmitting} fullWidth onClick={onClose} variant="neutral">생각해볼게요</Button><Button className="flex-[1.4]" disabled={isSubmitting} fullWidth loading={isSubmitting} onClick={onSubmit}>신청하기</Button></div>
-  </div></section></div>;
+  return <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+    <ModalContainer variant="bottom" size="large">
+      <ModalNavigation trailingContent={<ModalClose aria-label="신청 창 닫기" />} />
+      <ModalContent>
+        <ModalContentItem>
+          <ModalSummary>같이 치기 신청</ModalSummary>
+          <ModalHeading>신청 전에 한 번만 확인해요</ModalHeading>
+        </ModalContentItem>
+        <ModalContentItem>
+          <div className="space-y-3"><SummaryCard title="일정과 장소"><p>{schedule(detail.startsAt, detail.endsAt)}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{detail.court.name ?? "코트는 함께 정해요"} · {detail.region.name}</p></SummaryCard><SummaryCard title="예상 비용"><p>{detail.estimatedFeePerPersonKrw === null ? "코트를 정한 뒤 함께 확인해요" : `약 ${detail.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">비용은 참가자끼리 별도로 정산해요.</p></SummaryCard><SummaryCard title="내 테니스 프로필"><p>{profile?.experienceLabel ?? "테니스 프로필"} · {profile?.rallyLevelLabel ?? ""}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{profile?.playPurposes.map((purpose) => purpose.label).join(" · ") ?? ""}</p></SummaryCard></div>
+        </ModalContentItem>
+        <ModalContentItem>
+          <label className="block text-sm font-semibold" htmlFor="application-message">모집자에게 한마디 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></label>
+          <textarea className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-[var(--tm-border-default)] bg-white p-3 text-sm leading-6 outline-none placeholder:text-[var(--tm-text-placeholder)] focus:border-[var(--tm-action-primary)] focus:ring-2 focus:ring-[var(--tm-action-primary)]" id="application-message" maxLength={200} onChange={(event) => onMessageChange(event.target.value)} placeholder="예: 천천히 랠리하며 같이 연습하고 싶어요." value={message} />
+          <p className="mt-1 text-right text-xs text-[var(--tm-text-secondary)]">{message.length}/200</p>
+          {applyError ? <div className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]"><p>{applyError}</p>{alreadyApplied ? <Link className="mt-2 inline-block font-semibold underline" href="/activity/sent">신청 내역 보기</Link> : null}</div> : null}
+        </ModalContentItem>
+      </ModalContent>
+      <ActionArea variant="neutral">
+        <ActionAreaButton buttonColor="assistive" disabled={isSubmitting} onClick={onClose} variant="alternative">생각해볼게요</ActionAreaButton>
+        <ActionAreaButton disabled={isSubmitting} loading={isSubmitting} onClick={onSubmit} variant="main">신청하기</ActionAreaButton>
+      </ActionArea>
+    </ModalContainer>
+  </Modal>;
 }
 
 function SummaryCard({ children, title }: { children: React.ReactNode; title: string }) {
