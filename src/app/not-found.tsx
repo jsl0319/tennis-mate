@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
+
 export default function NotFound() {
   return (
     <main className="flex min-h-svh items-center justify-center px-5 py-12">
@@ -11,12 +13,9 @@ export default function NotFound() {
         <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">
           주소가 바뀌었거나 사용할 수 없는 화면이에요.
         </p>
-        <Link
-          className="mt-6 flex min-h-12 items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-5 font-semibold text-white hover:bg-[var(--tm-action-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]"
-          href="/"
-        >
+        <Button as={Link} className="mt-6" fullWidth href="/" size="large">
           처음으로 돌아가기
-        </Link>
+        </Button>
       </section>
     </main>
   );
