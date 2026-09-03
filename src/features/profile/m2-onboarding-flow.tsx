@@ -1,5 +1,6 @@
 "use client";
 
+import { Checkbox, FormControl, FormField, FormLabel, FormMessage, SearchField, TextField } from "@wanteddev/wds";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -254,7 +255,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
 
   if (screen === "nickname") {
     const nicknameValid = /^[가-힣a-zA-Z0-9]{2,12}$/.test(draft.nickname.trim());
-    return <FormShell step={1} onBack={goBack}><h1>어떤 이름으로<br />불러드릴까요?</h1><p>다른 메이트에게 보이는 닉네임이에요.</p><label className="mt-8 block text-sm font-semibold" htmlFor="nickname">닉네임</label><input className="mt-2 h-[52px] w-full rounded-xl border border-[var(--tm-border-default)] px-4 text-base" id="nickname" maxLength={12} onChange={(event) => setDraft((current) => ({ ...current, nickname: event.target.value }))} value={draft.nickname} /><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">2–12자 · 한글, 영문, 숫자를 사용할 수 있어요.</p>{error ? <ErrorMessage message={error} /> : null}<ActionButton disabled={!nicknameValid} loading={loading} onClick={() => void saveNickname()}>이 이름으로 시작할게요</ActionButton></FormShell>;
+    return <FormShell step={1} onBack={goBack}><h1>어떤 이름으로<br />불러드릴까요?</h1><p>다른 메이트에게 보이는 닉네임이에요.</p><FormField className="mt-8"><FormLabel>닉네임</FormLabel><FormControl><TextField maxLength={12} onChange={(event) => setDraft((current) => ({ ...current, nickname: event.target.value }))} value={draft.nickname} /></FormControl><FormMessage>2–12자 · 한글, 영문, 숫자를 사용할 수 있어요.</FormMessage></FormField>{error ? <ErrorMessage message={error} /> : null}<ActionButton disabled={!nicknameValid} loading={loading} onClick={() => void saveNickname()}>이 이름으로 시작할게요</ActionButton></FormShell>;
   }
 
   if (typeof screen === "number") {
@@ -276,7 +277,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
     const questionContent = question.key === "region" ? (
       <div className="mt-7">
         <label className="sr-only" htmlFor="region-search">지역 검색</label>
-        <input className="h-[48px] w-full rounded-xl border border-[var(--tm-border-default)] px-4" id="region-search" onChange={(event) => setRegionQuery(event.target.value)} placeholder="시·군·구 검색" value={regionQuery} />
+        <SearchField id="region-search" onChange={(event) => setRegionQuery(event.target.value)} onReset={() => setRegionQuery("")} placeholder="시·군·구 검색" value={regionQuery} />
         <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
           {cities.map((city) => <button className={`shrink-0 rounded-full px-3 py-2 text-sm ${city.code === draft.provinceCode ? "bg-[var(--tm-action-primary)] text-white" : "bg-[var(--tm-bg-subtle-muted)]"}`} key={city.code} onClick={() => void selectCity(city)} type="button">{city.shortName ?? city.name}</button>)}
         </div>
@@ -284,7 +285,7 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
         <div className="mt-4 grid grid-cols-2 gap-2">
           {displayedDistricts.map((district) => <button aria-pressed={draft.regionCode === district.code} className={`min-h-[44px] rounded-xl border px-3 text-left text-sm ${draft.regionCode === district.code ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)]"}`} key={district.code} onClick={() => { setDraft((current) => ({ ...current, provinceCode: district.parentCode ?? current.provinceCode, regionCode: district.code, regionName: district.name })); setRegionQuery(""); }} type="button">{district.name}{district.parentName ? <span className="mt-1 block text-xs text-[var(--tm-text-secondary)]">{district.parentName}</span> : null}</button>)}
         </div>
-        <label className="mt-5 flex items-center gap-3 text-sm"><input checked={draft.nearbyRegionAllowed} onChange={(event) => setDraft((current) => ({ ...current, nearbyRegionAllowed: event.target.checked }))} type="checkbox" />선택 지역과 가까운 시·군·구도 괜찮아요</label>
+        <label className="mt-5 flex items-center gap-3 text-sm"><Checkbox checked={draft.nearbyRegionAllowed} onCheckedChange={(checked) => setDraft((current) => ({ ...current, nearbyRegionAllowed: checked }))} />선택 지역과 가까운 시·군·구도 괜찮아요</label>
       </div>
     ) : (
       <div className="mt-7 space-y-3">
