@@ -1,5 +1,6 @@
 "use client";
 
+import { ActionArea, ActionAreaButton, Modal, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalHeading, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -132,5 +133,19 @@ function ContactButton({ contact }: { contact: NonNullable<SentApplication["cont
 }
 
 function WithdrawalConfirm({ busy, onCancel, onConfirm }: { busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  return <div className="fixed inset-0 z-50 flex items-end bg-black/35 px-5 pb-[max(20px,env(safe-area-inset-bottom))]" role="presentation"><section aria-label="신청 철회 확인" aria-modal="true" className="mx-auto w-full max-w-[560px] rounded-[28px] bg-[var(--tm-bg-page)] p-5" role="dialog"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">한 번만 확인해요</p><h2 className="mt-2 text-xl font-bold">신청을 철회할까요?</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">철회하면 다시 신청하지 못할 수 있어요.</p><div className="mt-6 grid gap-3"><Button disabled={busy} fullWidth loading={busy} onClick={onConfirm}>네, 철회할게요</Button><Button disabled={busy} fullWidth onClick={onCancel} variant="neutral">돌아가기</Button></div></section></div>;
+  return <Modal open onOpenChange={(next) => { if (!next) onCancel(); }}>
+    <ModalContainer variant="bottom">
+      <ModalContent>
+        <ModalContentItem>
+          <ModalSummary>한 번만 확인해요</ModalSummary>
+          <ModalHeading>신청을 철회할까요?</ModalHeading>
+          <ModalDescription>철회하면 다시 신청하지 못할 수 있어요.</ModalDescription>
+        </ModalContentItem>
+      </ModalContent>
+      <ActionArea variant="strong">
+        <ActionAreaButton disabled={busy} loading={busy} onClick={onConfirm} variant="main">네, 철회할게요</ActionAreaButton>
+        <ActionAreaButton buttonColor="assistive" disabled={busy} onClick={onCancel} variant="alternative">돌아가기</ActionAreaButton>
+      </ActionArea>
+    </ModalContainer>
+  </Modal>;
 }
