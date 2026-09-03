@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getSafeReturnTo, getStartAuthCallbackPath } from "@/navigation/return-to";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { Button } from "@/components/ui/button";
 
 type Screen = "loading" | "login" | "error" | "nickname" | 0 | 1 | 2 | 3 | 4 | "result";
 type Region = { code: string; name: string; shortName: string | null; parentCode: string | null; parentName?: string | null; type: "CITY" | "DISTRICT" };
@@ -301,11 +302,11 @@ export function M2OnboardingFlow({ onCompleted, redirectWhenOnboarded = false, r
 }
 
 function LoginScreen({ loading, onSignIn }: { loading: boolean; onSignIn: () => void }) {
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-[72px] text-[var(--tm-text-primary)]"><section className="mx-auto flex min-h-[700px] max-w-[338px] flex-col rounded-[28px] bg-white p-7 shadow-[0_4px_14px_rgba(49,94,158,0.06)]"><p className="font-semibold text-[var(--tm-action-primary)]">● Rally On</p><h1 className="mt-12 text-[32px] font-bold leading-tight">Rally On과<br />가볍게 시작해요</h1><p className="mt-4 leading-7 text-[var(--tm-text-secondary)]">조건이 맞는 메이트를 찾고,<br />신청부터 약속 확인까지 한 번에 이어가세요.</p><section className="mt-20 rounded-2xl bg-[var(--tm-bg-subtle)] p-4"><h2 className="text-sm font-semibold text-[var(--tm-action-primary)]">지금 보던 화면으로 돌아와요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-muted)]">카카오로 로그인하면 이어서 이용할 수 있어요.</p></section><div className="flex-1" /><button className="min-h-[52px] rounded-2xl bg-[var(--tm-action-primary)] px-4 text-lg font-semibold text-white disabled:opacity-60" disabled={loading} onClick={onSignIn} type="button">카카오 계정으로 시작하기</button><p className="mt-4 text-center text-xs leading-5 text-[var(--tm-text-secondary)]">계속하면 <Link className="font-semibold text-[var(--tm-action-primary)] underline" href="/terms">서비스 이용약관</Link>과<br /><Link className="font-semibold text-[var(--tm-action-primary)] underline" href="/privacy">개인정보 처리방침</Link>에 동의하게 됩니다.</p></section></main>;
+  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-[72px] text-[var(--tm-text-primary)]"><section className="mx-auto flex min-h-[700px] max-w-[338px] flex-col rounded-[28px] bg-white p-7 shadow-[0_4px_14px_rgba(49,94,158,0.06)]"><p className="font-semibold text-[var(--tm-action-primary)]">● Rally On</p><h1 className="mt-12 text-[32px] font-bold leading-tight">Rally On과<br />가볍게 시작해요</h1><p className="mt-4 leading-7 text-[var(--tm-text-secondary)]">조건이 맞는 메이트를 찾고,<br />신청부터 약속 확인까지 한 번에 이어가세요.</p><section className="mt-20 rounded-2xl bg-[var(--tm-bg-subtle)] p-4"><h2 className="text-sm font-semibold text-[var(--tm-action-primary)]">지금 보던 화면으로 돌아와요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-muted)]">카카오로 로그인하면 이어서 이용할 수 있어요.</p></section><div className="flex-1" /><Button disabled={loading} fullWidth loading={loading} onClick={onSignIn} size="large">카카오 계정으로 시작하기</Button><p className="mt-4 text-center text-xs leading-5 text-[var(--tm-text-secondary)]">계속하면 <Link className="font-semibold text-[var(--tm-action-primary)] underline" href="/terms">서비스 이용약관</Link>과<br /><Link className="font-semibold text-[var(--tm-action-primary)] underline" href="/privacy">개인정보 처리방침</Link>에 동의하게 됩니다.</p></section></main>;
 }
 
 function ServiceCheckError({ onRetry }: { onRetry: () => void }) {
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-[72px] text-[var(--tm-text-primary)]"><section className="mx-auto flex min-h-[700px] max-w-[338px] flex-col rounded-[28px] bg-white p-7 shadow-[0_4px_14px_rgba(49,94,158,0.06)]"><p className="font-semibold text-[var(--tm-action-primary)]">● Rally On</p><h1 className="mt-12 text-[32px] font-bold leading-tight">서비스를<br />확인하지 못했어요</h1><p className="mt-4 leading-7 text-[var(--tm-text-secondary)]">잠시 네트워크 상태를 확인한 뒤<br />다시 시도해 주세요.</p><section className="mt-20 rounded-2xl bg-[var(--tm-bg-subtle)] p-4"><h2 className="text-sm font-semibold text-[var(--tm-action-primary)]">로그인 정보는 안전하게 유지돼요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-muted)]">반복되면 운영자에게 알려 주세요.</p></section><div className="flex-1" /><button className="min-h-[52px] rounded-2xl bg-[var(--tm-action-primary)] px-4 text-lg font-semibold text-white" onClick={onRetry} type="button">다시 확인하기</button></section></main>;
+  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 py-[72px] text-[var(--tm-text-primary)]"><section className="mx-auto flex min-h-[700px] max-w-[338px] flex-col rounded-[28px] bg-white p-7 shadow-[0_4px_14px_rgba(49,94,158,0.06)]"><p className="font-semibold text-[var(--tm-action-primary)]">● Rally On</p><h1 className="mt-12 text-[32px] font-bold leading-tight">서비스를<br />확인하지 못했어요</h1><p className="mt-4 leading-7 text-[var(--tm-text-secondary)]">잠시 네트워크 상태를 확인한 뒤<br />다시 시도해 주세요.</p><section className="mt-20 rounded-2xl bg-[var(--tm-bg-subtle)] p-4"><h2 className="text-sm font-semibold text-[var(--tm-action-primary)]">로그인 정보는 안전하게 유지돼요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-muted)]">반복되면 운영자에게 알려 주세요.</p></section><div className="flex-1" /><Button fullWidth onClick={onRetry} size="large">다시 확인하기</Button></section></main>;
 }
 
 function FormShell({ children, onBack, step }: { children: React.ReactNode; onBack: () => void; step: number }) {
@@ -313,7 +314,7 @@ function FormShell({ children, onBack, step }: { children: React.ReactNode; onBa
 }
 
 function ActionButton({ children, disabled, loading, onClick }: { children: React.ReactNode; disabled?: boolean; loading?: boolean; onClick: () => void }) {
-  return <button className="mt-6 min-h-[52px] w-full rounded-2xl bg-[var(--tm-action-primary)] px-4 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled || loading} onClick={onClick} type="button">{loading ? "처리 중…" : children}</button>;
+  return <Button className="mt-6" disabled={disabled} fullWidth loading={loading} onClick={onClick} size="large">{children}</Button>;
 }
 
 function ErrorMessage({ message }: { message: string }) {
