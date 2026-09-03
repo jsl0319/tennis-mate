@@ -1,7 +1,6 @@
 "use client";
 
-import { IconButton } from "@wanteddev/wds";
-import { IconClose } from "@wanteddev/wds-icon";
+import { ActionArea, ActionAreaButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalHeading, ModalNavigation, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 
@@ -303,5 +302,29 @@ function ReportSheet({ matchId, message, onClose, onSubmitted }: { matchId: stri
       onSubmitted();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "신고를 접수하지 못했어요."); } finally { setSubmitting(false); }
   };
-  return <div className="fixed inset-0 z-20 flex items-end bg-black/35 px-5 pb-[max(20px,env(safe-area-inset-bottom))]" role="presentation"><section aria-label="메시지 신고" aria-modal="true" className="mx-auto w-full max-w-[560px] rounded-[28px] bg-[var(--tm-bg-page)] p-5" role="dialog"><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-[var(--tm-action-primary)]">안전한 채팅</p><h2 className="mt-1 text-xl font-bold">메시지를 신고할까요?</h2></div><IconButton aria-label="신고 창 닫기" disabled={submitting} onClick={onClose}><IconClose /></IconButton></div><p className="mt-3 line-clamp-2 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-[var(--tm-text-muted)]">{message.body}</p><fieldset className="mt-5"><legend className="text-sm font-semibold">신고 사유</legend><div className="mt-3 grid gap-2">{reportReasons.map(([value, label]) => <label className={`flex min-h-11 items-center rounded-2xl border px-4 text-sm font-semibold ${reason === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white"}`} key={value}><input checked={reason === value} className="sr-only" name="report-reason" onChange={() => setReason(value)} type="radio" value={value} />{label}</label>)}</div></fieldset><label className="mt-5 block text-sm font-semibold" htmlFor="chat-report-description">설명 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></label><textarea className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-[var(--tm-border-default)] bg-white p-3 text-sm outline-none focus:border-[var(--tm-action-primary)]" id="chat-report-description" maxLength={200} onChange={(event) => setDescription(event.target.value)} value={description} /><p className="mt-1 text-right text-xs text-[var(--tm-text-secondary)]">{description.length}/200</p>{error ? <p className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}<div className="mt-5 grid grid-cols-2 gap-3"><Button disabled={submitting} onClick={onClose} size="medium" variant="neutral">돌아가기</Button><Button disabled={submitting} loading={submitting} onClick={() => void submit()} size="medium">신고 접수</Button></div></section></div>;
+  return <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+    <ModalContainer variant="bottom">
+      <ModalNavigation trailingContent={<ModalClose aria-label="신고 창 닫기" disabled={submitting} />} />
+      <ModalContent>
+        <ModalContentItem>
+          <ModalSummary>안전한 채팅</ModalSummary>
+          <ModalHeading>메시지를 신고할까요?</ModalHeading>
+          <p className="line-clamp-2 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-[var(--tm-text-muted)]">{message.body}</p>
+        </ModalContentItem>
+        <ModalContentItem>
+          <fieldset><legend className="text-sm font-semibold">신고 사유</legend><div className="mt-3 grid gap-2">{reportReasons.map(([value, label]) => <label className={`flex min-h-11 items-center rounded-2xl border px-4 text-sm font-semibold ${reason === value ? "border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]" : "border-[var(--tm-border-default)] bg-white"}`} key={value}><input checked={reason === value} className="sr-only" name="report-reason" onChange={() => setReason(value)} type="radio" value={value} />{label}</label>)}</div></fieldset>
+        </ModalContentItem>
+        <ModalContentItem>
+          <label className="block text-sm font-semibold" htmlFor="chat-report-description">설명 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></label>
+          <textarea className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-[var(--tm-border-default)] bg-white p-3 text-sm outline-none focus:border-[var(--tm-action-primary)]" id="chat-report-description" maxLength={200} onChange={(event) => setDescription(event.target.value)} value={description} />
+          <p className="mt-1 text-right text-xs text-[var(--tm-text-secondary)]">{description.length}/200</p>
+          {error ? <p className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
+        </ModalContentItem>
+      </ModalContent>
+      <ActionArea variant="neutral">
+        <ActionAreaButton buttonColor="assistive" disabled={submitting} onClick={onClose} variant="alternative">돌아가기</ActionAreaButton>
+        <ActionAreaButton disabled={submitting} loading={submitting} onClick={() => void submit()} variant="main">신고 접수</ActionAreaButton>
+      </ActionArea>
+    </ModalContainer>
+  </Modal>;
 }
