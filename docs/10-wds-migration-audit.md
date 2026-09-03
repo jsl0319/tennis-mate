@@ -8,7 +8,7 @@
 | 문서 상태 | Draft v0.1 (조사만, 코드 변경 없음) |
 | 기준 커밋 | `53399ad` (feat: set up Montage(WDS) design system integration foundation) |
 | 작성 목적 | 화면 단위 WDS 컴포넌트 교체를 시작하기 전, 현재 UI 구현 방식과 WDS 컴포넌트 카탈로그를 매핑해 우선순위·리스크를 파악 |
-| 다음 단계 | 브랜드 컬러 전략 결정 완료(8번 참고) → "6. 제안 순서"의 2번부터 착수 |
+| 다음 단계 | 공용 컴포넌트 3개 + CTA 버튼 80곳 교체 완료(9·10번 참고) → "6. 제안 순서"의 4번(인라인 모달 6곳)부터 착수 |
 
 foundation(Provider, 전역 CSS, 패키지 설치)만 구성된 상태이며, 화면·컴포넌트는 아직 하나도 WDS로 교체되지 않았다. 이 문서는 그 착수 전 조사 결과다.
 
@@ -111,3 +111,33 @@ Rally On은 별도 UI 라이브러리(Radix, shadcn 등) 없이 **Tailwind CSS v
 - `npm run typecheck`, `npm run lint` 통과 확인. `npm run dev`는 이 작업 환경(디바이스 브릿지 셸)의 네트워크 제약으로 SWC 바이너리를 받지 못해 기동 확인을 못 했다 — 로컬에서 눈으로 한 번 확인 필요.
 
 다음 단계는 "6. 제안 순서"의 3번(반복도 높은 CTA 버튼 80곳을 공용 `Button`으로 추출)이다.
+
+## 10. 진행: CTA 버튼 80곳을 공용 Button으로 교체 완료 (2026-09-03)
+
+"6. 제안 순서"의 3번을 완료했다. `src/components/ui/button.tsx`에 WDS `Button`을 감싸는 공용 `Button` 컴포넌트를 새로 만들고, `bg-[var(--tm-action-primary)]` 조합을 파일마다 재작성하던 CTA 버튼·Link를 아래 21개 파일에서 이 컴포넌트로 교체했다(파일당 typecheck+lint 통과 후 개별 커밋).
+
+`error.tsx`, `not-found.tsx`, `partner-session-list.tsx`, `partner-session-create.tsx`, `partner-session-detail.tsx`, `operator-application-status.tsx`, `m3-home.tsx`, `match-chat-list.tsx`, `m5-sent-applications.tsx`, `m8-my-page.tsx`, `profile-edit-page.tsx`, `operator-application-flow.tsx`, `operator-court-photo-management.tsx`, `match-chat-report-review.tsx`, `m3-match-detail.tsx`, `operator-application-review.tsx`, `operator-time-management.tsx`, `m2-onboarding-flow.tsx`, `m6-received-applications.tsx`, `match-conversation.tsx`, `m4-match-create.tsx`.
+
+`partner-session-detail.tsx`와 `not-found.tsx`는 최초 조사 때 grep 대상에서 누락돼 있다가, 전체 교체를 마친 뒤 `bg-[var(--tm-action-primary)]`를 리포지토리 전체에서 재검색하는 과정에서 뒤늦게 발견해 함께 교체했다. 최종 재검색 결과 이제 이 클래스가 `<button>`/`<Link>`에 남아 있는 곳은 모두 의도적으로 네이티브를 유지하기로 한 곳뿐이다.
+
+**Button 컴포넌트 설계**
+
+- props: `variant`("primary" 기본값 = solid blue, "secondary" = outlined blue, "neutral" = outlined gray), `size`("small"/"medium"/"large", 기본 "large"), `fullWidth`, `loading`, `disabled`, 그리고 `as` prop으로 폴리모픽 렌더링(`as={Link}` + `href`로 네이티브 라우팅 유지, `as="a"`로 외부 링크 지원).
+- `loading`이 켜지면 WDS 자체 스피너가 children을 대체하므로, 기존에 화면마다 손으로 `{saving ? "처리 중…" : children}` 식으로 텍스트를 바꿔치던 코드는 대부분 제거하고 `loading` prop에 맡겼다. 다만 `m4-match-create.tsx`의 `ActionFooter`처럼 단계별로 서로 다른 문구("등록 중…"/"사진 올리는 중…")를 보여줘야 하는 경우는 예외적으로 라벨 텍스트를 직접 계산해 넘겼다.
+- 재시도(다시 불러오기) 버튼은 화면별 시각적 강조 정도에 따라 `variant`가 갈렸다(원래 배경이 solid blue였던 곳은 기본값 유지, outlined였던 곳은 `secondary`) — 통일된 규칙이라기보다 원래 화면 디자인을 최대한 보존하는 방향으로 판단했다.
+
+**의도적으로 네이티브로 남긴 패턴** (WDS `Button`/`IconButton`의 solid·outlined 매트릭스로 표현이 안 되거나, 성격이 다른 UI라서)
+
+- 선택형 토글/칩(`aria-pressed` 버튼, 지역·옵션 선택, 상태 필터 pill, 색상칩)
+- 파괴적 액션(빨강 계열 버튼 — WDS Button에 danger 컬러가 없음): 예) "세션 취소·안내", "운영자 공개 일시 중지", "이 코트 비활성화"
+- 배경·테두리 없는 순수 텍스트 버튼(예: "매칭 취소", "신고", "수정"/"로그아웃")
+- 리스트 아이템 형태(코트/지역 검색 결과, 신청자 카드 등 클릭 가능한 카드 전체)
+- `@phosphor-icons/react` 등 WDS 아이콘 세트가 아닌 별도 아이콘 라이브러리를 쓰는 아이콘 전용 버튼(`m4-match-create.tsx`의 뒤로가기·검색창 닫기·인원 증감 등) — 아이콘 색상 처리 방식이 다른 라이브러리와 섞이면 스타일이 깨질 위험이 있어 보수적으로 유지
+- 단계형 폼 위저드의 상단 "‹"/"←" 뒤로가기 컨트롤(자체 진행률 UI와 결합된 화면 전용 요소)
+
+**검증**
+
+- 21개 파일 각각에 대해 `npm run typecheck`(`tsc --noEmit`)와 `npm run lint`(`eslint . --max-warnings=0`)를 통과한 뒤 개별 커밋했다.
+- `npm run dev`는 이번에도 작업 환경(디바이스 브릿지 셸)의 네트워크 제약으로 SWC 바이너리를 받지 못해 기동 확인을 하지 못했다 — 로컬에서 화면을 눈으로 한 번 확인 권장.
+
+다음 단계는 "6. 제안 순서"의 4번(인라인 모달 6곳을 WDS `modal`로 교체)이다.
