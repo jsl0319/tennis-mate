@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { Button } from "@/components/ui/button";
 import { CourtMedia } from "@/features/matches/court-media";
 
 type Application = {
@@ -180,11 +181,11 @@ export function OperatorCourtPhotoManagement() {
   }
 
   if (!application?.canPublish) {
-    return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><h1 className="mt-5 text-2xl font-bold">대표 코트 사진은 공개 승인 후 관리해요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">심사 완료 뒤에 시설 사진을 최대 3장 올리고 대표 사진을 고를 수 있어요.</p><Link className="mt-6 inline-flex min-h-12 items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-5 text-sm font-semibold text-white" href="/partner/application">심사 상태 보기</Link></section></main>;
+    return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><h1 className="mt-5 text-2xl font-bold">대표 코트 사진은 공개 승인 후 관리해요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">심사 완료 뒤에 시설 사진을 최대 3장 올리고 대표 사진을 고를 수 있어요.</p><Button as={Link} className="mt-6" href="/partner/application" size="medium">심사 상태 보기</Button></section></main>;
   }
 
   if (!court) {
-    return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><h1 className="mt-5 text-2xl font-bold">등록된 코트를 먼저 준비해 주세요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">시간 초안을 처음 저장하면 승인된 시설에 코트가 만들어져요. 그 뒤 대표 사진을 관리할 수 있어요.</p><Link className="mt-6 inline-flex min-h-12 items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-5 text-sm font-semibold text-white" href="/partner/slots/new">시간 초안 만들기</Link></section></main>;
+    return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><h1 className="mt-5 text-2xl font-bold">등록된 코트를 먼저 준비해 주세요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">시간 초안을 처음 저장하면 승인된 시설에 코트가 만들어져요. 그 뒤 대표 사진을 관리할 수 있어요.</p><Button as={Link} className="mt-6" href="/partner/slots/new" size="medium">시간 초안 만들기</Button></section></main>;
   }
 
   return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-32 pt-8 text-[var(--tm-text-primary)]"><section className="mx-auto max-w-[560px]"><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--tm-text-secondary)]" href="/partner">← 운영 홈</Link><p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">대표 코트 사진</p><h1 className="mt-1 text-2xl font-bold">시설을 알아보기 쉽게 보여 주세요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{court.name}의 사진을 최대 3장 저장할 수 있어요. 대표 1장만 제휴 코트 카드와 세션 상세에 보여요.</p>
@@ -197,6 +198,6 @@ export function OperatorCourtPhotoManagement() {
     {!images.length ? <section className="mt-5 rounded-3xl bg-[var(--tm-bg-subtle)] p-5"><p className="font-semibold">아직 저장된 사진이 없어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">사진이 없어도 제휴 코트 시간은 계속 기본 코트 일러스트로 보여요.</p></section> : null}
     {notice ? <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-primary)]" role="status">{notice}</p> : null}
     {error ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
-    {error && !images.length ? <button className="mt-4 min-h-11 rounded-2xl border border-[var(--tm-border-default)] px-4 text-sm font-semibold text-[var(--tm-action-primary)]" onClick={() => void load()} type="button">다시 불러오기</button> : null}
-  </section><div className="fixed inset-x-5 bottom-7 mx-auto max-w-[520px]"><button className="flex h-14 w-full items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] text-lg font-medium text-white disabled:opacity-50" disabled={!images.length || !representativeImageId || saving || uploading || Boolean(removingId)} onClick={() => void save()} type="button">{saving ? "사진 저장 중…" : "사진 저장하기"}</button></div></main>;
+    {error && !images.length ? <Button className="mt-4" onClick={() => void load()} size="medium" variant="secondary">다시 불러오기</Button> : null}
+  </section><div className="fixed inset-x-5 bottom-7 mx-auto max-w-[520px]"><Button disabled={!images.length || !representativeImageId || saving || uploading || Boolean(removingId)} fullWidth loading={saving} onClick={() => void save()}>사진 저장하기</Button></div></main>;
 }
