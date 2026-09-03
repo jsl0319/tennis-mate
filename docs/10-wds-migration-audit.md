@@ -8,7 +8,7 @@
 | 문서 상태 | Draft v0.1 (조사만, 코드 변경 없음) |
 | 기준 커밋 | `53399ad` (feat: set up Montage(WDS) design system integration foundation) |
 | 작성 목적 | 화면 단위 WDS 컴포넌트 교체를 시작하기 전, 현재 UI 구현 방식과 WDS 컴포넌트 카탈로그를 매핑해 우선순위·리스크를 파악 |
-| 다음 단계 | 공용 컴포넌트 3개 + CTA 버튼 80곳 + 인라인 모달 6곳 + 폼 3개 화면 입력 컴포넌트 교체 완료(9·10·11·12번 참고) → "6. 제안 순서"의 항목 소진, 12번 말미의 남은 과제 중 결정 필요 |
+| 다음 단계 | 공용 컴포넌트 3개 + CTA 버튼 80곳 + 인라인 모달 6곳 + 폼 3개 화면 입력 컴포넌트 교체 완료(9·10·11·12번 참고) → 로컬 화면에서 전역 레이아웃 붕괴 발견·근본 원인 수정(13번 참고) → 로컬 재확인 대기, 12번 말미의 남은 과제 중 결정 필요 |
 
 foundation(Provider, 전역 CSS, 패키지 설치)만 구성된 상태이며, 화면·컴포넌트는 아직 하나도 WDS로 교체되지 않았다. 이 문서는 그 착수 전 조사 결과다.
 
@@ -193,3 +193,38 @@ Rally On은 별도 UI 라이브러리(Radix, shadcn 등) 없이 **Tailwind CSS v
 - 3개 파일 각각 `npm run typecheck`, `npm run lint` 통과 후 개별 커밋. `npm run dev`는 이 작업 환경(디바이스 브릿지 셸)의 네트워크 제약으로 여전히 기동 확인을 하지 못했다 — 특히 `Select`(팝오버 목록)와 `SearchField`(reset 버튼)는 실제 클릭 상호작용을 코드만으로 완전히 검증할 수 없으므로 로컬에서 직접 확인이 필요하다.
 
 다음 단계는 "6. 제안 순서"에 남은 항목이 없다 — 이 문서의 4번 섹션에서 언급했던 나머지 화면들(chip/badge, snackbar/toast, date-picker/time-picker, avatar 등 아직 활용하지 않은 WDS 컴포넌트)을 어디에 도입할지, 그리고 이번에 범위 밖으로 남긴 소수의 입력 요소(라디오, 나머지 파일들의 개별 input/textarea)를 이어서 정리할지 결정이 필요하다.
+
+## 13. 긴급 수정: WDS global.css가 Tailwind 유틸리티 클래스를 전역에서 무력화하던 문제
+
+9~12번 작업(공용 컴포넌트/CTA 버튼/모달/폼 컴포넌트 교체)을 모두 마친 뒤 로컬에서 실제 화면을 확인한 결과, 이번에 손댄 화면뿐 아니라 앱 전체에서 레이아웃이 깨지고 정렬이 맞지 않는 문제가 발견됐다. `npm run typecheck`/`npm run lint`는 매 커밋마다 통과했지만 이 둘은 CSS/레이아웃 결함을 잡아내지 못한다는 사실이 드러난 사례다.
+
+**원인 (node_modules 내 컴파일된 소스를 직접 읽어 확인)**
+
+- `node_modules/@wanteddev/wds/dist/global.css`는 레이어로 감싸지 않은(unlayered) 순수 CSS reset을 포함한다: `div, span, p, a, button, ul, li, form, label, table` 등 광범위한 엘리먼트에 `margin: 0; padding: 0; border: 0; font: inherit; vertical-align: baseline;`, 그리고 `body { line-height: 1; }`, `ol, ul { list-style: none; }` 등.
+- `node_modules/tailwindcss/index.css`는 최상단에서 `@layer theme, base, components, utilities;`를 선언하고, Preflight(리셋)와 모든 유틸리티 클래스 생성 결과를 예외 없이 이 네 레이어 안에 넣는다.
+- [CSS Cascade Layers 명세](https://www.w3.org/TR/css-cascade-5/#layering)상 레이어에 속하지 않은(unlayered) 규칙은 명시도(specificity)나 소스 순서와 무관하게 레이어에 속한 규칙보다 항상 우선한다. 기존에는 `layout.tsx`에서 `import "./globals.css"` 다음에 `import "@wanteddev/wds/global.css"`를 일반 JS import로 각각 불러오고 있었는데, 이렇게 불러온 WDS의 global.css는 어떤 레이어에도 속하지 않은 채였다.
+- 결과적으로 WDS의 reset이 Tailwind의 `mt-4`, `p-4`, `border`, `rounded-2xl`, `font-bold` 같은 margin/padding/border/font 관련 유틸리티 클래스를 **명시도와 무관하게** 계속 이기고 있었다 — `<button className="rounded-2xl border px-4">`처럼 클래스 선택자를 쓴 Tailwind 유틸리티조차, 단순 타입 선택자인 WDS의 unlayered `button { border: 0 }`에 졌다는 뜻이다. 이번 마이그레이션 대상 파일만이 아니라 `<div>`/`<p>`/`<a>`/`<ul>`/`<form>`/`<table>`을 쓰는 모든 화면이 영향을 받았다.
+- 부수 효과로 `body, textarea, input { font-family: 'Pretendard Variable' ... }`도 unlayered라, `src/app/globals.css`가 지정한 `--font-sans`(Noto Sans KR) 기반 `body` 폰트 지정을 이겨서 전역 폰트가 의도와 다르게 나오고 있었다.
+
+**수정**
+
+`src/app/globals.css` 최상단에 레이어 우선순위를 먼저 선언해 WDS의 global.css를 Tailwind보다 낮은 별도 레이어(`wds-reset`)에 격리했다 — Tailwind CSS v4 공식 문서가 서드파티 CSS를 다룰 때 권장하는 패턴과 동일하다.
+
+```css
+@layer wds-reset, theme, base, components, utilities;
+
+@import "tailwindcss";
+@import "@wanteddev/wds/global.css" layer(wds-reset);
+```
+
+CSS의 `layer()` 문법은 실제 CSS `@import`문에서만 동작하고 JS의 일반 `import "*.css"` 구문에는 적용할 수 없으므로, `layout.tsx`에 있던 `import "@wanteddev/wds/global.css";`는 제거하고 위 CSS `@import`로 통합했다.
+
+**검증 한계 (중요)**
+
+이 작업 환경(디바이스 브릿지 device_bash 셸)은 실제로는 Linux arm64 VM이라, Next.js의 SWC 바이너리와 `lightningcss` 네이티브 바이너리 모두 darwin-arm64 버전만 설치돼 있고 linux-arm64 버전은 없다. 레지스트리 접근도 막혀 있어(403 Forbidden) 새로 받을 수도 없다. 이를 직접 확인하기 위해:
+
+1. `npm run build`(`next build --webpack`)를 시도 → SWC 바이너리 로드 실패로 빌드 자체가 되지 않음을 확인.
+2. `@tailwindcss/postcss` + `postcss`를 Next.js 없이 직접 호출해 `globals.css` 하나만 컴파일 시도 → `lightningcss` 네이티브 바이너리(linux-arm64-gnu) 부재로 동일하게 실패.
+3. 부재한 바이너리를 `npm install`로 개별 설치 시도 → 레지스트리 403으로 실패.
+
+즉 이번 수정은 (a) 두 패키지의 실제 컴파일된 소스를 직접 읽어 충돌 지점을 특정하고 (b) Tailwind CSS v4 공식 문서가 명시하는 해결 패턴을 그대로 적용한 것이지만, **이 환경에서 실제 빌드·렌더링으로 재현·검증하는 것은 구조적으로 불가능했다.** `npm run typecheck`/`npm run lint`는 통과하지만, 애초에 "타입·린트만 통과하고 실제 화면은 깨져 있던" 것이 이 문제 자체이므로, 이번 커밋은 반드시 로컬 `npm run dev`로 화면을 직접 확인해 주어야 한다.
