@@ -1,4 +1,24 @@
+/*
+ * WDS(Wanted Design System)의 global.css는 레이어로 감싸지 않은(unlayered) 순수 CSS reset을
+ * 포함한다(div/p/a/button/ul/li/form/label 등에 margin/padding/border:0, font:inherit,
+ * body{line-height:1}, ol/ul{list-style:none} 등). Tailwind v4는 @import "tailwindcss"가
+ * 전개될 때 자기 자신의 모든 규칙(Preflight 포함, 유틸리티 클래스 전부)을
+ * `@layer theme, base, components, utilities;` 안에 넣는다.
+ * CSS Cascade Layers 명세상 "레이어에 속하지 않은 규칙은 명시도·소스 순서와 무관하게
+ * 항상 레이어에 속한 규칙보다 우선한다." 즉 WDS의 unlayered reset이 Tailwind의 모든
+ * 유틸리티 클래스(margin/padding/border/font 관련 전부)를 화면 전역에서 무력화하고 있었다ㅡ
+ * 이번 마이그레이션에서 손댄 화면뿐 아니라 앱 전체가 "레이아웃이 깨지고 정렬이 안 맞는"
+ * 이유가 바로 이것이다.
+ *
+ * 해결: WDS의 global.css를 Tailwind의 레이어보다 우선순위가 낮은 별도 레이어(wds-reset)로
+ * 감싼다. 아래 @layer 문으로 레이어 순서를 먼저 선언해 wds-reset을 가장 낮은 우선순위로
+ * 고정하면, Tailwind의 preflight/유틸리티 클래스와 이 파일의 이후 커스텀 규칙이 항상 이긴다.
+ * (Tailwind CSS v4 공식 문서가 권장하는 서드파티 CSS 레이어링 패턴과 동일)
+ */
+@layer wds-reset, theme, base, components, utilities;
+
 @import "tailwindcss";
+@import "@wanteddev/wds/global.css" layer(wds-reset);
 
 :root {
   --tm-bg-page: #f7fbff;

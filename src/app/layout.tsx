@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import { WdsProviders } from "./providers";
 
 import "./globals.css";
-import "@wanteddev/wds/global.css";
 
 const notoSansKr = Noto_Sans_KR({
   weight: ["400", "500", "700"],
