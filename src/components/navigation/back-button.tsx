@@ -1,5 +1,7 @@
 "use client";
 
+import { IconButton } from "@wanteddev/wds";
+import { IconArrowLeft } from "@wanteddev/wds-icon";
 import { useRouter } from "next/navigation";
 
 type BackButtonProps = {
@@ -11,5 +13,9 @@ type BackButtonProps = {
 export function BackButton({ ariaLabel = "이전 화면으로 돌아가기", className = "", fallbackPath = "/" }: BackButtonProps) {
   const router = useRouter();
 
-  return <button aria-label={ariaLabel} className={className} onClick={() => router.replace(fallbackPath)} type="button">←</button>;
+  return (
+    <IconButton aria-label={ariaLabel} className={className} onClick={() => router.replace(fallbackPath)}>
+      <IconArrowLeft height={20} width={20} />
+    </IconButton>
+  );
 }
