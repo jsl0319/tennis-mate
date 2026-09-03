@@ -8,7 +8,7 @@
 | 문서 상태 | Draft v0.1 (조사만, 코드 변경 없음) |
 | 기준 커밋 | `53399ad` (feat: set up Montage(WDS) design system integration foundation) |
 | 작성 목적 | 화면 단위 WDS 컴포넌트 교체를 시작하기 전, 현재 UI 구현 방식과 WDS 컴포넌트 카탈로그를 매핑해 우선순위·리스크를 파악 |
-| 다음 단계 | 공용 컴포넌트 3개 + CTA 버튼 80곳 교체 완료(9·10번 참고) → "6. 제안 순서"의 4번(인라인 모달 6곳)부터 착수 |
+| 다음 단계 | 공용 컴포넌트 3개 + CTA 버튼 80곳 + 인라인 모달 6곳 교체 완료(9·10·11번 참고) → "6. 제안 순서"의 5번(폼이 몰린 화면의 입력 컴포넌트)부터 착수 |
 
 foundation(Provider, 전역 CSS, 패키지 설치)만 구성된 상태이며, 화면·컴포넌트는 아직 하나도 WDS로 교체되지 않았다. 이 문서는 그 착수 전 조사 결과다.
 
@@ -141,3 +141,30 @@ Rally On은 별도 UI 라이브러리(Radix, shadcn 등) 없이 **Tailwind CSS v
 - `npm run dev`는 이번에도 작업 환경(디바이스 브릿지 셸)의 네트워크 제약으로 SWC 바이너리를 받지 못해 기동 확인을 하지 못했다 — 로컬에서 화면을 눈으로 한 번 확인 권장.
 
 다음 단계는 "6. 제안 순서"의 4번(인라인 모달 6곳을 WDS `modal`로 교체)이다.
+
+## 11. 진행: 인라인 모달 6곳을 WDS Modal로 교체 완료 (2026-09-03)
+
+"6. 제안 순서"의 4번을 완료했다. `role="dialog"`를 직접 구현하던 6개 바텀시트를 모두 WDS `Modal`/`ModalContainer`(`variant="bottom"`)로 교체했다. 대상 파일: `m6-received-applications.tsx`(LifecycleConfirm, DecisionConfirm), `m5-sent-applications.tsx`(WithdrawalConfirm), `match-conversation.tsx`(ReportSheet), `m3-match-detail.tsx`(ApplicationSheet), `operator-time-management.tsx`(SupplyIncidentSheet), `m4-match-create.tsx`(CourtPlaceDialog). 리포지토리 전체 기준으로 `role="dialog"`가 더 이상 남아 있지 않다.
+
+**구조 매핑**
+
+- `Modal`을 항상 `open` 상태로 렌더링하고(부모 컴포넌트가 조건부로 마운트/언마운트하는 기존 패턴은 그대로 유지), `onOpenChange`가 `false`로 바뀔 때(바깥 클릭·ESC 포함) 기존 `onClose`/`onCancel` 콜백을 호출하도록 연결했다.
+- 제목/설명이 있는 화면은 `ModalContent` > `ModalContentItem` 안에 `ModalSummary`(작은 eyebrow 텍스트) + `ModalHeading`(제목) + `ModalDescription`(본문)을 넣었다. 닫기(X) 버튼이 필요한 화면은 `ModalNavigation trailingContent={<ModalClose aria-label="..." />}`를 사용했다 — `ModalClose`가 기본으로 WDS `IconClose` 아이콘과 닫기 동작을 제공하므로, 이전에 개별 화면마다 넣었던 `IconButton`+`IconClose` 조합을 제거할 수 있었다.
+- 확인/취소 버튼 그룹은 `ActionArea`로 교체했다.
+  - **`variant="strong"`** (세로로 쌓인 버튼): 확인용 팝업(LifecycleConfirm, DecisionConfirm, WithdrawalConfirm, SupplyIncidentSheet의 사유 선택 단계)에 사용. `ActionAreaButton variant="main"`은 실선 파랑 풀너비, `variant="alternative" buttonColor="assistive"`는 아웃라인 회색 풀너비 버튼이 된다.
+  - **`variant="neutral"`** (가로 2등분 버튼): ReportSheet, ApplicationSheet, SupplyIncidentSheet의 세션 취소 확인 단계처럼 원래 화면이 두 버튼을 나란히 배치했던 곳에 사용 — `ActionAreaButton`은 `flex: 1 1 0`으로 자동 균등 분할된다.
+  - 파괴적 액션("세션 취소·안내")은 WDS Button/ActionAreaButton에 danger 컬러가 없어 여전히 네이티브 `<button>`으로 남기되, `ActionArea variant="neutral"` 안에서 `className="flex-1"`로 옆의 `ActionAreaButton`과 너비를 맞췄다.
+- `m4-match-create.tsx`의 CourtPlaceDialog는 원래 데스크톱에서 `sm:items-center`로 화면 중앙에 뜨는 반응형 레이아웃이 있었다. `ModalContainer`는 `xs`/`sm`/`md`/`lg`/`xl` prop으로 반응형 `variant`/`size`를 지원하지만, WDS 브레이크포인트 값이 Tailwind의 `sm:`(640px)과 실제로 일치하는지 이번 조사에서 확인하지 못했다. 잘못 맞추면 오히려 레이아웃이 깨질 위험이 있어, 이번에는 모바일 기준 `variant="bottom"` 하나로 단순화하고 데스크톱 중앙 배치는 포기했다 — 필요하면 WDS 브레이크포인트 토큰을 먼저 확인한 뒤 별도로 복원할 수 있다.
+
+**WDS가 대신 처리하게 된 것** (기존에는 각 화면이 직접 구현했던 부분)
+
+- 포커스 트랩(`FocusScope`), 바깥 클릭/ESC로 닫기, 스크롤 잠금, 배경 dimmer 페이드
+- 바텀시트 진입 애니메이션(아래에서 위로 슬라이드) — 기존 구현엔 애니메이션이 전혀 없었다
+- 상단 모서리 둥글리기, `env(safe-area-inset-bottom)` 패딩, 최대 높이 계산
+
+**검증**
+
+- 6개 파일 각각 `npm run typecheck`, `npm run lint` 통과 후 개별 커밋. 마지막에 리포지토리 전체에서 `role="dialog"` 재검색으로 누락이 없는지 확인했다.
+- `npm run dev`는 이번에도 이 작업 환경(디바이스 브릿지 셸)의 네트워크 제약으로 기동 확인을 하지 못했다 — 특히 Modal은 애니메이션·포커스 트랩·반응형 동작이 코드만으로 완전히 검증되지 않으므로, 로컬에서 실제 화면을 열어 확인하는 게 이번 단계에서는 더 중요하다.
+
+다음 단계는 "6. 제안 순서"의 5번(폼이 몰려 있는 화면인 `m4-match-create.tsx`, `m2-onboarding-flow.tsx`, `operator-time-management.tsx`의 `<input>`/`<textarea>`/`<select>` 등을 WDS 폼 컴포넌트로 교체)이다.
