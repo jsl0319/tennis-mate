@@ -14,11 +14,12 @@ import {
   Plus,
   TennisBall,
   UsersThree,
-  X,
 } from "@phosphor-icons/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+
+import { ActionArea, ActionAreaButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation } from "@wanteddev/wds";
 
 import { Button } from "@/components/ui/button";
 
@@ -598,38 +599,44 @@ function CourtPlaceDialog({ error, form, isLoading, isManualEntry, isOpen, onAdd
   if (!isOpen) return null;
 
   return (
-    <div aria-hidden={false} className="fixed inset-0 z-50 flex items-end bg-black/45 p-3 sm:items-center sm:justify-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section aria-labelledby="court-search-dialog-title" aria-modal="true" className="max-h-[min(760px,calc(100svh-1.5rem))] w-full max-w-[460px] overflow-y-auto rounded-[28px] bg-white px-5 pb-6 pt-5 shadow-2xl" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} role="dialog">
-        <header className="flex items-start justify-between gap-3">
-          <div>
-            <h2 id="court-search-dialog-title" className="text-2xl font-bold tracking-[-0.04em]">{isManualEntry ? "테니스장 직접 입력" : "테니스장 검색"}</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{isManualEntry ? "예약한 코트의 이름과 주소를 입력해 주세요." : "지역명 또는 테니스장 이름으로 검색해 주세요."}</p>
-          </div>
-          <button aria-label="테니스장 검색 닫기" className="grid size-10 shrink-0 place-items-center rounded-full text-[var(--tm-text-secondary)] hover:bg-[var(--tm-bg-subtle)]" onClick={onClose} type="button"><X aria-hidden size={22} weight="bold" /></button>
-        </header>
+    <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <ModalContainer variant="bottom" size="large">
+        <ModalNavigation trailingContent={<ModalClose aria-label="테니스장 검색 닫기" />}>
+          {isManualEntry ? "테니스장 직접 입력" : "테니스장 검색"}
+        </ModalNavigation>
+        <ModalContent>
+          <ModalContentItem>
+            <ModalDescription>{isManualEntry ? "예약한 코트의 이름과 주소를 입력해 주세요." : "지역명 또는 테니스장 이름으로 검색해 주세요."}</ModalDescription>
+          </ModalContentItem>
+
+          {isManualEntry ? (
+            <ModalContentItem>
+              <label className="block"><FieldTitle required>코트장 이름</FieldTitle><input autoFocus className={controlClassName} maxLength={100} onChange={(event) => onNameChange(event.target.value)} placeholder="예: 한강 테니스장" value={form.courtName} /></label>
+              <label className="mt-5 block"><FieldTitle required>코트장 주소</FieldTitle><input className={controlClassName} maxLength={255} onChange={(event) => onAddressChange(event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} /></label>
+              <label className="mt-5 block"><FieldTitle>코트 번호 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FieldTitle><input className={controlClassName} maxLength={50} onChange={(event) => set("courtNumber", event.target.value)} placeholder="예: 3번 코트" value={form.courtNumber} /></label>
+              <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">예약번호와 연락처는 입력하지 마세요. 코트 번호만 간단히 알려 주세요.</p>
+            </ModalContentItem>
+          ) : (
+            <ModalContentItem>
+              <label className="block"><span className="sr-only">테니스장 검색</span><div className="relative"><MagnifyingGlass aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--tm-action-primary)]" size={23} weight="bold" /><input autoFocus aria-label="테니스장 검색" className="h-15 w-full rounded-2xl border-2 border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] py-3 pl-12 pr-4 text-base outline-none" maxLength={80} onChange={(event) => onQueryChange(event.target.value)} placeholder="테니스장 이름을 입력…" value={query} /></div></label>
+              <button className="mt-4 flex min-h-[54px] w-full items-center justify-between rounded-2xl border border-[var(--tm-border-default)] px-4 text-sm font-bold text-[var(--tm-text-primary)]" onClick={onManualEntryOpen} type="button"><span className="inline-flex items-center gap-3"><PencilSimple aria-hidden size={21} weight="bold" />테니스장 직접 입력</span><ArrowRight aria-hidden size={18} weight="bold" /></button>
+              {isLoading ? <p className="mt-4 text-center text-sm text-[var(--tm-text-secondary)]">테니스장을 찾고 있어요…</p> : null}
+              {error ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
+              {results.length ? <div aria-label="테니스장 검색 결과" className="mt-4 grid gap-2">{results.map((place, index) => <button aria-label={`${place.name} 선택`} className="rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 py-4 text-left transition hover:border-[var(--tm-action-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]" key={`${place.name}-${place.address}-${index}`} onClick={() => onSelect(place)} type="button"><strong className="block text-sm">{place.name}</strong><span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{place.roadAddress ?? place.address}</span></button>)}</div> : null}
+              {isQueryReady && !isLoading && !error && results.length === 0 ? <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-4 text-center text-sm leading-6 text-[var(--tm-text-secondary)]">찾는 테니스장이 없나요?<br />직접 입력으로 계속 진행할 수 있어요.</p> : null}
+              {!isQueryReady ? <div className="px-4 pb-5 pt-18 text-center text-[var(--tm-text-secondary)]"><span className="mx-auto grid size-18 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]"><MagnifyingGlass aria-hidden size={36} weight="light" /></span><p className="mt-5 text-base">테니스장을 검색해 주세요</p></div> : null}
+              <p className="mt-5 text-center text-[11px] leading-5 text-[var(--tm-text-secondary)]">장소 정보 제공: Kakao · 검색 결과는 예약 여부를 보증하지 않아요.</p>
+            </ModalContentItem>
+          )}
+        </ModalContent>
 
         {isManualEntry ? (
-          <div className="mt-7">
-            <label className="block"><FieldTitle required>코트장 이름</FieldTitle><input autoFocus className={controlClassName} maxLength={100} onChange={(event) => onNameChange(event.target.value)} placeholder="예: 한강 테니스장" value={form.courtName} /></label>
-            <label className="mt-5 block"><FieldTitle required>코트장 주소</FieldTitle><input className={controlClassName} maxLength={255} onChange={(event) => onAddressChange(event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} /></label>
-            <label className="mt-5 block"><FieldTitle>코트 번호 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FieldTitle><input className={controlClassName} maxLength={50} onChange={(event) => set("courtNumber", event.target.value)} placeholder="예: 3번 코트" value={form.courtNumber} /></label>
-            <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">예약번호와 연락처는 입력하지 마세요. 코트 번호만 간단히 알려 주세요.</p>
-            <Button className="mt-6" disabled={!canFinishManualEntry} fullWidth onClick={onClose} size="large">입력 완료</Button>
-          </div>
-        ) : (
-          <div className="mt-7">
-            <label className="block"><span className="sr-only">테니스장 검색</span><div className="relative"><MagnifyingGlass aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--tm-action-primary)]" size={23} weight="bold" /><input autoFocus aria-label="테니스장 검색" className="h-15 w-full rounded-2xl border-2 border-[var(--tm-action-primary)] bg-[var(--tm-bg-subtle)] py-3 pl-12 pr-4 text-base outline-none" maxLength={80} onChange={(event) => onQueryChange(event.target.value)} placeholder="테니스장 이름을 입력…" value={query} /></div></label>
-            <button className="mt-4 flex min-h-[54px] w-full items-center justify-between rounded-2xl border border-[var(--tm-border-default)] px-4 text-sm font-bold text-[var(--tm-text-primary)]" onClick={onManualEntryOpen} type="button"><span className="inline-flex items-center gap-3"><PencilSimple aria-hidden size={21} weight="bold" />테니스장 직접 입력</span><ArrowRight aria-hidden size={18} weight="bold" /></button>
-            {isLoading ? <p className="mt-4 text-center text-sm text-[var(--tm-text-secondary)]">테니스장을 찾고 있어요…</p> : null}
-            {error ? <p className="mt-4 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
-            {results.length ? <div aria-label="테니스장 검색 결과" className="mt-4 grid gap-2">{results.map((place, index) => <button aria-label={`${place.name} 선택`} className="rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 py-4 text-left transition hover:border-[var(--tm-action-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]" key={`${place.name}-${place.address}-${index}`} onClick={() => onSelect(place)} type="button"><strong className="block text-sm">{place.name}</strong><span className="mt-1 block text-xs leading-5 text-[var(--tm-text-secondary)]">{place.roadAddress ?? place.address}</span></button>)}</div> : null}
-            {isQueryReady && !isLoading && !error && results.length === 0 ? <p className="mt-5 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-4 text-center text-sm leading-6 text-[var(--tm-text-secondary)]">찾는 테니스장이 없나요?<br />직접 입력으로 계속 진행할 수 있어요.</p> : null}
-            {!isQueryReady ? <div className="px-4 pb-5 pt-18 text-center text-[var(--tm-text-secondary)]"><span className="mx-auto grid size-18 place-items-center rounded-full bg-[var(--tm-bg-subtle)] text-[var(--tm-action-primary)]"><MagnifyingGlass aria-hidden size={36} weight="light" /></span><p className="mt-5 text-base">테니스장을 검색해 주세요</p></div> : null}
-            <p className="mt-5 text-center text-[11px] leading-5 text-[var(--tm-text-secondary)]">장소 정보 제공: Kakao · 검색 결과는 예약 여부를 보증하지 않아요.</p>
-          </div>
-        )}
-      </section>
-    </div>
+          <ActionArea variant="strong">
+            <ActionAreaButton disabled={!canFinishManualEntry} onClick={onClose} variant="main">입력 완료</ActionAreaButton>
+          </ActionArea>
+        ) : null}
+      </ModalContainer>
+    </Modal>
   );
 }
 
