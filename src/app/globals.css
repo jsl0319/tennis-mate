@@ -1,20 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --tm-bg-page: #fcfbf7;
+  --tm-bg-page: #f7fbff;
   --tm-bg-surface: #ffffff;
-  --tm-bg-subtle: #eef3f8;
-  --tm-bg-subtle-muted: #f4f7fa;
+  --tm-bg-subtle: #eaf2fe;
+  --tm-bg-subtle-muted: #f0f6fe;
   --tm-bg-highlight: #f7f8d6;
-  --tm-text-primary: #243044;
+  --tm-text-primary: #1e2a40;
   --tm-text-secondary: #5e6c80;
   --tm-text-muted: #475569;
   --tm-text-placeholder: #748198;
-  --tm-action-primary: #315e9e;
-  --tm-action-hover: #244a80;
-  --tm-border-default: #d9e2ec;
-  --tm-border-strong: #9bb6d8;
-  --tm-border-subtle: #edf2f7;
+  --tm-action-primary: #0066ff;
+  --tm-action-hover: #005eeb;
+  --tm-border-default: #c9defe;
+  --tm-border-strong: #9ec5ff;
+  --tm-border-subtle: #edf3fc;
   --tm-tennis-ball: #d8de35;
   --tm-tennis-ball-muted: #5f6814;
   --tm-status-error-bg: #fff1ef;
