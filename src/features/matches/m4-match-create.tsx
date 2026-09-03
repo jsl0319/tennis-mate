@@ -20,6 +20,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { Button } from "@/components/ui/button";
+
 import { CourtMedia } from "./court-media";
 
 type Region = { code: string; name: string; shortName: string | null };
@@ -612,7 +614,7 @@ function CourtPlaceDialog({ error, form, isLoading, isManualEntry, isOpen, onAdd
             <label className="mt-5 block"><FieldTitle required>코트장 주소</FieldTitle><input className={controlClassName} maxLength={255} onChange={(event) => onAddressChange(event.target.value)} placeholder="참가자가 찾아올 수 있는 주소" value={form.address} /></label>
             <label className="mt-5 block"><FieldTitle>코트 번호 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></FieldTitle><input className={controlClassName} maxLength={50} onChange={(event) => set("courtNumber", event.target.value)} placeholder="예: 3번 코트" value={form.courtNumber} /></label>
             <p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-xs leading-5 text-[var(--tm-text-secondary)]">예약번호와 연락처는 입력하지 마세요. 코트 번호만 간단히 알려 주세요.</p>
-            <button className="mt-6 min-h-[54px] w-full rounded-2xl bg-[var(--tm-action-primary)] px-5 text-sm font-bold text-white disabled:opacity-45" disabled={!canFinishManualEntry} onClick={onClose} type="button">입력 완료</button>
+            <Button className="mt-6" disabled={!canFinishManualEntry} fullWidth onClick={onClose} size="large">입력 완료</Button>
           </div>
         ) : (
           <div className="mt-7">
@@ -793,5 +795,5 @@ function PreviewItem({ icon, label, value }: { icon: ReactNode; label: string; v
 function ActionFooter({ action, disabled, onBack, onNext, saving, uploading }: { action: string; disabled: boolean; onBack?: () => void; onNext: () => void; saving: boolean; uploading: boolean }) {
   const label = saving ? "등록 중…" : uploading ? "사진 올리는 중…" : action;
 
-  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto flex max-w-[560px] gap-3">{onBack ? <button className="min-h-[54px] shrink-0 rounded-2xl bg-[var(--tm-bg-subtle)] px-5 text-sm font-bold text-[var(--tm-text-primary)]" onClick={onBack} type="button">이전</button> : null}<button className="flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--tm-action-primary)] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(49,94,158,0.22)] transition hover:bg-[var(--tm-action-hover)] disabled:cursor-not-allowed disabled:opacity-45" disabled={disabled} onClick={onNext} type="button">{label}{!saving && !uploading && action !== "매칭 공개하기" ? <ArrowRight aria-hidden size={18} weight="bold" /> : null}</button></div></footer>;
+  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto flex max-w-[560px] gap-3">{onBack ? <Button onClick={onBack} size="large" variant="neutral">이전</Button> : null}<Button className="flex-1" disabled={disabled} onClick={onNext} size="large">{label}{!saving && !uploading && action !== "매칭 공개하기" ? <ArrowRight aria-hidden size={18} weight="bold" /> : null}</Button></div></footer>;
 }
