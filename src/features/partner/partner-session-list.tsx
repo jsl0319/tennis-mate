@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
+import { Button } from "@/components/ui/button";
 import { CourtMedia } from "@/features/matches/court-media";
 
 import { apiMessage, formatPartnerSchedule, formatStatusChangedAt, type PublicCourtSlot } from "./partner-session";
@@ -43,7 +44,7 @@ export function PartnerSessionList() {
     <section className="mx-auto max-w-[560px] px-5 pt-6">
       <div className="flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold">이번 주 코트 매칭</h2><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">참가 신청은 세션을 연 모집자에게 보내요.</p></div></div>
       {!slots && !error ? <div className="grid min-h-[calc(100svh-260px)] place-items-center"><CourtRallyLoader className="max-w-[560px]" label="코트 매칭 시간을 준비하고 있어요." /></div> : null}
-      {error ? <div className="mt-5 rounded-3xl bg-[var(--tm-status-error-bg)] p-5"><p className="font-semibold text-[var(--tm-status-error-text)]">불러오지 못했어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-status-error-text)]">{error}</p><button className="mt-4 min-h-11 rounded-xl bg-white px-4 text-sm font-semibold text-[var(--tm-action-primary)]" onClick={() => void load()} type="button">다시 불러오기</button></div> : null}
+      {error ? <div className="mt-5 rounded-3xl bg-[var(--tm-status-error-bg)] p-5"><p className="font-semibold text-[var(--tm-status-error-text)]">불러오지 못했어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-status-error-text)]">{error}</p><Button onClick={() => void load()} size="medium" variant="secondary">다시 불러오기</Button></div> : null}
       {!error && slots?.length === 0 ? <EmptyState /> : null}
       {!error && slots && slots.length > 0 ? <div className="mt-5 grid gap-4">{slots.map((slot) => <PublicSlotCard key={slot.id} slot={slot} />)}</div> : null}
     </section>
@@ -68,7 +69,7 @@ function PublicSlotCard({ slot }: { slot: PublicCourtSlot }) {
       {slot.usageNote ? <p className="mt-3 rounded-2xl bg-[var(--tm-bg-subtle)] px-3 py-2 text-sm leading-5 text-[var(--tm-text-secondary)]">{slot.usageNote}</p> : null}
       {slot.availableAction === "READ_ONLY" ? <p className="mt-3 text-xs text-[var(--tm-text-secondary)]">상태 갱신 · {formatStatusChangedAt(slot.statusChangedAt)}</p> : <p className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)]">자세히 보기 →</p>}
     </Link>
-    {slot.availableAction === "OPEN_SESSION" ? <div className="border-t border-[var(--tm-border-subtle)] p-3"><Link className="flex min-h-12 items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" href={`/partner-sessions/open?slotId=${encodeURIComponent(slot.id)}`}>이 시간으로 코트 매칭 열기</Link></div> : null}
+    {slot.availableAction === "OPEN_SESSION" ? <div className="border-t border-[var(--tm-border-subtle)] p-3"><Button as={Link} fullWidth href={`/partner-sessions/open?slotId=${encodeURIComponent(slot.id)}`}>이 시간으로 코트 매칭 열기</Button></div> : null}
     {slot.availableAction === "VIEW_SESSION" && slot.session ? <div className="border-t border-[var(--tm-border-subtle)] p-3"><Link className="flex min-h-12 items-center justify-center rounded-2xl bg-[var(--tm-bg-subtle)] px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href={`/matches/${slot.session.matchId}`}>{isCancelledSession ? "코트 매칭 취소 안내 보기" : "코트 매칭 자세히 보기"}</Link></div> : null}
   </article>;
 }

@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { Button } from "@/components/ui/button";
+
 type ErrorPageProps = {
   error: Error & { digest?: string };
   reset: () => void;
@@ -23,13 +25,9 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           입력한 내용은 그대로 두고 다시 시도해 주세요. 계속 문제가 생기면
           잠시 후 이용해 주세요.
         </p>
-        <button
-          className="mt-6 min-h-12 w-full rounded-2xl bg-[var(--tm-action-primary)] px-5 font-semibold text-white hover:bg-[var(--tm-action-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tm-action-primary)]"
-          onClick={reset}
-          type="button"
-        >
+        <Button className="mt-6" fullWidth onClick={reset}>
           다시 시도하기
-        </button>
+        </Button>
       </section>
     </main>
   );
