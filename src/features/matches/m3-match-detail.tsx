@@ -1,11 +1,14 @@
 "use client";
 
+import { IconButton } from "@wanteddev/wds";
+import { IconClose } from "@wanteddev/wds-icon";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { BackButton } from "@/components/navigation/back-button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { Button } from "@/components/ui/button";
 import { getSafeReturnTo } from "@/navigation/return-to";
 
 import { CourtMedia, type CourtImageView } from "./court-media";
@@ -114,7 +117,7 @@ export function M3MatchDetail({ params }: { params: Promise<{ matchId: string }>
     }
   };
 
-  if (!detail) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center">{error ? <div><p>{error}</p><button className="mt-4 rounded-xl bg-[var(--tm-action-primary)] px-4 py-3 text-white" onClick={() => void load()} type="button">다시 불러오기</button><Link className="ml-3 text-sm underline" href="/">홈으로</Link></div> : <CourtRallyLoader label="매칭 정보를 준비하고 있어요." />}</main>;
+  if (!detail) return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-center">{error ? <div><p>{error}</p><Button className="mt-4" onClick={() => void load()}>다시 불러오기</Button><Link className="ml-3 text-sm underline" href="/">홈으로</Link></div> : <CourtRallyLoader label="매칭 정보를 준비하고 있어요." />}</main>;
 
   if (submitted) return <ApplicationSuccess title={detail.title} />;
 
@@ -134,24 +137,24 @@ export function M3MatchDetail({ params }: { params: Promise<{ matchId: string }>
 }
 
 function DetailAction({ detail, onApply }: { detail: Detail; onApply: () => void }) {
-  if (detail.viewer.canApply) return <button className="min-h-[52px] w-full rounded-3xl bg-[var(--tm-action-primary)] font-semibold text-white transition-colors hover:bg-[var(--tm-action-hover)]" onClick={onApply} type="button">같이 치기</button>;
+  if (detail.viewer.canApply) return <Button fullWidth onClick={onApply}>같이 치기</Button>;
   if ((detail.viewer.relation === "HOST" || detail.viewer.applicationStatus === "ACCEPTED") && detail.contact) return <ContactAction contact={detail.contact} />;
-  if (detail.viewer.relation === "APPLICANT") return <Link className="flex min-h-[52px] w-full items-center justify-center rounded-3xl bg-[var(--tm-bg-subtle)] font-semibold text-[var(--tm-action-primary)]" href="/activity/sent">검토 중이에요 · 신청 내역 보기</Link>;
+  if (detail.viewer.relation === "APPLICANT") return <Button as={Link} fullWidth href="/activity/sent" variant="secondary">검토 중이에요 · 신청 내역 보기</Button>;
   return <p className="py-4 text-center text-sm font-medium text-[var(--tm-text-secondary)]">{blockedMessage(detail.viewer.applyBlockedReason)}</p>;
 }
 
 function ContactAction({ contact }: { contact: NonNullable<Detail["contact"]> }) {
   if (!contact.href) return <p className="py-4 text-center text-sm font-medium text-[var(--tm-text-secondary)]">참가자가 수락되면 채팅방이 열려요.</p>;
-  return <Link className="flex min-h-[52px] w-full items-center justify-center rounded-3xl bg-[var(--tm-action-primary)] font-semibold text-white" href={contact.href}>{contact.label}</Link>;
+  return <Button as={Link} fullWidth href={contact.href}>{contact.label}</Button>;
 }
 
 function ApplicationSheet({ detail, message, applyError, alreadyApplied, isSubmitting, onClose, onMessageChange, onSubmit }: { detail: Detail; message: string; applyError: string; alreadyApplied: boolean; isSubmitting: boolean; onClose: () => void; onMessageChange: (value: string) => void; onSubmit: () => void }) {
   const profile = detail.viewer.tennisProfile;
-  return <div className="fixed inset-0 z-10 flex items-end bg-black/35" onMouseDown={onClose} role="presentation"><section aria-label="같이 치기 신청" aria-modal="true" className="max-h-[88svh] w-full overflow-y-auto rounded-t-[28px] bg-[var(--tm-bg-page)] px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-3" onMouseDown={(event) => event.stopPropagation()} role="dialog"><div className="mx-auto h-1.5 w-10 rounded-full bg-[var(--tm-border-default)]" /><div className="mx-auto max-w-[560px]"><div className="mt-5 flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-[var(--tm-action-primary)]">같이 치기 신청</p><h2 className="mt-1 text-xl font-bold">신청 전에 한 번만 확인해요</h2></div><button aria-label="신청 창 닫기" className="grid size-10 place-items-center rounded-full text-lg text-[var(--tm-text-muted)]" onClick={onClose} type="button">×</button></div>
+  return <div className="fixed inset-0 z-10 flex items-end bg-black/35" onMouseDown={onClose} role="presentation"><section aria-label="같이 치기 신청" aria-modal="true" className="max-h-[88svh] w-full overflow-y-auto rounded-t-[28px] bg-[var(--tm-bg-page)] px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-3" onMouseDown={(event) => event.stopPropagation()} role="dialog"><div className="mx-auto h-1.5 w-10 rounded-full bg-[var(--tm-border-default)]" /><div className="mx-auto max-w-[560px]"><div className="mt-5 flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-[var(--tm-action-primary)]">같이 치기 신청</p><h2 className="mt-1 text-xl font-bold">신청 전에 한 번만 확인해요</h2></div><IconButton aria-label="신청 창 닫기" onClick={onClose}><IconClose /></IconButton></div>
     <div className="mt-5 space-y-3"><SummaryCard title="일정과 장소"><p>{schedule(detail.startsAt, detail.endsAt)}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{detail.court.name ?? "코트는 함께 정해요"} · {detail.region.name}</p></SummaryCard><SummaryCard title="예상 비용"><p>{detail.estimatedFeePerPersonKrw === null ? "코트를 정한 뒤 함께 확인해요" : `약 ${detail.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">비용은 참가자끼리 별도로 정산해요.</p></SummaryCard><SummaryCard title="내 테니스 프로필"><p>{profile?.experienceLabel ?? "테니스 프로필"} · {profile?.rallyLevelLabel ?? ""}</p><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">{profile?.playPurposes.map((purpose) => purpose.label).join(" · ") ?? ""}</p></SummaryCard></div>
     <label className="mt-5 block text-sm font-semibold" htmlFor="application-message">모집자에게 한마디 <span className="font-normal text-[var(--tm-text-secondary)]">(선택)</span></label><textarea className="mt-2 min-h-24 w-full resize-none rounded-2xl border border-[var(--tm-border-default)] bg-white p-3 text-sm leading-6 outline-none placeholder:text-[var(--tm-text-placeholder)] focus:border-[var(--tm-action-primary)] focus:ring-2 focus:ring-[var(--tm-action-primary)]" id="application-message" maxLength={200} onChange={(event) => onMessageChange(event.target.value)} placeholder="예: 천천히 랠리하며 같이 연습하고 싶어요." value={message} /><p className="mt-1 text-right text-xs text-[var(--tm-text-secondary)]">{message.length}/200</p>
     {applyError ? <div className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm text-[var(--tm-status-error-text)]"><p>{applyError}</p>{alreadyApplied ? <Link className="mt-2 inline-block font-semibold underline" href="/activity/sent">신청 내역 보기</Link> : null}</div> : null}
-    <div className="mt-5 flex gap-3"><button className="min-h-[52px] flex-1 rounded-2xl border border-[var(--tm-border-default)] font-semibold text-[var(--tm-text-muted)]" disabled={isSubmitting} onClick={onClose} type="button">생각해볼게요</button><button className="min-h-[52px] flex-[1.4] rounded-2xl bg-[var(--tm-action-primary)] font-semibold text-white disabled:opacity-50" disabled={isSubmitting} onClick={onSubmit} type="button">{isSubmitting ? "신청 보내는 중…" : "신청하기"}</button></div>
+    <div className="mt-5 flex gap-3"><Button className="flex-1" disabled={isSubmitting} fullWidth onClick={onClose} variant="neutral">생각해볼게요</Button><Button className="flex-[1.4]" disabled={isSubmitting} fullWidth loading={isSubmitting} onClick={onSubmit}>신청하기</Button></div>
   </div></section></div>;
 }
 
@@ -160,7 +163,7 @@ function SummaryCard({ children, title }: { children: React.ReactNode; title: st
 }
 
 function ApplicationSuccess({ title }: { title: string }) {
-  return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-[var(--tm-text-primary)]"><section className="w-full max-w-[390px] rounded-[28px] bg-white p-6 text-center shadow-[0_10px_40px_rgba(49,94,158,0.09)]"><p className="text-4xl">🎾</p><h1 className="mt-4 text-2xl font-bold">신청을 보냈어요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]"><strong className="font-semibold text-[var(--tm-text-primary)]">{title}</strong><br />모집자가 프로필을 확인하면 결과를 알려드릴게요.</p><Link className="mt-6 flex min-h-[52px] items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] font-semibold text-white" href="/activity/sent">신청 내역 보기</Link></section></main>;
+  return <main className="grid min-h-svh place-items-center bg-[var(--tm-bg-page)] px-5 text-[var(--tm-text-primary)]"><section className="w-full max-w-[390px] rounded-[28px] bg-white p-6 text-center shadow-[0_10px_40px_rgba(49,94,158,0.09)]"><p className="text-4xl">🎾</p><h1 className="mt-4 text-2xl font-bold">신청을 보냈어요</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]"><strong className="font-semibold text-[var(--tm-text-primary)]">{title}</strong><br />모집자가 프로필을 확인하면 결과를 알려드릴게요.</p><Button as={Link} className="mt-6" fullWidth href="/activity/sent">신청 내역 보기</Button></section></main>;
 }
 
 function Section({ children, title }: { children: React.ReactNode; title: string }) {
