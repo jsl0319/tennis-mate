@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
+import { Button } from "@/components/ui/button";
 import { getSafeReturnTo } from "@/navigation/return-to";
 import { EntrySelection } from "@/features/profile/entry-selection";
 import { M2OnboardingFlow } from "@/features/profile/m2-onboarding-flow";
@@ -81,7 +82,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   if (screen === "loading") return <HomeLoading />;
   if (screen === "entry") return <EntrySelection returnTo={safeReturnTo} />;
   if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
-  if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><button className="mt-6 rounded-2xl bg-[var(--tm-action-primary)] px-5 py-3 font-semibold text-white" onClick={() => void load()} type="button">다시 불러오기</button></div></HomeStateFrame>;
+  if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><Button className="mt-6" onClick={() => void load()}>다시 불러오기</Button></div></HomeStateFrame>;
 
   const visibleOtherMatches = matches.filter((match) => !recommended.some((item) => item.id === match.id));
   const isRecommendedList = activeList === "recommended";

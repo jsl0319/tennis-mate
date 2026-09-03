@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityTabs } from "@/components/navigation/activity-tabs";
 import { BottomNavigation } from "@/components/navigation/bottom-navigation";
 import { BackButton } from "@/components/navigation/back-button";
+import { Button } from "@/components/ui/button";
 import { CourtRallyLoader } from "@/components/feedback/court-rally-loader";
 
 type SentApplication = {
@@ -102,11 +103,11 @@ export function M5SentApplications() {
 }
 
 function LoadError({ error, onRetry }: { error: string; onRetry: () => Promise<void> }) {
-  return <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p>{error}</p><button className="mt-4 rounded-2xl bg-[var(--tm-action-primary)] px-4 py-3 text-sm font-semibold text-white" onClick={() => void onRetry()} type="button">다시 불러오기</button></section>;
+  return <section className="mt-8 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5"><p>{error}</p><Button onClick={() => void onRetry()}>다시 불러오기</Button></section>;
 }
 
 function EmptySentApplications() {
-  return <section className="mt-10 rounded-3xl border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 보낸 신청이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">마음에 드는 매치를 찾아 부담 없이 신청해 보세요.</p><Link className="mt-5 inline-flex min-h-11 items-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white" href="/">매치 찾아보기</Link></section>;
+  return <section className="mt-10 rounded-3xl border border-dashed border-[var(--tm-border-strong)] bg-white px-5 py-10 text-center"><p className="text-2xl">🎾</p><h2 className="mt-4 font-bold">아직 보낸 신청이 없어요</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">마음에 드는 매치를 찾아 부담 없이 신청해 보세요.</p><Button as={Link} className="mt-5" href="/" size="medium">매치 찾아보기</Button></section>;
 }
 
 function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentApplication; withdrawing: boolean; onWithdraw: () => void }) {
@@ -122,14 +123,14 @@ function SentApplicationCard({ item, withdrawing, onWithdraw }: { item: SentAppl
       {item.message ? <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">“{item.message}”</p> : null}
     </Link>
     {item.contact ? <><p className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] px-4 py-3 text-sm leading-6 text-[var(--tm-action-hover)]">{acceptedCoordinationMessage(item.match.courtSource)}</p><ContactButton contact={item.contact} /></> : null}
-    {item.status === "PENDING" ? <button className="mt-3 min-h-11 w-full rounded-2xl border border-[var(--tm-border-default)] px-4 text-sm font-semibold text-[var(--tm-text-muted)] disabled:opacity-50" disabled={withdrawing} onClick={onWithdraw} type="button">신청 철회</button> : null}
+    {item.status === "PENDING" ? <Button className="mt-3" disabled={withdrawing} fullWidth onClick={onWithdraw} size="medium" variant="neutral">신청 철회</Button> : null}
   </article>;
 }
 
 function ContactButton({ contact }: { contact: NonNullable<SentApplication["contact"]> }) {
-  return contact.href ? <Link className="mt-3 flex min-h-[52px] items-center justify-center rounded-2xl bg-[var(--tm-action-primary)] px-4 text-center text-sm font-semibold text-white" href={contact.href}>{contact.label}</Link> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
+  return contact.href ? <Button as={Link} className="mt-3" fullWidth href={contact.href}>{contact.label}</Button> : <p className="mt-3 text-center text-sm text-[var(--tm-text-secondary)]">채팅방을 준비하고 있어요.</p>;
 }
 
 function WithdrawalConfirm({ busy, onCancel, onConfirm }: { busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  return <div className="fixed inset-0 z-50 flex items-end bg-black/35 px-5 pb-[max(20px,env(safe-area-inset-bottom))]" role="presentation"><section aria-label="신청 철회 확인" aria-modal="true" className="mx-auto w-full max-w-[560px] rounded-[28px] bg-[var(--tm-bg-page)] p-5" role="dialog"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">한 번만 확인해요</p><h2 className="mt-2 text-xl font-bold">신청을 철회할까요?</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">철회하면 다시 신청하지 못할 수 있어요.</p><div className="mt-6 grid gap-3"><button className="min-h-[52px] w-full rounded-2xl bg-[var(--tm-action-primary)] px-4 text-sm font-semibold text-white disabled:opacity-50" disabled={busy} onClick={onConfirm} type="button">{busy ? "철회하는 중…" : "네, 철회할게요"}</button><button className="min-h-[52px] w-full rounded-2xl border border-[var(--tm-border-default)] px-4 text-sm font-semibold text-[var(--tm-text-muted)]" disabled={busy} onClick={onCancel} type="button">돌아가기</button></div></section></div>;
+  return <div className="fixed inset-0 z-50 flex items-end bg-black/35 px-5 pb-[max(20px,env(safe-area-inset-bottom))]" role="presentation"><section aria-label="신청 철회 확인" aria-modal="true" className="mx-auto w-full max-w-[560px] rounded-[28px] bg-[var(--tm-bg-page)] p-5" role="dialog"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">한 번만 확인해요</p><h2 className="mt-2 text-xl font-bold">신청을 철회할까요?</h2><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">철회하면 다시 신청하지 못할 수 있어요.</p><div className="mt-6 grid gap-3"><Button disabled={busy} fullWidth loading={busy} onClick={onConfirm}>네, 철회할게요</Button><Button disabled={busy} fullWidth onClick={onCancel} variant="neutral">돌아가기</Button></div></section></div>;
 }
