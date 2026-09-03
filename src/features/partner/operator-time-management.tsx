@@ -1,7 +1,6 @@
 "use client";
 
-import { IconButton } from "@wanteddev/wds";
-import { IconClose } from "@wanteddev/wds-icon";
+import { ActionArea, ActionAreaButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalHeading, ModalNavigation, ModalSummary } from "@wanteddev/wds";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -216,7 +215,39 @@ function SupplyIncidentSheet({ slot, onClose, onDone }: { slot: Slot; onClose: (
       await onDone();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "운영상 문제를 접수하지 못했어요."); } finally { setSubmitting(false); }
   };
-  return <div className="fixed inset-0 z-50 flex items-end bg-black/35 px-5 pb-[max(20px,env(safe-area-inset-bottom))]" onMouseDown={onClose} role="presentation"><section aria-label="운영상 문제 접수" aria-modal="true" className="mx-auto max-h-[88svh] w-full max-w-[560px] overflow-y-auto rounded-[28px] bg-[var(--tm-bg-page)] p-5" onMouseDown={(event) => event.stopPropagation()} role="dialog"><div className="mx-auto h-1.5 w-10 rounded-full bg-[var(--tm-border-default)]" /><div className="mt-5 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-[var(--tm-action-primary)]">운영상 문제 접수</p><h2 className="mt-1 text-xl font-bold">시간을 바로 바꾸지 않아요</h2></div><IconButton aria-label="닫기" onClick={onClose}><IconClose /></IconButton></div>{confirming ? <><section className="mt-5 rounded-3xl bg-[var(--tm-status-error-bg)] p-5"><h3 className="font-bold">연결된 세션을 취소할까요?</h3><p className="mt-2 text-sm leading-6 text-[var(--tm-status-error-text)]">연결된 세션이 취소되고 모집자와 신청자에게 앱 안에서 안내돼요. 시간을 다른 때로 바꾸는 기능은 아니에요.</p></section>{error ? <p className="mt-4 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}<div className="mt-6 grid grid-cols-2 gap-3"><Button disabled={submitting} fullWidth onClick={() => setConfirming(false)} variant="neutral">돌아가기</Button><button className="min-h-[52px] rounded-2xl bg-[var(--tm-status-error-text)] text-sm font-semibold text-white disabled:opacity-50" disabled={submitting} onClick={() => void submit()} type="button">{submitting ? "처리 중…" : "세션 취소·안내"}</button></div></> : <><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">{slot.court.name} · {formatDateTime(slot.startsAt)} 시간에 어떤 도움이 필요한지 골라 주세요.</p><div className="mt-5 grid gap-2"><IncidentOption checked={code === "INFORMATION_REVIEW"} description="시간과 연결된 세션은 그대로 두고 운영 검토에 접수해요." label="일반 오류·문의" onClick={() => setCode("INFORMATION_REVIEW")} /><IncidentOption checked={code === "SCHEDULE_UNAVAILABLE"} description="등록한 시간에 실제 코트 공급이 불가해요." label="등록한 시간이 실제로 불가함" onClick={() => setCode("SCHEDULE_UNAVAILABLE")} /><IncidentOption checked={code === "FACILITY_CLOSED"} description="시설 운영이 중단되어 세션을 진행할 수 없어요." label="시설 폐쇄" onClick={() => setCode("FACILITY_CLOSED")} /><IncidentOption checked={code === "SAFETY_RISK"} description="안전상 이유로 코트를 제공할 수 없어요." label="안전 위험" onClick={() => setCode("SAFETY_RISK")} /><IncidentOption checked={code === "NATURAL_DISASTER"} description="재난·기상 등으로 코트를 제공할 수 없어요." label="재난·기상" onClick={() => setCode("NATURAL_DISASTER")} /></div>{error ? <p className="mt-4 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}<Button className="mt-6" disabled={submitting} fullWidth onClick={() => isReview ? void submit() : setConfirming(true)}>{isReview ? "운영 검토에 접수" : "긴급 철회 내용 확인"}</Button></>}</section></div>;
+  return <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+    <ModalContainer variant="bottom">
+      <ModalNavigation trailingContent={<ModalClose aria-label="닫기" />} />
+      <ModalContent>
+        <ModalContentItem>
+          <ModalSummary>운영상 문제 접수</ModalSummary>
+          <ModalHeading>시간을 바로 바꾸지 않아요</ModalHeading>
+        </ModalContentItem>
+        {confirming ? (
+          <ModalContentItem>
+            <section className="rounded-3xl bg-[var(--tm-status-error-bg)] p-5"><h3 className="font-bold">연결된 세션을 취소할까요?</h3><p className="mt-2 text-sm leading-6 text-[var(--tm-status-error-text)]">연결된 세션이 취소되고 모집자와 신청자에게 앱 안에서 안내돼요. 시간을 다른 때로 바꾸는 기능은 아니에요.</p></section>
+            {error ? <p className="mt-4 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
+          </ModalContentItem>
+        ) : (
+          <ModalContentItem>
+            <p className="text-sm leading-6 text-[var(--tm-text-secondary)]">{slot.court.name} · {formatDateTime(slot.startsAt)} 시간에 어떤 도움이 필요한지 골라 주세요.</p>
+            <div className="mt-2 grid gap-2"><IncidentOption checked={code === "INFORMATION_REVIEW"} description="시간과 연결된 세션은 그대로 두고 운영 검토에 접수해요." label="일반 오류·문의" onClick={() => setCode("INFORMATION_REVIEW")} /><IncidentOption checked={code === "SCHEDULE_UNAVAILABLE"} description="등록한 시간에 실제 코트 공급이 불가해요." label="등록한 시간이 실제로 불가함" onClick={() => setCode("SCHEDULE_UNAVAILABLE")} /><IncidentOption checked={code === "FACILITY_CLOSED"} description="시설 운영이 중단되어 세션을 진행할 수 없어요." label="시설 폐쇄" onClick={() => setCode("FACILITY_CLOSED")} /><IncidentOption checked={code === "SAFETY_RISK"} description="안전상 이유로 코트를 제공할 수 없어요." label="안전 위험" onClick={() => setCode("SAFETY_RISK")} /><IncidentOption checked={code === "NATURAL_DISASTER"} description="재난·기상 등으로 코트를 제공할 수 없어요." label="재난·기상" onClick={() => setCode("NATURAL_DISASTER")} /></div>
+            {error ? <p className="mt-4 text-sm text-[var(--tm-status-error-text)]">{error}</p> : null}
+          </ModalContentItem>
+        )}
+      </ModalContent>
+      {confirming ? (
+        <ActionArea variant="neutral">
+          <ActionAreaButton buttonColor="assistive" disabled={submitting} onClick={() => setConfirming(false)} variant="alternative">돌아가기</ActionAreaButton>
+          <button className="min-h-[52px] flex-1 rounded-2xl bg-[var(--tm-status-error-text)] text-sm font-semibold text-white disabled:opacity-50" disabled={submitting} onClick={() => void submit()} type="button">{submitting ? "처리 중…" : "세션 취소·안내"}</button>
+        </ActionArea>
+      ) : (
+        <ActionArea variant="strong">
+          <ActionAreaButton disabled={submitting} loading={submitting} onClick={() => isReview ? void submit() : setConfirming(true)} variant="main">{isReview ? "운영 검토에 접수" : "긴급 철회 내용 확인"}</ActionAreaButton>
+        </ActionArea>
+      )}
+    </ModalContainer>
+  </Modal>;
 }
 
 function IncidentOption({ checked, description, label, onClick }: { checked: boolean; description: string; label: string; onClick: () => void }) {
