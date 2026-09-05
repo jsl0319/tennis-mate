@@ -16,9 +16,9 @@ import {
 } from "@phosphor-icons/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useState, type ReactNode } from "react";
 
-import { ActionArea, ActionAreaButton, DatePicker, type DateType, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextField, TextFieldContent, TimePicker } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, DatePicker, type DatePickerFieldProps, type DateType, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextField, TextFieldContent, TimePicker, type TimePickerFieldProps } from "@wanteddev/wds";
 
 import { Button } from "@/components/ui/button";
 
@@ -116,6 +116,22 @@ function valueToTimeInput(value: DateType): string {
 
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
+
+const DATE_PICKER_FORMAT = "YYYY.MM.DD";
+const TIME_PICKER_FORMAT = "a hh:mm";
+
+// WDS의 DatePicker/TimePicker는 값이 비어 있을 때 포맷 문자열 자체를(예: "YYYY.MM.DD")
+// 입력값으로 채워 넣는데, 이 화면에서는 달력/휠 선택만 쓰기 때문에 아직 아무것도
+// 고르지 않은 상태에서는 그 포맷 문자열 대신 안내 placeholder만 보이도록 감춘다.
+const MaskedDateField = forwardRef<HTMLDivElement, DatePickerFieldProps>(({ inputRef, value, ...props }, ref) => (
+  <TextField {...props} ref={inputRef} value={value === DATE_PICKER_FORMAT ? "" : value} wrapperRef={ref} />
+));
+MaskedDateField.displayName = "MaskedDateField";
+
+const MaskedTimeField = forwardRef<HTMLDivElement, TimePickerFieldProps>(({ inputRef, value, ...props }, ref) => (
+  <TextField {...props} ref={inputRef} value={value === TIME_PICKER_FORMAT ? "" : value} wrapperRef={ref} />
+));
+MaskedTimeField.displayName = "MaskedTimeField";
 
 function formatSchedule(date: string, startTime: string, endTime: string) {
   if (!date || !startTime || !endTime) return "일시를 선택해 주세요";
@@ -428,7 +444,7 @@ function StepOne({
         <FormField className="mt-6">
           <FormLabel required>매칭 날짜</FormLabel>
           <FormControl>
-            <DatePicker min={dateInputToValue(getTodayDate())} onChange={(value) => set("date", valueToDateInput(value))} placeholder="연도.월.일" value={dateInputToValue(form.date)} />
+            <DatePicker format={DATE_PICKER_FORMAT} input={MaskedDateField} min={dateInputToValue(getTodayDate())} onChange={(value) => set("date", valueToDateInput(value))} placeholder="연도.월.일" value={dateInputToValue(form.date)} />
           </FormControl>
         </FormField>
         <div className="mt-6">
@@ -437,13 +453,13 @@ function StepOne({
             <FormField>
               <FormLabel>시작 시간</FormLabel>
               <FormControl>
-                <TimePicker onChange={(value) => set("startTime", valueToTimeInput(value))} placeholder="시작 시간" value={timeInputToValue(form.startTime)} />
+                <TimePicker format={TIME_PICKER_FORMAT} input={MaskedTimeField} onChange={(value) => set("startTime", valueToTimeInput(value))} placeholder="시작 시간" value={timeInputToValue(form.startTime)} />
               </FormControl>
             </FormField>
             <FormField>
               <FormLabel>종료 시간</FormLabel>
               <FormControl>
-                <TimePicker minTime={timeInputToValue(form.startTime)} onChange={(value) => set("endTime", valueToTimeInput(value))} placeholder="종료 시간" value={timeInputToValue(form.endTime)} />
+                <TimePicker format={TIME_PICKER_FORMAT} input={MaskedTimeField} minTime={timeInputToValue(form.startTime)} onChange={(value) => set("endTime", valueToTimeInput(value))} placeholder="종료 시간" value={timeInputToValue(form.endTime)} />
               </FormControl>
             </FormField>
           </div>
