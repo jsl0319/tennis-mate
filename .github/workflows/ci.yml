@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 15
     env:
       DATABASE_URL: postgresql://ci:ci@localhost:5432/tennis_mate
+      WDS_GITHUB_TOKEN: ${{ secrets.WDS_GITHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
