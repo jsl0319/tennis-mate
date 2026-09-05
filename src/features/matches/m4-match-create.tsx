@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextField, TextFieldContent } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, DatePicker, type DateType, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextField, TextFieldContent, TimePicker } from "@wanteddev/wds";
 
 import { Button } from "@/components/ui/button";
 
@@ -83,6 +83,38 @@ function getTodayDate() {
   const part = (type: Intl.DateTimeFormatPartTypes) => values.find((item) => item.type === type)?.value ?? "";
 
   return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function dateInputToValue(date: string): Date | undefined {
+  if (!date) return undefined;
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+
+  return new Date(year, month - 1, day);
+}
+
+function valueToDateInput(value: DateType): string {
+  const date = value instanceof Date ? value : typeof value === "string" && value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function timeInputToValue(time: string): Date | undefined {
+  if (!time) return undefined;
+  const [hour, minute] = time.split(":").map(Number);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return undefined;
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+
+  return date;
+}
+
+function valueToTimeInput(value: DateType): string {
+  const date = value instanceof Date ? value : typeof value === "string" && value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatSchedule(date: string, startTime: string, endTime: string) {
@@ -396,7 +428,7 @@ function StepOne({
         <FormField className="mt-6">
           <FormLabel required>매칭 날짜</FormLabel>
           <FormControl>
-            <TextField min={getTodayDate()} onChange={(event) => set("date", event.target.value)} type="date" value={form.date} />
+            <DatePicker min={dateInputToValue(getTodayDate())} onChange={(value) => set("date", valueToDateInput(value))} placeholder="연도.월.일" value={dateInputToValue(form.date)} />
           </FormControl>
         </FormField>
         <div className="mt-6">
@@ -405,13 +437,13 @@ function StepOne({
             <FormField>
               <FormLabel>시작 시간</FormLabel>
               <FormControl>
-                <TextField onChange={(event) => set("startTime", event.target.value)} type="time" value={form.startTime} />
+                <TimePicker onChange={(value) => set("startTime", valueToTimeInput(value))} placeholder="시작 시간" value={timeInputToValue(form.startTime)} />
               </FormControl>
             </FormField>
             <FormField>
               <FormLabel>종료 시간</FormLabel>
               <FormControl>
-                <TextField min={form.startTime || undefined} onChange={(event) => set("endTime", event.target.value)} type="time" value={form.endTime} />
+                <TimePicker minTime={timeInputToValue(form.startTime)} onChange={(value) => set("endTime", valueToTimeInput(value))} placeholder="종료 시간" value={timeInputToValue(form.endTime)} />
               </FormControl>
             </FormField>
           </div>
