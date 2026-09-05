@@ -446,7 +446,7 @@ describe("match service operation safeguards", () => {
     expect(transaction.match.create).not.toHaveBeenCalled();
   });
 
-  it("asks the database to exclude the viewer's matches, prior applications, and historical court-undecided matches from discovery", async () => {
+  it("asks the database to exclude the viewer's prior applications and historical court-undecided matches from discovery, but keeps the viewer's own hosted matches", async () => {
     const findMany = vi.fn().mockResolvedValue([makeMatch({ id: "other-match-id", hostUserId: "other-user-id", host: { id: "other-user-id", nickname: "다른모집자", tennisProfile: viewer.profile } })]);
     const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];
 
@@ -456,11 +456,19 @@ describe("match service operation safeguards", () => {
       where: expect.objectContaining({
         courtSource: { not: "COURT_TBD" },
         NOT: [
-          { hostUserId: viewer.id },
           { applications: { some: { applicantUserId: viewer.id } } },
         ],
       }),
     }));
+  });
+
+  it("marks the viewer as host on their own match in the discovery list", async () => {
+    const findMany = vi.fn().mockResolvedValue([makeMatch({ id: "own-match-id" })]);
+    const prisma = { match: { findMany } } as unknown as Parameters<typeof getMatches>[0];
+
+    const result = await getMatches(prisma, viewer, { startsFrom: new Date("2029-01-01T00:00:00.000Z"), limit: 20 });
+
+    expect(result.items[0]).toMatchObject({ isHost: true });
   });
 
   it("does not recommend a historical court-undecided match", async () => {

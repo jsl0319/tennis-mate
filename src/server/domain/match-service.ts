@@ -240,6 +240,7 @@ function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
     estimatedTotalParticipants: match.recruitCount + 1,
     estimatedFeePerPersonKrw: getEstimatedFeePerPerson(match.totalCourtFeeKrw, match.recruitCount),
     recommendationReasons: recommendation.reasons,
+    isHost: match.hostUserId === viewer.id,
   };
 }
 
@@ -325,7 +326,6 @@ export async function getMatches(
     startsAt: { gt: input.startsFrom },
     courtSource: { not: "COURT_TBD" },
     NOT: [
-      { hostUserId: viewer.id },
       { applications: { some: { applicantUserId: viewer.id } } },
     ],
     ...(input.playPurpose ? { purposes: { some: { purpose: input.playPurpose } } } : {}),

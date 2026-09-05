@@ -14,6 +14,7 @@ export type MatchCardData = {
   remainingSpots: number;
   estimatedFeePerPersonKrw: number | null;
   recommendationReasons: Array<{ code: string; label: string }>;
+  isHost: boolean;
 };
 
 function formatSchedule(startsAt: string, endsAt: string) {
@@ -34,6 +35,7 @@ export function MatchCard({ match, returnTo = "/" }: { match: MatchCardData; ret
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-5 items-center gap-1 overflow-hidden text-[11px] font-semibold leading-4">
           <span className="shrink-0 text-[var(--tm-action-primary)]">{match.statusLabel}</span>
+          {match.isHost ? <span className="truncate font-bold text-[var(--tm-text-secondary)]">· 내가 만든 매칭</span> : null}
           {match.beginnerWelcome ? <span className="truncate text-[var(--tm-tennis-ball-muted)]">· 🌱 초보자 환영</span> : null}
         </div>
         <h2 className="line-clamp-2 min-h-[52px] text-lg font-medium leading-[26px]">{match.title}</h2>
