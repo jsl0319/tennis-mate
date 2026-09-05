@@ -32,7 +32,6 @@ async function createOnboardedUser({ id, nickname }: { id: string; nickname: str
           experienceRange: "MONTHS_6_TO_12",
           rallyLevel: "SHORT_RALLY",
           gameExperience: "KNOWS_RULES",
-          regions: { create: { regionCode: "E2E-SEOUL-001", isPrimary: true } },
           purposes: { create: { purpose: "RALLY_PRACTICE" } },
         },
       },
@@ -105,7 +104,6 @@ export async function resetE2eDatabase(): Promise<E2eFixture> {
     data: {
       hostUserId: e2eUsers.host.id,
       clientRequestId: "20000000-0000-4000-8000-000000000005",
-      regionCode: "E2E-SEOUL-001",
       title: legacyMatchTitle,
       startsAt: legacyStartsAt,
       endsAt: legacyEndsAt,

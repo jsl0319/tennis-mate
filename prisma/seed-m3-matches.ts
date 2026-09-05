@@ -10,10 +10,10 @@ config();
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: getDatabaseUrl() }) });
 
 const hosts = [
-  { id: "10000000-0000-4000-8000-000000000001", nickname: "랠리민지", regionCode: "SEOUL-001", rallyLevel: "SHORT_RALLY", gameExperience: "NONE", purposes: ["RALLY_PRACTICE"] },
-  { id: "10000000-0000-4000-8000-000000000002", nickname: "테니스수아", regionCode: "SEOUL-002", rallyLevel: "COMFORTABLE_RALLY", gameExperience: "KNOWS_RULES", purposes: ["CASUAL_HIT", "RALLY_PRACTICE"] },
-  { id: "10000000-0000-4000-8000-000000000003", nickname: "초록라켓", regionCode: "SEOUL-003", rallyLevel: "STARTING", gameExperience: "NONE", purposes: ["CASUAL_HIT"] },
-  { id: "10000000-0000-4000-8000-000000000004", nickname: "주말테니스", regionCode: "SEOUL-004", rallyLevel: "SHORT_RALLY", gameExperience: "PLAYED_FEW", purposes: ["GAME_INTRO"] },
+  { id: "10000000-0000-4000-8000-000000000001", nickname: "랠리민지", rallyLevel: "SHORT_RALLY", gameExperience: "NONE", purposes: ["RALLY_PRACTICE"] },
+  { id: "10000000-0000-4000-8000-000000000002", nickname: "테니스수아", rallyLevel: "COMFORTABLE_RALLY", gameExperience: "KNOWS_RULES", purposes: ["CASUAL_HIT", "RALLY_PRACTICE"] },
+  { id: "10000000-0000-4000-8000-000000000003", nickname: "초록라켓", rallyLevel: "STARTING", gameExperience: "NONE", purposes: ["CASUAL_HIT"] },
+  { id: "10000000-0000-4000-8000-000000000004", nickname: "주말테니스", rallyLevel: "SHORT_RALLY", gameExperience: "PLAYED_FEW", purposes: ["GAME_INTRO"] },
 ] as const;
 
 async function seedHosts() {
@@ -27,12 +27,10 @@ async function seedHosts() {
       where: { userId: host.id },
       update: {
         experienceRange: "MONTHS_6_TO_12", rallyLevel: host.rallyLevel, gameExperience: host.gameExperience,
-        regions: { deleteMany: {}, create: { regionCode: host.regionCode, isPrimary: true } },
         purposes: { deleteMany: {}, create: host.purposes.map((purpose) => ({ purpose })) },
       },
       create: {
         userId: host.id, experienceRange: "MONTHS_6_TO_12", rallyLevel: host.rallyLevel, gameExperience: host.gameExperience,
-        regions: { create: { regionCode: host.regionCode, isPrimary: true } },
         purposes: { create: host.purposes.map((purpose) => ({ purpose })) },
       },
     });
@@ -62,7 +60,7 @@ async function seedMatches() {
       update: { title, startsAt: start, endsAt: end, status: "OPEN" },
       create: {
         hostUserId: host.id, clientRequestId: `20000000-0000-4000-8000-00000000000${index + 1}`,
-        regionCode: host.regionCode, title, startsAt: start, endsAt: end,
+        title, startsAt: start, endsAt: end,
         externalCourtName: courtName, externalCourtAddress: address, recruitCount: 2,
         partnerPreference, totalCourtFeeKrw: fee, introduction: "처음 만나는 메이트와도 천천히, 편하게 쳐요.",
         purposes: { create: { purpose } },
@@ -78,7 +76,7 @@ async function seedMatches() {
     where: { hostUserId_clientRequestId: { hostUserId: hosts[0].id, clientRequestId: "20000000-0000-4000-8000-000000000005" } },
     update: { title: "주말 코트, 같이 정해요", startsAt: tbdStart, endsAt: tbdEnd, status: "OPEN", courtSource: "COURT_TBD", externalCourtName: null, externalCourtAddress: null, externalCourtNumber: null, totalCourtFeeKrw: null, additionalCostNote: null },
     create: {
-      hostUserId: hosts[0].id, clientRequestId: "20000000-0000-4000-8000-000000000005", regionCode: hosts[0].regionCode,
+      hostUserId: hosts[0].id, clientRequestId: "20000000-0000-4000-8000-000000000005",
       title: "주말 코트, 같이 정해요", startsAt: tbdStart, endsAt: tbdEnd, courtSource: "COURT_TBD", recruitCount: 2,
       partnerPreference: "COMPLETE_BEGINNER_WELCOME", introduction: "코트와 비용은 수락 후 서비스 내 채팅에서 함께 정해요.",
       purposes: { create: { purpose: "RALLY_PRACTICE" } },
