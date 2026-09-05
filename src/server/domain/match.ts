@@ -40,7 +40,7 @@ const externalReservedMatchSchema = matchCreateCommonSchema.extend({
     courtNumber: z.string().trim().max(50).nullable().optional(),
     imageUploadId: z.string().uuid("코트 사진을 다시 올려 주세요.").nullable().optional(),
   }),
-  totalCourtFeeKrw: z.number().int().min(0, "코트 비용은 0원 이상이어야 해요."),
+  totalCourtFeeKrw: z.number().int().min(0, "코트 비용은 0원 이상이어야 해요.").max(1_000_000, "코트 비용은 100만원 이하로 입력해 주세요."),
   additionalCostNote: z.string().trim().max(200).nullable().optional(),
 });
 

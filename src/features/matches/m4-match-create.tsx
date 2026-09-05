@@ -11,6 +11,7 @@ import {
   Minus,
   PencilSimple,
   Plus,
+  Sparkle,
   TennisBall,
   UsersThree,
 } from "@phosphor-icons/react";
@@ -18,7 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 
-import { ActionArea, ActionAreaButton, DatePicker, type DatePickerFieldProps, type DateType, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextField, TextFieldContent, TimePicker, type TimePickerFieldProps } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, DatePicker, type DatePickerFieldProps, type DateType, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextButton, TextField, TextFieldContent, TimePicker, type TimePickerFieldProps } from "@wanteddev/wds";
 
 import { Button } from "@/components/ui/button";
 
@@ -142,6 +143,24 @@ function formatSchedule(date: string, startTime: string, endTime: string) {
 
 function getLabel<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
   return items.find(([item]) => item === value)?.[1] ?? value;
+}
+
+function getDescription<Value extends string>(items: readonly (readonly [Value, string, string])[], value: string) {
+  return items.find(([item]) => item === value)?.[2] ?? "";
+}
+
+const MAX_COURT_FEE_KRW = 1_000_000;
+
+// 이미 앞 단계에서 고른 플레이 목적·상대 선호를 자연스러운 한 두 문장으로 엮어
+// 초보자도 부담 없이 "소개" 칸을 채울 수 있도록 초안을 만들어 준다. 외부 AI 호출 없이
+// 화면에 이미 쓰인 안내 문구(질문 카드의 설명 문구)를 그대로 재활용한다.
+function suggestIntroduction(form: Pick<MatchCreateForm, "playPurposes" | "partnerPreference">) {
+  const purposeSentences = form.playPurposes.map((purpose) => getDescription(purposes, purpose)).filter(Boolean);
+  const preferenceSentence = getDescription(preferences, form.partnerPreference);
+  const sentences = [...purposeSentences, preferenceSentence].filter(Boolean);
+  if (sentences.length === 0) return "";
+
+  return `${sentences.join(". ")}. 함께 즐거운 시간 보내요!`;
 }
 
 function isCourtPlaceSearchItem(value: unknown): value is CourtPlaceSearchItem {
@@ -286,8 +305,8 @@ export function M4MatchCreate() {
       setError("매칭 제목, 모집 인원, 원하는 플레이를 확인해 주세요.");
       return;
     }
-    if (step === 3 && (form.totalCourtFeeKrw === "" || !Number.isInteger(totalCourtFee) || totalCourtFee < 0)) {
-      setError("전체 코트 비용을 0원 이상의 정수로 입력해 주세요.");
+    if (step === 3 && (form.totalCourtFeeKrw === "" || !Number.isInteger(totalCourtFee) || totalCourtFee < 0 || totalCourtFee > MAX_COURT_FEE_KRW)) {
+      setError(`전체 코트 비용을 0원 이상 ${MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원 이하의 정수로 입력해 주세요.`);
       return;
     }
 
@@ -614,8 +633,9 @@ function StepThree({ expectedPeople, fee, form, set }: { expectedPeople: number;
         <FormField>
           <FormLabel required>전체 코트 비용</FormLabel>
           <FormControl>
-            <TextField inputMode="numeric" min="0" onChange={(event) => set("totalCourtFeeKrw", event.target.value)} placeholder="예: 24,000" trailingContent={<TextFieldContent variant="text">원</TextFieldContent>} type="number" value={form.totalCourtFeeKrw} />
+            <TextField inputMode="numeric" max={MAX_COURT_FEE_KRW} min="0" onChange={(event) => set("totalCourtFeeKrw", event.target.value)} placeholder="예: 24,000" trailingContent={<TextFieldContent variant="text">원</TextFieldContent>} type="number" value={form.totalCourtFeeKrw} />
           </FormControl>
+          <p className="mt-2 text-xs text-[var(--tm-text-secondary)]">최대 {MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원까지 입력할 수 있어요.</p>
         </FormField>
         <div className="mt-4 rounded-2xl bg-[var(--tm-bg-subtle)] p-4">
           <p className="text-sm text-[var(--tm-text-secondary)]">예상 1인 비용</p>
@@ -637,7 +657,10 @@ function StepThree({ expectedPeople, fee, form, set }: { expectedPeople: number;
 
       <FormPanel description="처음 신청하는 분도 편하게 알 수 있도록 적어 주세요." title={<>소개 <span className="text-base font-normal text-[var(--tm-text-secondary)]">(선택)</span></>}>
         <FormField>
-          <FormLabel>소개</FormLabel>
+          <div className="flex items-center justify-between gap-3">
+            <FormLabel>소개</FormLabel>
+            <TextButton color="primary" leadingContent={<Sparkle aria-hidden size={16} weight="fill" />} onClick={() => set("introduction", suggestIntroduction(form))} size="small">자동으로 소개 만들기</TextButton>
+          </div>
           <FormControl>
             <TextArea maxLength={300} onChange={(event) => set("introduction", event.target.value)} placeholder="예: 천천히 랠리하면서 즐겁게 연습할 분을 찾아요. 처음 게임을 해봐도 괜찮아요!" value={form.introduction} />
           </FormControl>

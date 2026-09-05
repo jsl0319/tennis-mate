@@ -52,6 +52,11 @@ describe("M4 match creation input", () => {
     expect(matchCreateInputSchema.parse({ ...validInput, totalCourtFeeKrw: 0 }).courtSource).toBe("EXTERNAL_RESERVED");
   });
 
+  it("rejects a court fee above 1,000,000 won", () => {
+    expect(() => matchCreateInputSchema.parse({ ...validInput, totalCourtFeeKrw: 1_000_001 })).toThrow();
+    expect(matchCreateInputSchema.parse({ ...validInput, totalCourtFeeKrw: 1_000_000 }).courtSource).toBe("EXTERNAL_RESERVED");
+  });
+
   it("rejects a new court-undecided match without court details or a fee", () => {
     expect(() => matchCreateInputSchema.parse({
       ...validInput,
