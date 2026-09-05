@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarBlank,
-  Camera,
   CheckCircle,
   CurrencyKrw,
   MapPin,
@@ -23,10 +22,7 @@ import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal,
 
 import { Button } from "@/components/ui/button";
 
-import { CourtMedia } from "./court-media";
-
 type Region = { code: string; name: string; shortName: string | null };
-type CourtImageDraft = { fileName: string; previewUrl: string; uploadId: string };
 type CourtPlaceSearchItem = { name: string; address: string; roadAddress: string | null };
 
 type MatchCreateForm = {
@@ -117,9 +113,6 @@ export function M4MatchCreate() {
   const [districts, setDistricts] = useState<Region[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [courtImage, setCourtImage] = useState<CourtImageDraft | null>(null);
-  const [courtImageError, setCourtImageError] = useState("");
-  const [courtImageUploading, setCourtImageUploading] = useState(false);
   const [courtSearchQuery, setCourtSearchQuery] = useState("");
   const [courtSearchResults, setCourtSearchResults] = useState<CourtPlaceSearchItem[]>([]);
   const [courtSearchError, setCourtSearchError] = useState("");
@@ -165,10 +158,6 @@ export function M4MatchCreate() {
       active = false;
     };
   }, []);
-
-  useEffect(() => () => {
-    if (courtImage) URL.revokeObjectURL(courtImage.previewUrl);
-  }, [courtImage]);
 
   useEffect(() => {
     const query = courtSearchQuery.trim();
@@ -278,41 +267,6 @@ export function M4MatchCreate() {
     setIsManualCourtEntry(false);
   };
 
-  const uploadCourtImage = async (file: File | null) => {
-    if (!file) return;
-    setCourtImageError("");
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setCourtImageError("코트 사진은 JPEG, PNG, WebP만 올릴 수 있어요.");
-      return;
-    }
-    if (file.size < 1 || file.size > 4 * 1024 * 1024) {
-      setCourtImageError("코트 사진은 4 MiB 이하로 올려 주세요.");
-      return;
-    }
-
-    const previewUrl = URL.createObjectURL(file);
-    setCourtImageUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await fetch("/api/v1/court-image-uploads", { method: "POST", body: formData });
-      const body: unknown = await response.json();
-      if (!response.ok) throw new Error(apiMessage(body));
-      const uploadId = typeof body === "object" && body !== null && "id" in body && typeof body.id === "string" ? body.id : null;
-      if (!uploadId) throw new Error("코트 사진을 다시 올려 주세요.");
-
-      setCourtImage((current) => {
-        if (current) URL.revokeObjectURL(current.previewUrl);
-        return { fileName: file.name, previewUrl, uploadId };
-      });
-    } catch (caught) {
-      URL.revokeObjectURL(previewUrl);
-      setCourtImageError(caught instanceof Error ? caught.message : "코트 사진을 올리지 못했어요.");
-    } finally {
-      setCourtImageUploading(false);
-    }
-  };
-
   const next = () => {
     setError("");
     if (step === 1 && (!form.date || !form.startTime || !form.endTime || !form.regionCode)) {
@@ -325,10 +279,6 @@ export function M4MatchCreate() {
     }
     if (step === 1 && (!form.courtName.trim() || !form.address.trim())) {
       setError("예약한 코트의 이름과 주소를 입력해 주세요.");
-      return;
-    }
-    if (step === 1 && courtImageUploading) {
-      setError("코트 사진을 올리는 중이에요. 잠시만 기다려 주세요.");
       return;
     }
     if (step === 2 && (!form.title.trim() || form.playPurposes.length === 0 || form.recruitCount < 1)) {
@@ -363,7 +313,6 @@ export function M4MatchCreate() {
             name: form.courtName,
             address: form.address,
             courtNumber: form.courtNumber || null,
-            imageUploadId: courtImage?.uploadId ?? null,
           },
           recruitCount: form.recruitCount,
           playPurposes: form.playPurposes,
@@ -413,12 +362,8 @@ export function M4MatchCreate() {
           {step === 1 ? (
             <StepOne
               cities={cities}
-              courtImage={courtImage}
-              courtImageError={courtImageError}
-              courtImageUploading={courtImageUploading}
               districts={districts}
               form={form}
-              onCourtImageChange={(file) => void uploadCourtImage(file)}
               onCourtNameChange={(value) => set("courtName", value)}
               onCourtAddressChange={(value) => set("address", value)}
               onCourtSearchClose={closeCourtSearch}
@@ -438,7 +383,7 @@ export function M4MatchCreate() {
           ) : null}
           {step === 2 ? <StepTwo form={form} onRecruitChange={updateRecruitCount} onTogglePurpose={togglePurpose} set={set} /> : null}
           {step === 3 ? <StepThree expectedPeople={expectedPeople} fee={fee} form={form} set={set} /> : null}
-          {step === 4 ? <StepFour courtImage={courtImage} expectedPeople={expectedPeople} fee={fee} form={form} /> : null}
+          {step === 4 ? <StepFour expectedPeople={expectedPeople} fee={fee} form={form} /> : null}
 
           {error ? (
             <p className="mt-5 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">
@@ -449,11 +394,10 @@ export function M4MatchCreate() {
 
         <ActionFooter
           action={action}
-          disabled={saving || courtImageUploading}
+          disabled={saving}
           onBack={step === 1 ? undefined : () => setStep((current) => current - 1)}
           onNext={() => (step < 4 ? next() : void submit())}
           saving={saving}
-          uploading={courtImageUploading}
         />
       </section>
     </main>
@@ -462,12 +406,8 @@ export function M4MatchCreate() {
 
 function StepOne({
   cities,
-  courtImage,
-  courtImageError,
-  courtImageUploading,
   districts,
   form,
-  onCourtImageChange,
   onCourtAddressChange,
   onCourtNameChange,
   onCourtSearchClose,
@@ -485,12 +425,8 @@ function StepOne({
   set,
 }: {
   cities: Region[];
-  courtImage: CourtImageDraft | null;
-  courtImageError: string;
-  courtImageUploading: boolean;
   districts: Region[];
   form: MatchCreateForm;
-  onCourtImageChange: (file: File | null) => void;
   onCourtAddressChange: (value: string) => void;
   onCourtNameChange: (value: string) => void;
   onCourtSearchClose: () => void;
@@ -559,7 +495,6 @@ function StepOne({
         </Link>
       </section>
 
-      <CourtImageUpload courtImage={courtImage} error={courtImageError} isUploading={courtImageUploading} onChange={onCourtImageChange} />
       <CourtPlaceDialog
         error={courtSearchError}
         form={form}
@@ -639,28 +574,6 @@ function CourtPlaceDialog({ error, form, isLoading, isManualEntry, isOpen, onAdd
         ) : null}
       </ModalContainer>
     </Modal>
-  );
-}
-
-function CourtImageUpload({ courtImage, error, isUploading, onChange }: { courtImage: CourtImageDraft | null; error: string; isUploading: boolean; onChange: (file: File | null) => void }) {
-  const previewLabel = isUploading ? "사진 올리는 중…" : "선택한 코트 사진";
-
-  return (
-    <FormPanel description="사진이 있으면 함께 칠 분이 코트를 더 쉽게 알아볼 수 있어요." icon={<Camera aria-hidden size={23} weight="fill" />} title={<>코트 사진 <span className="text-base font-normal text-[var(--tm-text-secondary)]">(선택)</span></>}>
-      {courtImage ? (
-        <CourtMedia alt="선택한 코트 사진 미리보기" className="aspect-[350/212] w-full" fallbackLabel="코트 사진을 선택해 보세요" image={null} previewLabel={previewLabel} previewUrl={courtImage.previewUrl} />
-      ) : (
-        <CourtMedia alt="코트 사진을 선택할 수 있는 영역" className="aspect-[350/212] w-full" fallbackLabel="코트 사진을 선택해 보세요" image={null} />
-      )}
-      <label className={`mt-4 flex min-h-[52px] cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-sm font-bold text-[var(--tm-text-primary)] transition hover:border-[var(--tm-action-primary)] ${isUploading ? "cursor-wait opacity-60" : ""}`}>
-        <Camera aria-hidden size={19} weight="bold" />
-        <span>{isUploading ? "사진 올리는 중…" : courtImage ? "사진 바꾸기" : "사진 선택하기"}</span>
-        <input accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={isUploading} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ""; onChange(file); }} type="file" />
-      </label>
-      <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">JPEG · PNG · WebP · 최대 4MB<br />사진에 얼굴, 연락처, 예약번호가 보이지 않는지 확인해 주세요.</p>
-      {courtImage ? <p className="mt-2 truncate text-xs text-[var(--tm-text-secondary)]">선택한 파일: {courtImage.fileName}</p> : null}
-      {error ? <p className="mt-3 rounded-2xl bg-[var(--tm-status-error-bg)] px-4 py-3 text-sm leading-6 text-[var(--tm-status-error-text)]" role="alert">{error}</p> : null}
-    </FormPanel>
   );
 }
 
@@ -754,7 +667,7 @@ function StepThree({ expectedPeople, fee, form, set }: { expectedPeople: number;
   );
 }
 
-function StepFour({ courtImage, expectedPeople, fee, form }: { courtImage: CourtImageDraft | null; expectedPeople: number; fee: number; form: MatchCreateForm }) {
+function StepFour({ expectedPeople, fee, form }: { expectedPeople: number; fee: number; form: MatchCreateForm }) {
   const regionText = [form.courtName, form.address].filter(Boolean).join(" · ");
 
   return (
@@ -762,7 +675,6 @@ function StepFour({ courtImage, expectedPeople, fee, form }: { courtImage: Court
       <StepIntro eyebrow="공개 전 확인" title="이렇게 모집할까요?" description="공개하면 매칭 목록에 보여지고, 원할 때 참가 신청을 받을 수 있어요." />
 
       <article className="mt-6 overflow-hidden rounded-3xl border border-[var(--tm-border-default)] bg-white shadow-[0_12px_30px_rgba(29,50,84,0.08)]">
-        {courtImage ? <CourtMedia alt="등록할 코트 사진 미리보기" className="aspect-[350/180] w-full rounded-none" fallbackLabel="등록할 코트" image={null} previewLabel="등록할 코트 사진" previewUrl={courtImage.previewUrl} /> : null}
         <div className="p-5">
           <p className="inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-1.5 text-xs font-bold text-[var(--tm-action-primary)]">모집자가 코트를 예약했어요</p>
           <h2 className="mt-3 text-xl font-bold leading-7">{form.title}</h2>
@@ -806,8 +718,9 @@ function PreviewItem({ icon, label, value }: { icon: ReactNode; label: string; v
   return <div className="flex gap-3"><span className="mt-0.5 text-[var(--tm-action-primary)]">{icon}</span><div><dt className="text-xs font-bold text-[var(--tm-text-secondary)]">{label}</dt><dd className="mt-1 text-sm leading-5 text-[var(--tm-text-primary)]">{value}</dd></div></div>;
 }
 
-function ActionFooter({ action, disabled, onBack, onNext, saving, uploading }: { action: string; disabled: boolean; onBack?: () => void; onNext: () => void; saving: boolean; uploading: boolean }) {
-  const label = saving ? "등록 중…" : uploading ? "사진 올리는 중…" : action;
+function ActionFooter({ action, disabled, onBack, onNext, saving }: { action: string; disabled: boolean; onBack?: () => void; onNext: () => void; saving: boolean }) {
+  const label = saving ? "등록 중…" : action;
+  const trailingIcon = !saving && action !== "매칭 공개하기" ? <ArrowRight aria-hidden size={18} weight="bold" /> : null;
 
-  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto flex max-w-[560px] gap-3">{onBack ? <Button onClick={onBack} size="large" variant="neutral">이전</Button> : null}<Button className="flex-1" disabled={disabled} onClick={onNext} size="large">{label}{!saving && !uploading && action !== "매칭 공개하기" ? <ArrowRight aria-hidden size={18} weight="bold" /> : null}</Button></div></footer>;
+  return <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--tm-border-subtle)] bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur"><div className="mx-auto flex max-w-[560px] gap-3">{onBack ? <Button onClick={onBack} size="large" variant="neutral">이전</Button> : null}<Button className="flex-1" disabled={disabled} onClick={onNext} size="large" trailingContent={trailingIcon}>{label}</Button></div></footer>;
 }

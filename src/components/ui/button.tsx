@@ -19,6 +19,12 @@ type ButtonOwnProps = {
   disabled?: boolean;
   children?: ReactNode;
   className?: string;
+  /** Passed straight through to WDS's `Button` so an icon lays out as a
+   * proper flex sibling of the label (with WDS's own gap) instead of being
+   * nested inside the label's own inline wrapper, where a block-level
+   * `<svg>` would otherwise break onto its own line. */
+  leadingContent?: ReactNode;
+  trailingContent?: ReactNode;
 };
 
 type ButtonProps<E extends ElementType = "button"> = ButtonOwnProps & {
@@ -37,8 +43,8 @@ const VARIANT_TO_WDS = {
  * keeps WDS's own polymorphic `as` support (e.g. `as={Link}` for a link
  * styled as a button).
  */
-export function Button<E extends ElementType = "button">({ variant = "primary", size = "large", as, ...rest }: ButtonProps<E>) {
+export function Button<E extends ElementType = "button">({ variant = "primary", size = "large", as, leadingContent, trailingContent, ...rest }: ButtonProps<E>) {
   const Component = WdsButton as unknown as ElementType;
   const { color, variant: wdsVariant } = VARIANT_TO_WDS[variant];
-  return <Component as={as} color={color} size={size} variant={wdsVariant} {...rest} />;
+  return <Component as={as} color={color} leadingContent={leadingContent} size={size} trailingContent={trailingContent} variant={wdsVariant} {...rest} />;
 }
