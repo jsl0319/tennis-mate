@@ -633,7 +633,20 @@ function StepThree({ expectedPeople, fee, form, set }: { expectedPeople: number;
         <FormField>
           <FormLabel required>전체 코트 비용</FormLabel>
           <FormControl>
-            <TextField inputMode="numeric" max={MAX_COURT_FEE_KRW} min="0" onChange={(event) => set("totalCourtFeeKrw", event.target.value)} placeholder="예: 24,000" trailingContent={<TextFieldContent variant="text">원</TextFieldContent>} type="number" value={form.totalCourtFeeKrw} />
+            <TextField
+              inputMode="numeric"
+              max={MAX_COURT_FEE_KRW}
+              min="0"
+              onChange={(event) => {
+                const { value } = event.target;
+                if (value !== "" && (!Number.isFinite(Number(value)) || Number(value) > MAX_COURT_FEE_KRW)) return;
+                set("totalCourtFeeKrw", value);
+              }}
+              placeholder="예: 24,000"
+              trailingContent={<TextFieldContent variant="text">원</TextFieldContent>}
+              type="number"
+              value={form.totalCourtFeeKrw}
+            />
           </FormControl>
           <p className="mt-2 text-xs text-[var(--tm-text-secondary)]">최대 {MAX_COURT_FEE_KRW.toLocaleString("ko-KR")}원까지 입력할 수 있어요.</p>
         </FormField>
