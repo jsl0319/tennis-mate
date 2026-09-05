@@ -33,7 +33,7 @@ export function PartnerSessionList() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
+  return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
     <header className="border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)]">
       <div className="mx-auto max-w-[560px] px-5 pb-5 pt-8">
         <p className="text-sm font-semibold text-[var(--tm-action-primary)]">코트 매칭</p>
@@ -41,9 +41,9 @@ export function PartnerSessionList() {
         <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">운영자가 준비해 공개한 시간이에요. 직접 코트를 예약하는 메뉴는 아니에요.</p>
       </div>
     </header>
-    <section className="mx-auto max-w-[560px] px-5 pt-6">
+    <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-5 pt-6">
       <div className="flex items-end justify-between gap-3"><div><h2 className="text-xl font-bold">이번 주 코트 매칭</h2><p className="mt-1 text-sm text-[var(--tm-text-secondary)]">참가 신청은 세션을 연 모집자에게 보내요.</p></div></div>
-      {!slots && !error ? <div className="grid min-h-[calc(100svh-260px)] place-items-center"><CourtRallyLoader className="max-w-[560px]" label="코트 매칭 시간을 준비하고 있어요." /></div> : null}
+      {!slots && !error ? <div className="grid flex-1 place-items-center"><CourtRallyLoader className="max-w-[560px]" label="코트 매칭 시간을 준비하고 있어요." /></div> : null}
       {error ? <div className="mt-5 rounded-3xl bg-[var(--tm-status-error-bg)] p-5"><p className="font-semibold text-[var(--tm-status-error-text)]">불러오지 못했어요</p><p className="mt-2 text-sm leading-6 text-[var(--tm-status-error-text)]">{error}</p><Button onClick={() => void load()} size="medium" variant="secondary">다시 불러오기</Button></div> : null}
       {!error && slots?.length === 0 ? <EmptyState /> : null}
       {!error && slots && slots.length > 0 ? <div className="mt-5 grid gap-4">{slots.map((slot) => <PublicSlotCard key={slot.id} slot={slot} />)}</div> : null}

@@ -58,8 +58,8 @@ export function MatchChatList() {
     void load(nextRole);
   };
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
-    <section className="mx-auto max-w-[560px]">
+  return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
+    <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
       <p className="text-sm font-semibold text-[var(--tm-action-primary)]">채팅</p>
       <h1 className="mt-1 text-2xl font-bold">매칭 채팅</h1>
       <p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">매칭이 성사된 뒤에만 일정과 준비를 함께 조율할 수 있어요.</p>
@@ -69,7 +69,7 @@ export function MatchChatList() {
           <TabListItem value="PARTICIPANT">내가 신청한 매칭</TabListItem>
         </TabList>
       </Tab>
-      {items === null ? <CourtRallyLoader className="mt-8" label="채팅을 준비하고 있어요." /> : error ? <LoadError error={error} onRetry={() => void load()} /> : items.length === 0 ? <EmptyChatList role={role} /> : <div className="mt-6 space-y-3">{items.map((item) => <ConversationCard item={item} key={item.match.id} />)}</div>}
+      {items === null ? <div className="grid flex-1 place-items-center"><CourtRallyLoader label="채팅을 준비하고 있어요." /></div> : error ? <LoadError error={error} onRetry={() => void load()} /> : items.length === 0 ? <EmptyChatList role={role} /> : <div className="mt-6 space-y-3">{items.map((item) => <ConversationCard item={item} key={item.match.id} />)}</div>}
     </section>
     <BottomNavigation />
   </main>;

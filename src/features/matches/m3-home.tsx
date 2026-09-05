@@ -147,11 +147,11 @@ function HomeLoading() {
 }
 
 function HomeStateFrame({ children }: { children: React.ReactNode }) {
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
+  return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] pb-32 text-[var(--tm-text-primary)]">
     <header className="border-b border-[var(--tm-border-default)] bg-[var(--tm-bg-page)]">
       <div className="mx-auto max-w-[560px] px-5 pb-5 pt-8"><p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On</p><h1 className="mt-2 text-2xl font-bold">매칭</h1><p className="mt-3 text-sm leading-6 text-[var(--tm-text-secondary)]">함께 칠 메이트를 찾고 있어요.</p></div>
     </header>
-    <section className="mx-auto grid min-h-[calc(100svh-250px)] max-w-[560px] place-items-center px-5 text-center">{children}</section>
+    <section className="mx-auto flex w-full max-w-[560px] flex-1 items-center justify-center px-5 text-center">{children}</section>
     <BottomNavigation />
   </main>;
 }

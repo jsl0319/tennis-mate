@@ -90,11 +90,11 @@ export function M8MyPage() {
     setEditingNickname(false);
   };
 
-  return <main className="min-h-svh bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
-    <section className="mx-auto max-w-[560px]">
+  return <main className="flex min-h-svh flex-col bg-[var(--tm-bg-page)] px-5 pb-28 pt-8 text-[var(--tm-text-primary)]">
+    <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col">
       <p className="text-sm font-semibold text-[var(--tm-action-primary)]">마이</p>
       <h1 className="mt-1 text-2xl font-bold">내 테니스 이야기</h1>
-      {me === null ? error ? <LoadError error={error} onRetry={load} /> : <CourtRallyLoader className="mt-4" label="내 정보를 준비하고 있어요." /> : <>
+      {me === null ? error ? <LoadError error={error} onRetry={load} /> : <div className="grid flex-1 place-items-center"><CourtRallyLoader label="내 정보를 준비하고 있어요." /></div> : <>
         <ProfileCard me={me} />
         <ActivityCard />
         <AccountCard
