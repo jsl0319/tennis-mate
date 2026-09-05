@@ -10,6 +10,7 @@
     "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build --webpack",
+    "vercel-build": "prisma migrate deploy && next build --webpack",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
