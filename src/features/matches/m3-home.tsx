@@ -15,7 +15,7 @@ import { MatchCard, type MatchCardData } from "./m3-match-card";
 type MeResponse = {
   nickname: string;
   onboardingCompleted: boolean;
-  tennisProfile: null | { activityRegion: { name: string } | null; rallyLevel: string };
+  tennisProfile: null | { rallyLevel: string };
 };
 
 type MatchListResponse = { items: MatchCardData[] };
@@ -89,7 +89,7 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   const activeMatches = isRecommendedList ? recommended : visibleOtherMatches;
   const listTitle = isRecommendedList ? "나와 잘 맞을 것 같아요 🎾" : "다른 매칭 둘러보기";
   const listDescription = isRecommendedList
-    ? "랠리, 원하는 플레이와 활동 지역을 기준으로 골랐어요."
+    ? "랠리 수준과 원하는 플레이를 기준으로 골랐어요."
     : "추천 조건과 달라도, 지금 함께 칠 수 있는 매칭이에요.";
 
   return (
@@ -98,7 +98,6 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         <div className="mx-auto max-w-[560px] px-5 pb-4 pt-8">
           <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On</p>
           <h1 className="mt-3 text-2xl font-bold leading-snug">{me?.nickname}님, 오늘도<br />부담 없이 테니스해요.</h1>
-          <p className="mt-3 inline-flex rounded-full bg-[var(--tm-bg-subtle)] px-3 py-2 text-sm text-[var(--tm-text-secondary)]">📍 {me?.tennisProfile?.activityRegion?.name ?? "활동 지역"}에서 메이트를 찾고 있어요</p>
 
           <div aria-label="매칭 목록 선택" className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-[var(--tm-bg-subtle)] p-1" role="group">
             <ListTab active={isRecommendedList} label="추천 매칭" onClick={() => setActiveList("recommended")} />

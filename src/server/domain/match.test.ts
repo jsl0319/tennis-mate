@@ -5,27 +5,26 @@ import { getApplicationStatusLabel, getEstimatedFeePerPerson, getPendingCount, g
 const viewer = {
   rallyLevel: "SHORT_RALLY" as const,
   gameExperience: "NONE" as const,
-  activityRegionCode: "SEOUL-001",
   playPurposes: ["RALLY_PRACTICE"] as const,
 };
 
 describe("M3 match discovery rules", () => {
-  it("scores same rally, purpose, region, and game experience without exposing the score", () => {
+  it("scores same rally, purpose, and game experience without exposing the score", () => {
     const recommendation = getRecommendation(viewer, viewer, {
       partnerPreference: "COMPLETE_BEGINNER_WELCOME",
       playPurposes: ["RALLY_PRACTICE"],
     });
-    expect(recommendation.score).toBe(100);
+    expect(recommendation.score).toBe(80);
     expect(recommendation.reasons.map((reason) => reason.code)).toEqual([
-      "SAME_RALLY_LEVEL", "SAME_PLAY_PURPOSE", "SAME_REGION", "SIMILAR_GAME_EXPERIENCE", "BEGINNER_WELCOME",
+      "SAME_RALLY_LEVEL", "SAME_PLAY_PURPOSE", "SIMILAR_GAME_EXPERIENCE", "BEGINNER_WELCOME",
     ]);
   });
 
   it("scores an adjacent rally level but not a two-step difference", () => {
     const adjacent = getRecommendation(viewer, { ...viewer, rallyLevel: "COMFORTABLE_RALLY" }, { partnerPreference: "SIMILAR_LEVEL", playPurposes: [] });
     const distant = getRecommendation(viewer, { ...viewer, rallyLevel: "STANDARD_RALLY" }, { partnerPreference: "SIMILAR_LEVEL", playPurposes: [] });
-    expect(adjacent.score).toBe(55);
-    expect(distant.score).toBe(30);
+    expect(adjacent.score).toBe(35);
+    expect(distant.score).toBe(10);
   });
 
   it("only exposes open, future matches with remaining spots", () => {
@@ -44,7 +43,7 @@ describe("M3 match discovery rules", () => {
 describe("M4 match creation input", () => {
   const validInput = {
     clientRequestId: "e3e70682-c209-4cac-a29f-6fbed82c07cd", title: "천천히 랠리 연습해요",
-    startsAt: "2030-01-02T01:00:00.000Z", endsAt: "2030-01-02T03:00:00.000Z", regionCode: "SEOUL-001",
+    startsAt: "2030-01-02T01:00:00.000Z", endsAt: "2030-01-02T03:00:00.000Z",
     courtSource: "EXTERNAL_RESERVED", externalCourt: { name: "마포 테니스장", address: "서울 마포구" }, recruitCount: 2,
     playPurposes: ["RALLY_PRACTICE"], partnerPreference: "COMPLETE_BEGINNER_WELCOME", totalCourtFeeKrw: 40_000,
   } as const;

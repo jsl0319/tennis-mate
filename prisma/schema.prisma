@@ -314,13 +314,11 @@ model TennisProfile {
   rallyLevel          RallyLevel      @map("rally_level")
   gameExperience      GameExperience  @map("game_experience")
   skillLabel          String?         @map("skill_label") @db.VarChar(30)
-  nearbyRegionAllowed Boolean         @default(true) @map("nearby_region_allowed")
   version             Int             @default(1)
   createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user     User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  regions  TennisProfileRegion[]
   purposes TennisProfilePurpose[]
 
   @@map("tennis_profiles")
@@ -334,28 +332,13 @@ model Region {
   type       RegionType
   active     Boolean    @default(true)
 
-  parent   Region?               @relation("RegionHierarchy", fields: [parentCode], references: [code], onDelete: Restrict)
-  children Region[]              @relation("RegionHierarchy")
-  profiles TennisProfileRegion[]
-  matches  Match[]
+  parent   Region?  @relation("RegionHierarchy", fields: [parentCode], references: [code], onDelete: Restrict)
+  children Region[] @relation("RegionHierarchy")
   courts   Court[]
 
   @@unique([parentCode, name])
   @@index([parentCode, active])
   @@map("regions")
-}
-
-model TennisProfileRegion {
-  tennisProfileId String  @map("tennis_profile_id") @db.Uuid
-  regionCode      String  @map("region_code") @db.VarChar(30)
-  isPrimary       Boolean @default(true) @map("is_primary")
-
-  tennisProfile TennisProfile @relation(fields: [tennisProfileId], references: [id], onDelete: Cascade)
-  region        Region        @relation(fields: [regionCode], references: [code], onDelete: Restrict)
-
-  @@id([tennisProfileId, regionCode])
-  @@index([regionCode, tennisProfileId])
-  @@map("tennis_profile_regions")
 }
 
 model TennisProfilePurpose {
@@ -383,7 +366,6 @@ model Match {
   id                   String            @id @default(uuid()) @db.Uuid
   hostUserId           String            @map("host_user_id") @db.Uuid
   clientRequestId      String            @map("client_request_id") @db.Uuid
-  regionCode           String            @map("region_code") @db.VarChar(30)
   title                String            @db.VarChar(80)
   startsAt             DateTime          @map("starts_at") @db.Timestamptz(6)
   endsAt               DateTime          @map("ends_at") @db.Timestamptz(6)
@@ -409,7 +391,6 @@ model Match {
   updatedAt            DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   host         User               @relation("MatchHost", fields: [hostUserId], references: [id], onDelete: Restrict)
-  region       Region             @relation(fields: [regionCode], references: [code], onDelete: Restrict)
   purposes     MatchPurpose[]
   applications MatchApplication[]
   externalCourtImageUpload CourtImageUpload? @relation("ExternalCourtImage", fields: [externalCourtImageUploadId], references: [id], onDelete: Restrict)
@@ -420,7 +401,6 @@ model Match {
 
   @@unique([hostUserId, clientRequestId])
   @@index([status, startsAt])
-  @@index([regionCode, status, startsAt])
   @@index([hostUserId, status, startsAt])
   @@map("matches")
 }

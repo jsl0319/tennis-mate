@@ -8,7 +8,6 @@ export type MatchCardData = {
   statusLabel: string;
   startsAt: string;
   endsAt: string;
-  region: { name: string };
   court: { sourceLabel: string; name: string | null; image: CourtImageView };
   playPurposes: Array<{ code: string; label: string }>;
   beginnerWelcome: boolean;
@@ -43,7 +42,7 @@ export function MatchCard({ match, returnTo = "/" }: { match: MatchCardData; ret
         </p>
         <p className="text-sm leading-5 text-[var(--tm-text-secondary)]">
           {formatSchedule(match.startsAt, match.endsAt)}<br />
-          {match.region.name} · {match.court.name ?? "코트는 함께 정해요"}<br />
+          {match.court.name ?? "코트는 함께 정해요"}<br />
           <span className="text-[var(--tm-text-secondary)]">{match.court.sourceLabel}</span><br />
           {match.estimatedFeePerPersonKrw === null ? "비용 협의 필요" : `1인 약 ${match.estimatedFeePerPersonKrw.toLocaleString("ko-KR")}원`} · 남은 자리 {match.remainingSpots}명
         </p>

@@ -15,7 +15,6 @@ type Me = {
     rallyLevel: string;
     gameExperience: string;
     playPurposes: string[];
-    activityRegion: { name: string } | null;
   };
 };
 
@@ -122,7 +121,7 @@ function LoadError({ error, onRetry }: { error: string; onRetry: () => Promise<v
 function ProfileCard({ me }: { me: Me }) {
   return <section className="mt-6 rounded-3xl border border-[var(--tm-border-default)] bg-white p-5 shadow-[0_4px_14px_rgba(49,94,158,0.05)]">
     <p className="text-sm font-semibold text-[var(--tm-action-primary)]">{me.nickname}님의 테니스 프로필</p>
-    {me.tennisProfile ? <><h2 className="mt-3 text-xl font-bold">{rallyLabels[me.tennisProfile.rallyLevel]}</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{experienceLabels[me.tennisProfile.experienceRange]} · {gameLabels[me.tennisProfile.gameExperience]}</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">📍 {me.tennisProfile.activityRegion?.name ?? "활동 지역"} · {me.tennisProfile.playPurposes.map((purpose) => purposeLabels[purpose]).filter(Boolean).join(" · ")}</p></> : <><h2 className="mt-3 text-xl font-bold">테니스 프로필을 만들어 볼까요?</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">내게 잘 맞는 메이트를 찾기 위한 정보예요.</p></>}
+    {me.tennisProfile ? <><h2 className="mt-3 text-xl font-bold">{rallyLabels[me.tennisProfile.rallyLevel]}</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{experienceLabels[me.tennisProfile.experienceRange]} · {gameLabels[me.tennisProfile.gameExperience]}</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{me.tennisProfile.playPurposes.map((purpose) => purposeLabels[purpose]).filter(Boolean).join(" · ")}</p></> : <><h2 className="mt-3 text-xl font-bold">테니스 프로필을 만들어 볼까요?</h2><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">내게 잘 맞는 메이트를 찾기 위한 정보예요.</p></>}
     <Link className="mt-5 flex min-h-[52px] items-center justify-between rounded-2xl border border-[var(--tm-border-strong)] px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href={me.tennisProfile ? "/my/profile" : "/"}><span>{me.tennisProfile ? "테니스 프로필 수정" : "테니스 프로필 만들기"}</span><span aria-hidden="true">→</span></Link>
   </section>;
 }

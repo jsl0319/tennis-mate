@@ -33,7 +33,6 @@ type ProfileSnapshot = {
   experienceLabel?: string;
   rallyLevelLabel?: string;
   gameExperienceLabel?: string;
-  activityRegion?: { name?: string } | null;
   playPurposes?: Array<{ label?: string }>;
 };
 
@@ -61,7 +60,7 @@ function schedule(startsAt: string) {
 }
 
 function snapshotSummary(snapshot: ProfileSnapshot) {
-  return [snapshot.experienceLabel, snapshot.rallyLevelLabel, snapshot.activityRegion?.name].filter(Boolean).join(" · ");
+  return [snapshot.experienceLabel, snapshot.rallyLevelLabel].filter(Boolean).join(" · ");
 }
 
 function snapshotDetails(snapshot: ProfileSnapshot) {

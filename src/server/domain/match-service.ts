@@ -25,7 +25,6 @@ import {
 } from "./match";
 
 const matchInclude = {
-  region: true,
   purposes: { select: { purpose: true } },
   host: {
     select: {
@@ -33,7 +32,6 @@ const matchInclude = {
       nickname: true,
       tennisProfile: {
         include: {
-          regions: { include: { region: true } },
           purposes: true,
         },
       },
@@ -71,7 +69,6 @@ function toRecommendationProfile(profile: ProfileWithRelations): RecommendationP
   return {
     rallyLevel: profile.rallyLevel,
     gameExperience: profile.gameExperience,
-    activityRegionCode: profile.regions.find((item) => item.isPrimary)?.regionCode ?? null,
     playPurposes: profile.purposes.map(({ purpose }) => purpose),
   };
 }
@@ -81,14 +78,12 @@ function toHostProfile(profile: MatchWithRelations["host"]["tennisProfile"]): Re
   return {
     rallyLevel: profile.rallyLevel,
     gameExperience: profile.gameExperience,
-    activityRegionCode: profile.regions.find((item) => item.isPrimary)?.regionCode ?? null,
     playPurposes: profile.purposes.map(({ purpose }) => purpose),
   };
 }
 
 function toProfileView(profile: ProfileWithRelations | null) {
   if (!profile) return null;
-  const primaryRegion = profile.regions.find((item) => item.isPrimary)?.region;
   const { rallyLevelLabel, gameExperienceLabel } = getProfileLabels(profile);
 
   return {
@@ -111,10 +106,6 @@ function toProfileView(profile: ProfileWithRelations | null) {
       GAME_INTRO: "게임 입문",
       GAME: "게임",
     } as const)[purpose] })),
-    activityRegion: primaryRegion
-      ? { code: primaryRegion.code, name: primaryRegion.name, parentCode: primaryRegion.parentCode }
-      : null,
-    nearbyRegionAllowed: profile.nearbyRegionAllowed,
   };
 }
 
@@ -233,7 +224,6 @@ function toMatchCardView(match: MatchWithRelations, viewer: Viewer) {
     statusLabel: matchStatusLabels[match.status],
     startsAt: match.startsAt.toISOString(),
     endsAt: match.endsAt.toISOString(),
-    region: { code: match.region.code, name: match.region.name },
     court: getCourtView(match),
     playPurposes: match.purposes.map(({ purpose }) => ({ code: purpose, label: ({
       CASUAL_HIT: "편하게 공 주고받기",
@@ -325,7 +315,7 @@ export async function getRecommendedMatches(prisma: PrismaClient, viewer: Viewer
 export async function getMatches(
   prisma: PrismaClient,
   viewer: Viewer,
-  input: { regionCode?: string; playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number },
+  input: { playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number },
 ) {
   const cursorCondition = input.cursor
     ? {
@@ -344,7 +334,6 @@ export async function getMatches(
         { hostUserId: viewer.id },
         { applications: { some: { applicantUserId: viewer.id } } },
       ],
-      ...(input.regionCode ? { regionCode: input.regionCode } : {}),
       ...(input.playPurpose ? { purposes: { some: { purpose: input.playPurpose } } } : {}),
       ...cursorCondition,
     },
@@ -447,7 +436,6 @@ function isSameCreateRequest(match: MatchWithRelations, input: MatchCreateInput)
 
   return match.startsAt.getTime() === new Date(input.startsAt).getTime() &&
     match.endsAt.getTime() === new Date(input.endsAt).getTime() &&
-    match.regionCode === input.regionCode &&
     match.externalCourtName === input.externalCourt.name &&
     match.externalCourtAddress === input.externalCourt.address &&
     match.externalCourtNumber === optionalText(input.externalCourt.courtNumber) &&
@@ -472,11 +460,6 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
   const existing = await findExistingCreateRequest(prisma, viewer, input);
   if (existing) {
     return { match: await getMatchDetail(prisma, viewer, existing.id), created: false };
-  }
-
-  if (input.courtSource !== "PARTNER_COURT") {
-    const region = await prisma.region.findFirst({ where: { code: input.regionCode, active: true, type: "DISTRICT" }, select: { code: true } });
-    if (!region) throw new DomainError("INVALID_REGION", 422, "활성화된 시·군·구를 선택해 주세요.");
   }
 
   try {
@@ -529,7 +512,6 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
           data: {
             hostUserId: viewer.id,
             clientRequestId: input.clientRequestId,
-            regionCode: slot.courtUnit.court.regionCode,
             title: input.title,
             startsAt: slot.startsAt,
             endsAt: slot.endsAt,
@@ -563,7 +545,7 @@ export async function createMatch(prisma: PrismaClient, viewer: Viewer, input: M
 
       return transaction.match.create({
         data: {
-          hostUserId: viewer.id, clientRequestId: input.clientRequestId, regionCode: input.regionCode, title: input.title,
+          hostUserId: viewer.id, clientRequestId: input.clientRequestId, title: input.title,
           startsAt: new Date(input.startsAt), endsAt: new Date(input.endsAt), courtSource: "EXTERNAL_RESERVED",
           externalCourtName: input.externalCourt.name,
           externalCourtAddress: input.externalCourt.address,
@@ -592,7 +574,6 @@ const applicationInclude = {
   applicantUser: { select: { nickname: true } },
   match: {
     include: {
-      region: true,
       courtSlot: { include: { courtUnit: { include: { court: true } } } },
       conversation: { select: { status: true } },
     },
@@ -622,7 +603,6 @@ function toApplicationView(application: ApplicationWithRelations, supplyNotice: 
       courtName: application.match.courtSource === "PARTNER_COURT"
         ? application.match.courtSlot?.courtUnit.court.name ?? null
         : application.match.externalCourtName,
-      regionName: application.match.region.name,
       estimatedFeePerPersonKrw: getEstimatedFeePerPerson(application.match.totalCourtFeeKrw, application.match.recruitCount),
     },
     createdAt: application.createdAt.toISOString(),

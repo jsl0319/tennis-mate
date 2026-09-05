@@ -38,7 +38,6 @@ function parseSearchParams(request: Request) {
   }
 
   return {
-    regionCode: params.get("regionCode")?.trim() || undefined,
     playPurpose: playPurpose?.data,
     startsFrom,
     cursor: params.get("cursor") ? parseCursor(params.get("cursor")!) : undefined,

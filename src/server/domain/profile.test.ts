@@ -7,13 +7,11 @@ const validProfile = {
   rallyLevel: "SHORT_RALLY",
   gameExperience: "NONE",
   playPurposes: ["CASUAL_HIT"],
-  activityRegionCode: "SEOUL-014",
-  nearbyRegionAllowed: true,
   expectedVersion: null,
 } as const;
 
 describe("M2 profile input", () => {
-  it("accepts the M2 region and experience contract", () => {
+  it("accepts the M2 experience contract", () => {
     expect(profileInputSchema.parse(validProfile)).toMatchObject(validProfile);
   });
 

@@ -22,7 +22,6 @@ const externalReservedInput = {
   title: "천천히 랠리 연습해요",
   startsAt: "2030-01-02T01:00:00.000Z",
   endsAt: "2030-01-02T03:00:00.000Z",
-  regionCode: "SEOUL-001",
   courtSource: "EXTERNAL_RESERVED",
   externalCourt: { name: "마포 테니스장", address: "서울 마포구 월드컵로 00" },
   recruitCount: 2,

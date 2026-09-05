@@ -15,11 +15,9 @@ const viewer = {
     experienceRange: "YEARS_1_TO_2",
     rallyLevel: "SHORT_RALLY",
     gameExperience: "NONE",
-    nearbyRegionAllowed: true,
     version: 1,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-    regions: [{ tennisProfileId: "profile-id", regionCode: "SEOUL-001", isPrimary: true, region: { code: "SEOUL-001", parentCode: "SEOUL", name: "마포구", shortName: null, type: "DISTRICT", active: true } }],
     purposes: [{ tennisProfileId: "profile-id", purpose: "RALLY_PRACTICE" }],
   },
 } as Parameters<typeof createMatch>[1];
@@ -29,7 +27,6 @@ const input = matchCreateInputSchema.parse({
   title: "천천히 랠리 연습해요",
   startsAt: futureStartsAt.toISOString(),
   endsAt: futureEndsAt.toISOString(),
-  regionCode: "SEOUL-001",
   courtSource: "EXTERNAL_RESERVED",
   externalCourt: { name: "마포 테니스장", address: "서울 마포구 월드컵로 00" },
   recruitCount: 1,
@@ -45,7 +42,6 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
     id: "match-id",
     hostUserId: "host-user-id",
     clientRequestId: input.clientRequestId,
-    regionCode: "SEOUL-001",
     title: input.title,
     startsAt: futureStartsAt,
     endsAt: futureEndsAt,
@@ -71,7 +67,6 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
     cancellationReason: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-    region: { code: "SEOUL-001", parentCode: "SEOUL", name: "마포구", shortName: null, type: "DISTRICT", active: true },
     purposes: [{ purpose: "RALLY_PRACTICE" }],
     host: { id: "host-user-id", nickname: "테스트모집자", tennisProfile: viewer.profile },
     applications: [],
@@ -89,7 +84,6 @@ describe("match service operation safeguards", () => {
       .mockResolvedValueOnce({ id: existing.id, status: "OPEN", startsAt: futureStartsAt, applications: [] })
       .mockResolvedValueOnce(existing);
     const prisma = {
-      region: { findFirst: vi.fn().mockResolvedValue({ code: "SEOUL-001" }) },
       match: {
         findUnique,
         create: vi.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "test" })),
@@ -205,7 +199,6 @@ describe("match service operation safeguards", () => {
       match: { create: vi.fn() },
     };
     const prisma = {
-      region: { findFirst: vi.fn().mockResolvedValue({ code: "SEOUL-001" }) },
       match: { findUnique: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
     } as unknown as Parameters<typeof createMatch>[0];
@@ -248,7 +241,6 @@ describe("match service operation safeguards", () => {
       matchApplication: { updateMany: vi.fn() },
     };
     const prisma = {
-      region: { findFirst: vi.fn().mockResolvedValue({ code: "SEOUL-001" }) },
       match: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(createdMatch) },
       matchSupplyNoticeRecipient: { findFirst: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
@@ -330,7 +322,6 @@ describe("match service operation safeguards", () => {
       data: expect.objectContaining({
         courtSource: "PARTNER_COURT",
         courtSlotId: partnerSlotId,
-        regionCode: "SEOUL-001",
         startsAt: futureStartsAt,
         endsAt: futureEndsAt,
         totalCourtFeeKrw: 40_000,

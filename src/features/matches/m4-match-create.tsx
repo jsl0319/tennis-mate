@@ -18,11 +18,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, Option, SearchField, Select, TextArea, TextField, TextFieldContent } from "@wanteddev/wds";
+import { ActionArea, ActionAreaButton, FormControl, FormField, FormLabel, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalDescription, ModalNavigation, SearchField, TextArea, TextField, TextFieldContent } from "@wanteddev/wds";
 
 import { Button } from "@/components/ui/button";
 
-type Region = { code: string; name: string; shortName: string | null };
 type CourtPlaceSearchItem = { name: string; address: string; roadAddress: string | null };
 
 type MatchCreateForm = {
@@ -30,8 +29,6 @@ type MatchCreateForm = {
   date: string;
   startTime: string;
   endTime: string;
-  cityCode: string;
-  regionCode: string;
   courtName: string;
   address: string;
   courtNumber: string;
@@ -109,8 +106,6 @@ function isCourtPlaceSearchItem(value: unknown): value is CourtPlaceSearchItem {
 export function M4MatchCreate() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const [cities, setCities] = useState<Region[]>([]);
-  const [districts, setDistricts] = useState<Region[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [courtSearchQuery, setCourtSearchQuery] = useState("");
@@ -124,8 +119,6 @@ export function M4MatchCreate() {
     date: "",
     startTime: "",
     endTime: "",
-    cityCode: "",
-    regionCode: "",
     courtName: "",
     address: "",
     courtNumber: "",
@@ -137,27 +130,6 @@ export function M4MatchCreate() {
     additionalCostNote: "",
     introduction: "",
   }));
-
-  useEffect(() => {
-    let active = true;
-
-    void (async () => {
-      try {
-        const response = await fetch("/api/v1/regions");
-        const body: unknown = await response.json();
-        if (!response.ok || typeof body !== "object" || body === null || !("items" in body) || !Array.isArray(body.items)) {
-          throw new Error("활동 지역을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.");
-        }
-        if (active) setCities(body.items as Region[]);
-      } catch (caught) {
-        if (active) setError(caught instanceof Error ? caught.message : "활동 지역을 불러오지 못했어요.");
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     const query = courtSearchQuery.trim();
@@ -197,25 +169,6 @@ export function M4MatchCreate() {
   const expectedPeople = form.recruitCount + 1;
   const totalCourtFee = Number(form.totalCourtFeeKrw);
   const fee = form.totalCourtFeeKrw === "" || !Number.isFinite(totalCourtFee) ? 0 : Math.ceil(totalCourtFee / expectedPeople);
-
-  const selectCity = async (code: string) => {
-    setError("");
-    set("cityCode", code);
-    set("regionCode", "");
-    setDistricts([]);
-    if (!code) return;
-
-    try {
-      const response = await fetch(`/api/v1/regions?parentCode=${encodeURIComponent(code)}`);
-      const body: unknown = await response.json();
-      if (!response.ok || typeof body !== "object" || body === null || !("items" in body) || !Array.isArray(body.items)) {
-        throw new Error("시·군·구를 불러오지 못했어요. 다시 선택해 주세요.");
-      }
-      setDistricts(body.items as Region[]);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "시·군·구를 불러오지 못했어요.");
-    }
-  };
 
   const togglePurpose = (purpose: string) => {
     setForm((current) => {
@@ -269,8 +222,8 @@ export function M4MatchCreate() {
 
   const next = () => {
     setError("");
-    if (step === 1 && (!form.date || !form.startTime || !form.endTime || !form.regionCode)) {
-      setError("날짜, 시작 시간, 종료 시간, 활동 지역을 모두 선택해 주세요.");
+    if (step === 1 && (!form.date || !form.startTime || !form.endTime)) {
+      setError("날짜, 시작 시간, 종료 시간을 모두 선택해 주세요.");
       return;
     }
     if (step === 1 && form.endTime <= form.startTime) {
@@ -307,7 +260,6 @@ export function M4MatchCreate() {
           title: form.title,
           startsAt,
           endsAt,
-          regionCode: form.regionCode,
           courtSource: "EXTERNAL_RESERVED",
           externalCourt: {
             name: form.courtName,
@@ -361,8 +313,6 @@ export function M4MatchCreate() {
         <div className="px-5 pt-6">
           {step === 1 ? (
             <StepOne
-              cities={cities}
-              districts={districts}
               form={form}
               onCourtNameChange={(value) => set("courtName", value)}
               onCourtAddressChange={(value) => set("address", value)}
@@ -371,7 +321,6 @@ export function M4MatchCreate() {
               onManualCourtEntryOpen={openManualCourtEntry}
               onCourtPlaceQueryChange={updateCourtSearchQuery}
               onCourtPlaceSelect={selectCourtPlace}
-              onSelectCity={(code) => void selectCity(code)}
               courtSearchError={courtSearchError}
               courtSearchLoading={courtSearchLoading}
               courtSearchQuery={courtSearchQuery}
@@ -405,8 +354,6 @@ export function M4MatchCreate() {
 }
 
 function StepOne({
-  cities,
-  districts,
   form,
   onCourtAddressChange,
   onCourtNameChange,
@@ -415,7 +362,6 @@ function StepOne({
   onCourtPlaceQueryChange,
   onCourtPlaceSelect,
   onManualCourtEntryOpen,
-  onSelectCity,
   courtSearchError,
   courtSearchLoading,
   courtSearchQuery,
@@ -424,8 +370,6 @@ function StepOne({
   isManualCourtEntry,
   set,
 }: {
-  cities: Region[];
-  districts: Region[];
   form: MatchCreateForm;
   onCourtAddressChange: (value: string) => void;
   onCourtNameChange: (value: string) => void;
@@ -434,7 +378,6 @@ function StepOne({
   onCourtPlaceQueryChange: (value: string) => void;
   onCourtPlaceSelect: (place: CourtPlaceSearchItem) => void;
   onManualCourtEntryOpen: () => void;
-  onSelectCity: (code: string) => void;
   courtSearchError: string;
   courtSearchLoading: boolean;
   courtSearchQuery: string;
@@ -473,17 +416,6 @@ function StepOne({
             </FormField>
           </div>
           <p className="mt-3 text-xs leading-5 text-[var(--tm-text-secondary)]">2시간을 넘는 일정도 등록할 수 있어요. 자정을 넘는 일정은 현재 등록할 수 없어요.</p>
-        </div>
-        <div className="mt-6 border-t border-[var(--tm-border-subtle)] pt-5">
-          <FieldTitle required>활동 지역</FieldTitle>
-          <div className="mt-2 grid grid-cols-2 gap-3">
-            <Select aria-label="시·도 선택" onChange={onSelectCity} placeholder="시·도 선택" value={form.cityCode}>
-              {cities.map((city) => <Option key={city.code} value={city.code}>{city.shortName ?? city.name}</Option>)}
-            </Select>
-            <Select aria-label="시·군·구 선택" disabled={!form.cityCode} onChange={(value) => set("regionCode", value)} placeholder="시·군·구 선택" value={form.regionCode}>
-              {districts.map((district) => <Option key={district.code} value={district.code}>{district.name}</Option>)}
-            </Select>
-          </div>
         </div>
       </FormPanel>
 

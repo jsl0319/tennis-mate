@@ -12,7 +12,6 @@ export class DomainError extends Error {
 }
 
 const profileInclude = {
-  regions: { include: { region: true } },
   purposes: true,
 } satisfies Prisma.TennisProfileInclude;
 
@@ -26,14 +25,6 @@ export function toProfileView(profile: ProfileWithRelations) {
     rallyLevel: profile.rallyLevel,
     gameExperience: profile.gameExperience,
     playPurposes: profile.purposes.map(({ purpose }) => purpose),
-    activityRegion: profile.regions[0]
-      ? {
-          code: profile.regions[0].region.code,
-          name: profile.regions[0].region.name,
-          parentCode: profile.regions[0].region.parentCode,
-        }
-      : null,
-    nearbyRegionAllowed: profile.nearbyRegionAllowed,
     version: profile.version,
     updatedAt: profile.updatedAt.toISOString(),
   };
@@ -51,15 +42,6 @@ export async function saveProfile(
   userId: string,
   input: ProfileInput,
 ) {
-  const region = await prisma.region.findFirst({
-    where: { code: input.activityRegionCode, active: true, type: "DISTRICT" },
-    select: { code: true },
-  });
-
-  if (!region) {
-    throw new DomainError("INVALID_REGION", 422, "활성화된 시·군·구를 선택해 주세요.");
-  }
-
   return prisma.$transaction(async (transaction) => {
     const current = await transaction.tennisProfile.findUnique({
       where: { userId },
@@ -81,12 +63,7 @@ export async function saveProfile(
             experienceRange: input.experienceRange,
             rallyLevel: input.rallyLevel,
             gameExperience: input.gameExperience,
-            nearbyRegionAllowed: input.nearbyRegionAllowed,
             version: { increment: 1 },
-            regions: {
-              deleteMany: {},
-              create: { regionCode: input.activityRegionCode, isPrimary: true },
-            },
             purposes: {
               deleteMany: {},
               create: input.playPurposes.map((purpose) => ({ purpose })),
@@ -100,8 +77,6 @@ export async function saveProfile(
             experienceRange: input.experienceRange,
             rallyLevel: input.rallyLevel,
             gameExperience: input.gameExperience,
-            nearbyRegionAllowed: input.nearbyRegionAllowed,
-            regions: { create: { regionCode: input.activityRegionCode, isPrimary: true } },
             purposes: { create: input.playPurposes.map((purpose) => ({ purpose })) },
           },
           include: profileInclude,

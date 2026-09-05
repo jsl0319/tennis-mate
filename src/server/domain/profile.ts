@@ -35,8 +35,6 @@ export const profileInputSchema = z.object({
     .min(1, "원하는 플레이를 하나 이상 선택해 주세요.")
     .max(2, "원하는 플레이는 최대 2개까지 선택할 수 있어요.")
     .refine((values) => new Set(values).size === values.length, "같은 플레이를 중복 선택할 수 없어요."),
-  activityRegionCode: z.string().trim().min(1, "주 활동 지역을 선택해 주세요."),
-  nearbyRegionAllowed: z.boolean(),
   expectedVersion: z.number().int().positive().nullable(),
 });
 

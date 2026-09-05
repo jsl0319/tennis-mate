@@ -7,7 +7,6 @@ export type MatchRecommendationReasonCode =
   | "SAME_RALLY_LEVEL"
   | "NEAR_RALLY_LEVEL"
   | "SAME_PLAY_PURPOSE"
-  | "SAME_REGION"
   | "SIMILAR_GAME_EXPERIENCE"
   | "BEGINNER_WELCOME";
 
@@ -30,7 +29,6 @@ const matchCreateCommonSchema = z.object({
 const directMatchTimingSchema = {
   startsAt: z.string().datetime({ offset: true }),
   endsAt: z.string().datetime({ offset: true }),
-  regionCode: z.string().trim().min(1, "지역을 선택해 주세요."),
 };
 
 const externalReservedMatchSchema = matchCreateCommonSchema.extend({
@@ -90,7 +88,6 @@ export type MatchCancelInput = z.infer<typeof matchCancelInputSchema>;
 export type RecommendationProfile = {
   rallyLevel: RallyLevel;
   gameExperience: GameExperience;
-  activityRegionCode: string | null;
   playPurposes: readonly PlayPurpose[];
 };
 
@@ -166,11 +163,6 @@ export function getRecommendation(
   if (sharedPurpose) {
     score += 30;
     reasons.push({ code: "SAME_PLAY_PURPOSE", label: `둘 다 ${purposeLabels[sharedPurpose]}을 원해요.` });
-  }
-
-  if (viewer.activityRegionCode && viewer.activityRegionCode === host.activityRegionCode) {
-    score += 20;
-    reasons.push({ code: "SAME_REGION", label: "활동 지역이 같아요." });
   }
 
   if (Math.abs(gameRanks[viewer.gameExperience] - gameRanks[host.gameExperience]) <= 1) {
