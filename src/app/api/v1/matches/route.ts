@@ -17,6 +17,8 @@ const playPurposeSchema = z.enum([
   "GAME",
 ]);
 
+const matchSortSchema = z.enum(["recommended", "soonest", "newest"]);
+
 function parseSearchParams(request: Request) {
   const params = new URL(request.url).searchParams;
   const limitValue = params.get("limit") ?? "20";
@@ -37,11 +39,18 @@ function parseSearchParams(request: Request) {
     throw new DomainError("INVALID_REQUEST", 400, "원하는 플레이를 다시 선택해 주세요.");
   }
 
+  const sortValue = params.get("sort");
+  const sort = sortValue ? matchSortSchema.safeParse(sortValue) : null;
+  if (sort && !sort.success) {
+    throw new DomainError("INVALID_REQUEST", 400, "정렬 방식을 다시 선택해 주세요.");
+  }
+
   return {
     playPurpose: playPurpose?.data,
     startsFrom,
     cursor: params.get("cursor") ? parseCursor(params.get("cursor")!) : undefined,
     limit,
+    sort: sort?.data,
   };
 }
 

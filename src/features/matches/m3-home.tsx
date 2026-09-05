@@ -1,5 +1,7 @@
 "use client";
 
+import { CaretDown, CheckCircle, Funnel } from "@phosphor-icons/react";
+import { FilterButton, Modal, ModalClose, ModalContainer, ModalContent, ModalContentItem, ModalNavigation } from "@wanteddev/wds";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -20,7 +22,31 @@ type MeResponse = {
 
 type MatchListResponse = { items: MatchCardData[] };
 type Screen = "loading" | "entry" | "onboarding" | "home" | "error";
-type MatchList = "recommended" | "other";
+type ListStatus = "loading" | "ready" | "error";
+type PlayPurpose = "CASUAL_HIT" | "RALLY_PRACTICE" | "STROKE_PRACTICE" | "GAME_INTRO" | "GAME";
+type MatchSort = "recommended" | "soonest" | "newest";
+
+const PURPOSE_OPTIONS: { value: PlayPurpose; label: string }[] = [
+  { value: "CASUAL_HIT", label: "편하게 공 주고받기" },
+  { value: "RALLY_PRACTICE", label: "랠리" },
+  { value: "STROKE_PRACTICE", label: "스트로크 연습" },
+  { value: "GAME_INTRO", label: "게임 입문" },
+  { value: "GAME", label: "게임" },
+];
+
+const SORT_OPTIONS: { value: MatchSort; label: string }[] = [
+  { value: "recommended", label: "추천순" },
+  { value: "soonest", label: "매칭 임박순" },
+  { value: "newest", label: "매칭 생성순" },
+];
+
+function purposeLabel(value: PlayPurpose | null) {
+  return PURPOSE_OPTIONS.find((option) => option.value === value)?.label ?? "게임 유형";
+}
+
+function sortLabel(value: MatchSort) {
+  return SORT_OPTIONS.find((option) => option.value === value)?.label ?? "정렬";
+}
 
 function getErrorMessage(body: unknown) {
   if (typeof body === "object" && body !== null && "error" in body) {
@@ -41,12 +67,17 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   const safeReturnTo = getSafeReturnTo(returnTo);
   const [screen, setScreen] = useState<Screen>("loading");
   const [me, setMe] = useState<MeResponse | null>(null);
-  const [recommended, setRecommended] = useState<MatchCardData[]>([]);
-  const [matches, setMatches] = useState<MatchCardData[]>([]);
   const [error, setError] = useState("");
-  const [activeList, setActiveList] = useState<MatchList>("recommended");
 
-  const load = useCallback(async () => {
+  const [matches, setMatches] = useState<MatchCardData[]>([]);
+  const [listStatus, setListStatus] = useState<ListStatus>("loading");
+  const [listError, setListError] = useState("");
+  const [purpose, setPurpose] = useState<PlayPurpose | null>(null);
+  const [sort, setSort] = useState<MatchSort>("recommended");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isSortOpen, setIsSortOpen] = useState(false);
+
+  const loadMe = useCallback(async () => {
     try {
       const meResponse = await fetch("/api/v1/me", { cache: "no-store" });
       if (meResponse.status === 401) {
@@ -61,12 +92,6 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         setScreen("onboarding");
         return;
       }
-      const [recommendedResponse, matchesResponse] = await Promise.all([
-        requestJson<MatchListResponse>("/api/v1/matches/recommended?limit=5"),
-        requestJson<MatchListResponse>("/api/v1/matches?limit=20"),
-      ]);
-      setRecommended(recommendedResponse.items);
-      setMatches(matchesResponse.items);
       setScreen("home");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "서비스를 불러오지 못했어요.");
@@ -75,22 +100,36 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void load(); }, 0);
+    const timer = window.setTimeout(() => { void loadMe(); }, 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [loadMe]);
+
+  const loadMatches = useCallback(async () => {
+    setListStatus("loading");
+    try {
+      const params = new URLSearchParams({ limit: "30", sort });
+      if (purpose) params.set("playPurpose", purpose);
+      const response = await requestJson<MatchListResponse>(`/api/v1/matches?${params.toString()}`);
+      setMatches(response.items);
+      setListStatus("ready");
+    } catch (caught) {
+      setListError(caught instanceof Error ? caught.message : "매칭을 불러오지 못했어요.");
+      setListStatus("error");
+    }
+  }, [purpose, sort]);
+
+  useEffect(() => {
+    if (screen !== "home") return;
+    const timer = window.setTimeout(() => { void loadMatches(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [screen, loadMatches]);
 
   if (screen === "loading") return <HomeLoading />;
   if (screen === "entry") return <EntrySelection returnTo={safeReturnTo} />;
   if (screen === "onboarding") return <M2OnboardingFlow returnTo={safeReturnTo} />;
-  if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><Button className="mt-6" onClick={() => void load()}>다시 불러오기</Button></div></HomeStateFrame>;
+  if (screen === "error") return <HomeStateFrame><div><p className="text-lg font-bold">불러오지 못했어요</p><p className="mt-2 text-sm text-[var(--tm-text-secondary)]">{error}</p><Button className="mt-6" onClick={() => void loadMe()}>다시 불러오기</Button></div></HomeStateFrame>;
 
-  const visibleOtherMatches = matches.filter((match) => !recommended.some((item) => item.id === match.id));
-  const isRecommendedList = activeList === "recommended";
-  const activeMatches = isRecommendedList ? recommended : visibleOtherMatches;
-  const listTitle = isRecommendedList ? "나와 잘 맞을 것 같아요 🎾" : "다른 매칭 둘러보기";
-  const listDescription = isRecommendedList
-    ? "랠리 수준과 원하는 플레이를 기준으로 골랐어요."
-    : "추천 조건과 달라도, 지금 함께 칠 수 있는 매칭이에요.";
+  const hasFilter = purpose !== null;
 
   return (
     <main className="min-h-svh bg-[var(--tm-bg-page)] pb-28 text-[var(--tm-text-primary)]">
@@ -98,26 +137,33 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         <div className="mx-auto max-w-[560px] px-5 pb-4 pt-8">
           <p className="text-sm font-semibold text-[var(--tm-action-primary)]">Rally On</p>
           <h1 className="mt-3 text-2xl font-bold leading-snug">{me?.nickname}님, 오늘도<br />부담 없이 테니스해요.</h1>
-
-          <div aria-label="매칭 목록 선택" className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-[var(--tm-bg-subtle)] p-1" role="group">
-            <ListTab active={isRecommendedList} label="추천 매칭" onClick={() => setActiveList("recommended")} />
-            <ListTab active={!isRecommendedList} label="다른 매칭" onClick={() => setActiveList("other")} />
-          </div>
         </div>
       </header>
 
       <section className="mx-auto max-w-[560px] px-5 pt-6">
-        <h2 className="text-xl font-bold">{listTitle}</h2>
-        <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{listDescription}</p>
+        <h2 className="text-xl font-bold">매칭 둘러보기</h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">조건에 맞는 매칭을 찾아보세요.</p>
         <Link className="mt-4 flex min-h-12 items-center justify-between rounded-2xl border border-[var(--tm-border-default)] bg-white px-4 text-sm font-semibold text-[var(--tm-action-primary)]" href="/partner-sessions"><span>코트 걱정 없이 함께 테니스해요</span><span aria-hidden>→</span></Link>
-        {activeMatches.length > 0 ? (
-          <div className="mt-4 grid gap-4">{activeMatches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
-        ) : isRecommendedList && visibleOtherMatches.length > 0 ? (
-          <EmptyRecommendedState onShowOtherMatches={() => setActiveList("other")} />
-        ) : isRecommendedList ? (
-          <EmptyMatchState />
+
+        <div className="mt-5 flex items-center gap-2">
+          <FilterButton active={hasFilter} activeLabel={purposeLabel(purpose)} onClick={() => setIsFilterOpen(true)}>
+            <span className="inline-flex items-center gap-1.5"><Funnel aria-hidden size={16} weight="bold" />게임 유형</span>
+          </FilterButton>
+          <FilterButton active={false} onClick={() => setIsSortOpen(true)}>
+            <span className="inline-flex items-center gap-1.5">{sortLabel(sort)}<CaretDown aria-hidden size={14} weight="bold" /></span>
+          </FilterButton>
+        </div>
+
+        {listStatus === "loading" ? (
+          <CourtRallyLoader className="mt-4" label="매칭을 불러오고 있어요." />
+        ) : listStatus === "error" ? (
+          <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-6"><p className="font-bold">매칭을 불러오지 못했어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">{listError}</p><Button className="mt-4" onClick={() => void loadMatches()} variant="neutral">다시 시도</Button></div>
+        ) : matches.length > 0 ? (
+          <div className="mt-4 grid gap-4">{matches.map((match) => <MatchCard key={match.id} match={match} />)}</div>
+        ) : hasFilter ? (
+          <EmptyFilteredState onReset={() => setPurpose(null)} />
         ) : (
-          <p className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-5 text-sm leading-6 text-[var(--tm-text-secondary)]">지금은 추천 매칭이 전부예요. 나와 잘 맞는 매칭을 다시 확인해 보세요.</p>
+          <EmptyMatchState />
         )}
       </section>
 
@@ -126,16 +172,73 @@ export function RallyOnHome({ returnTo = "/" }: { returnTo?: string }) {
         매칭 만들기
       </Link>
       <BottomNavigation />
+
+      <FilterSheet
+        onClose={() => setIsFilterOpen(false)}
+        onSelect={(value) => { setPurpose(value); setIsFilterOpen(false); }}
+        open={isFilterOpen}
+        value={purpose}
+      />
+      <SortSheet
+        onClose={() => setIsSortOpen(false)}
+        onSelect={(value) => { setSort(value); setIsSortOpen(false); }}
+        open={isSortOpen}
+        value={sort}
+      />
     </main>
   );
 }
 
-function ListTab({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return <button aria-pressed={active} className={`min-h-11 rounded-xl px-3 text-sm font-semibold transition-colors ${active ? "bg-[var(--tm-action-primary)] text-white shadow-sm" : "text-[var(--tm-text-secondary)]"}`} onClick={onClick} type="button">{label}</button>;
+function FilterSheet({ onClose, onSelect, open, value }: { onClose: () => void; onSelect: (value: PlayPurpose | null) => void; open: boolean; value: PlayPurpose | null }) {
+  if (!open) return null;
+
+  return (
+    <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <ModalContainer size="large" variant="bottom">
+        <ModalNavigation trailingContent={<ModalClose aria-label="게임 유형 필터 닫기" />}>게임 유형</ModalNavigation>
+        <ModalContent>
+          <ModalContentItem>
+            <div className="grid gap-1">
+              <SheetOptionRow label="전체" onClick={() => onSelect(null)} selected={value === null} />
+              {PURPOSE_OPTIONS.map((option) => <SheetOptionRow key={option.value} label={option.label} onClick={() => onSelect(option.value)} selected={value === option.value} />)}
+            </div>
+          </ModalContentItem>
+        </ModalContent>
+      </ModalContainer>
+    </Modal>
+  );
 }
 
-function EmptyRecommendedState({ onShowOtherMatches }: { onShowOtherMatches: () => void }) {
-  return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-5"><p className="font-bold">조건이 꼭 맞는 매칭은 아직 없어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">다른 초보자 매칭도 편하게 둘러볼 수 있어요.</p><button className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)] underline" onClick={onShowOtherMatches} type="button">다른 매칭 보기</button></div>;
+function SortSheet({ onClose, onSelect, open, value }: { onClose: () => void; onSelect: (value: MatchSort) => void; open: boolean; value: MatchSort }) {
+  if (!open) return null;
+
+  return (
+    <Modal open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <ModalContainer size="large" variant="bottom">
+        <ModalNavigation trailingContent={<ModalClose aria-label="정렬 선택 닫기" />}>정렬</ModalNavigation>
+        <ModalContent>
+          <ModalContentItem>
+            <div className="grid gap-1">
+              {SORT_OPTIONS.map((option) => <SheetOptionRow key={option.value} label={option.label} onClick={() => onSelect(option.value)} selected={value === option.value} />)}
+            </div>
+          </ModalContentItem>
+        </ModalContent>
+      </ModalContainer>
+    </Modal>
+  );
+}
+
+function SheetOptionRow({ label, onClick, selected }: { label: string; onClick: () => void; selected: boolean }) {
+  return (
+    <button aria-pressed={selected} className={`flex min-h-13 w-full items-center justify-between rounded-xl px-3 text-left text-base transition-colors ${selected ? "bg-[var(--tm-bg-subtle)] font-bold text-[var(--tm-action-primary)]" : "text-[var(--tm-text-primary)]"}`} onClick={onClick} type="button">
+      {label}
+      {selected ? <CheckCircle aria-hidden size={20} weight="fill" /> : null}
+    </button>
+  );
+}
+
+function EmptyFilteredState({ onReset }: { onReset: () => void }) {
+  return <div className="mt-4 rounded-3xl bg-[var(--tm-bg-subtle)] p-5"><p className="font-bold">조건에 맞는 매칭이 아직 없어요.</p><p className="mt-2 text-sm leading-6 text-[var(--tm-text-secondary)]">필터를 초기화하면 더 많은 매칭을 볼 수 있어요.</p><button className="mt-4 text-sm font-semibold text-[var(--tm-action-primary)] underline" onClick={onReset} type="button">필터 초기화</button></div>;
 }
 
 function EmptyMatchState() {

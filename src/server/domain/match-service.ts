@@ -312,44 +312,74 @@ export async function getRecommendedMatches(prisma: PrismaClient, viewer: Viewer
     .map(({ match }) => toMatchCardView(match, viewer));
 }
 
+export type MatchSort = "recommended" | "soonest" | "newest";
+
 export async function getMatches(
   prisma: PrismaClient,
   viewer: Viewer,
-  input: { playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number },
+  input: { playPurpose?: PlayPurpose; startsFrom: Date; cursor?: { startsAt: string; id: string }; limit: number; sort?: MatchSort },
 ) {
-  const cursorCondition = input.cursor
-    ? {
-        OR: [
-          { startsAt: { gt: new Date(input.cursor.startsAt) } },
-          { startsAt: new Date(input.cursor.startsAt), id: { gt: input.cursor.id } },
-        ],
-      }
-    : undefined;
-  const matches = await prisma.match.findMany({
-    where: {
-      status: "OPEN",
-      startsAt: { gt: input.startsFrom },
-      courtSource: { not: "COURT_TBD" },
-      NOT: [
-        { hostUserId: viewer.id },
-        { applications: { some: { applicantUserId: viewer.id } } },
-      ],
-      ...(input.playPurpose ? { purposes: { some: { purpose: input.playPurpose } } } : {}),
-      ...cursorCondition,
-    },
-    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+  const sort = input.sort ?? "recommended";
+  const baseWhere = {
+    status: "OPEN",
+    startsAt: { gt: input.startsFrom },
+    courtSource: { not: "COURT_TBD" },
+    NOT: [
+      { hostUserId: viewer.id },
+      { applications: { some: { applicantUserId: viewer.id } } },
+    ],
+    ...(input.playPurpose ? { purposes: { some: { purpose: input.playPurpose } } } : {}),
+  } satisfies Prisma.MatchWhereInput;
+
+  if (sort === "soonest") {
+    const cursorCondition = input.cursor
+      ? {
+          OR: [
+            { startsAt: { gt: new Date(input.cursor.startsAt) } },
+            { startsAt: new Date(input.cursor.startsAt), id: { gt: input.cursor.id } },
+          ],
+        }
+      : undefined;
+    const matches = await prisma.match.findMany({
+      where: { ...baseWhere, ...cursorCondition },
+      orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+      include: matchInclude,
+    });
+    const items = filterDiscoverable(matches, new Date()).slice(0, input.limit + 1);
+    const hasNext = items.length > input.limit;
+    const visibleItems = hasNext ? items.slice(0, input.limit) : items;
+
+    return {
+      items: visibleItems.map((match) => toMatchCardView(match, viewer)),
+      pageInfo: {
+        nextCursor: hasNext && visibleItems.at(-1) ? toCursor(visibleItems.at(-1)!) : null,
+        hasNext,
+      },
+    };
+  }
+
+  // "recommended" and "newest" rank by something other than startsAt, so the startsAt/id
+  // keyset cursor above doesn't apply to them. The home screen only ever loads a single
+  // page today, so we fetch a bounded candidate set and rank it in memory instead.
+  const candidates = await prisma.match.findMany({
+    where: baseWhere,
+    orderBy: sort === "newest" ? [{ createdAt: "desc" }, { id: "asc" }] : [{ startsAt: "asc" }, { id: "asc" }],
     include: matchInclude,
+    take: 200,
   });
-  const items = filterDiscoverable(matches, new Date()).slice(0, input.limit + 1);
-  const hasNext = items.length > input.limit;
-  const visibleItems = hasNext ? items.slice(0, input.limit) : items;
+  const discoverable = filterDiscoverable(candidates, new Date());
+  const ordered = sort === "recommended"
+    ? [...discoverable].sort((left, right) => (
+        getRecommendationForMatch(right, viewer).score - getRecommendationForMatch(left, viewer).score
+        || left.startsAt.getTime() - right.startsAt.getTime()
+        || left.id.localeCompare(right.id)
+      ))
+    : discoverable;
+  const visibleItems = ordered.slice(0, input.limit);
 
   return {
     items: visibleItems.map((match) => toMatchCardView(match, viewer)),
-    pageInfo: {
-      nextCursor: hasNext && visibleItems.at(-1) ? toCursor(visibleItems.at(-1)!) : null,
-      hasNext,
-    },
+    pageInfo: { nextCursor: null, hasNext: ordered.length > input.limit },
   };
 }
 
